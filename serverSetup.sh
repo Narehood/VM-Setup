@@ -4,5 +4,5 @@ apt install xe-guest-utilities git net-tools
 apt upgrade -y
 
 git clone https://github.com/Narehood/dotfiles.git
-cd dotfile
+cd dotfiles
 ./install.sh
