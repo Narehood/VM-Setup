@@ -3,12 +3,15 @@
 # Check if the system is Debian, Ubuntu, Red Hat, Arch, or SUSE based
 if [ -f /etc/debian_version ]; then
     # Debian-based system (including Ubuntu)
-    sudo apt-get update
-    sudo apt-get install -y xe-guest-utilities net-tools cockpit htop
+    sudo apt update -y
+    sudo apt upgrade -y
+    sudo apt install -y xe-guest-utilities net-tools cockpit htop
 elif [ -f /etc/redhat-release ]; then
     # Red Hat-based system (including Fedora)
-    sudo yum update
+    sudo yum update -y
     sudo yum install -y xe-guest-utilities net-tools cockpit htop
+    sudo dnf update -y
+    sudo dnf install -y xe-guest-utilities net-tools cockpit htop
 elif [ -f /etc/arch-release ]; then
     # Arch-based system
     sudo pacman -Syu --noconfirm xe-guest-utilities net-tools cockpit htop
