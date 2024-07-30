@@ -3,5 +3,5 @@ docker run \
     -p 8080:8080 \
     -e DEFAULT_DOMAIN=s.test \
     -e IS_HTTPS_ENABLED=true \
-    -e GEOLITE_LICENSE_KEY=kjh23ljkbndskj345 \
+    -e GEOLITE_LICENSE_KEY=codeHere \
     shlinkio/shlink:stable
