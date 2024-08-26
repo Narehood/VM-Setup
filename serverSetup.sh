@@ -8,7 +8,6 @@ if [ "$install_xen_tools" == "y" ]; then
 if [ -f /etc/debian_version ]; then
     # Debian-based system (including Ubuntu)
     sudo apt update -y
-    sudo apt upgrade -y
     sudo apt install -y xe-guest-utilities
 elif [ -f /etc/redhat-release ]; then
     # Red Hat-based system (including Fedora)
