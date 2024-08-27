@@ -56,9 +56,9 @@
 ###################################################################################################################################################################################################
 
 # Script                | UniFi Network Easy Installation Script
-# Version               | 7.8.2
-# Application version   | 8.3.32-896f48ed11
-# Debian Repo version   | 8.3.32-26237-1
+# Version               | 7.8.4
+# Application version   | 8.4.59-y2b2oj1o96
+# Debian Repo version   | 8.4.59-26648-1
 # Author                | Glenn Rietveld
 # Email                 | glennrietveld8@hotmail.nl
 # Website               | https://GlennR.nl
@@ -639,7 +639,7 @@ support_file() {
       jq --arg script_name "$script_name" --arg support_file_name "$support_file_name" --arg abort_reason "$abort_reason" '.scripts[$script_name] |= (. + {support: ((.support // {}) + {($support_file_name): {"abort-reason": $abort_reason,"upload-results": ""}})})' "${eus_dir}/db/db.json" > "${eus_dir}/db/db.json.tmp" 2>> "${eus_dir}/logs/eus-database-management.log"
     fi
     eus_database_move
-    tar cJvfh "${support_file}" --exclude="${eus_dir}/go.tar.gz" --exclude="${eus_dir}/unifi_db" --exclude="/tmp/EUS/downloads" --exclude="/usr/lib/unifi/logs/remote" "/tmp/EUS" "${eus_dir}" "/usr/lib/unifi/logs" "/etc/apt/sources.list" "/etc/apt/sources.list.d/" "/etc/apt/preferences" "/etc/apt/keyrings" "/etc/apt/trusted.gpg.d/" "/etc/apt/preferences.d/" "/etc/default/unifi" "/etc/environment" "/var/log/dpkg.log"* "/etc/systemd/system/unifi.service.d/" "/lib/systemd/system/unifi.service" &> /dev/null
+    tar cJvfh "${support_file}" --exclude="${eus_dir}/go.tar.gz" --exclude="${eus_dir}/unifi_db" --exclude="/tmp/EUS/downloads" --exclude="/usr/lib/unifi/logs/remote" "/tmp/EUS" "${eus_dir}" "/usr/lib/unifi/logs" "/etc/apt/sources.list" "/etc/apt/sources.list.d/" "/etc/apt/preferences" "/etc/apt/keyrings" "/etc/apt/trusted.gpg.d/" "/etc/apt/preferences.d/" "/etc/default/unifi" "/etc/environment" "/var/log/dpkg.log"* "/etc/systemd/system/unifi.service.d/" "/lib/systemd/system/unifi.service" "/usr/lib/unifi/data/db/version" &> /dev/null
   elif "$(which dpkg)" -l zstd 2> /dev/null | grep -iq "^ii\\|^hi\\|^ri\\|^pi\\|^ui"; then
     support_file="/tmp/eus-support-${support_file_uuid}${support_file_time}.tar.zst"
     support_file_name="$(basename "${support_file}")"
@@ -649,7 +649,7 @@ support_file() {
       jq --arg script_name "$script_name" --arg support_file_name "$support_file_name" --arg abort_reason "$abort_reason" '.scripts[$script_name] |= (. + {support: ((.support // {}) + {($support_file_name): {"abort-reason": $abort_reason,"upload-results": ""}})})' "${eus_dir}/db/db.json" > "${eus_dir}/db/db.json.tmp" 2>> "${eus_dir}/logs/eus-database-management.log"
     fi
     eus_database_move
-    tar --use-compress-program=zstd -cvf "${support_file}" --exclude="${eus_dir}/go.tar.gz" --exclude="${eus_dir}/unifi_db" --exclude="/tmp/EUS/downloads" --exclude="/usr/lib/unifi/logs/remote" "/tmp/EUS" "${eus_dir}" "/usr/lib/unifi/logs" "/etc/apt/sources.list" "/etc/apt/sources.list.d/" "/etc/apt/preferences" "/etc/apt/keyrings" "/etc/apt/trusted.gpg.d/" "/etc/apt/preferences.d/" "/etc/default/unifi" "/etc/environment" "/var/log/dpkg.log"* "/etc/systemd/system/unifi.service.d/" "/lib/systemd/system/unifi.service" &> /dev/null
+    tar --use-compress-program=zstd -cvf "${support_file}" --exclude="${eus_dir}/go.tar.gz" --exclude="${eus_dir}/unifi_db" --exclude="/tmp/EUS/downloads" --exclude="/usr/lib/unifi/logs/remote" "/tmp/EUS" "${eus_dir}" "/usr/lib/unifi/logs" "/etc/apt/sources.list" "/etc/apt/sources.list.d/" "/etc/apt/preferences" "/etc/apt/keyrings" "/etc/apt/trusted.gpg.d/" "/etc/apt/preferences.d/" "/etc/default/unifi" "/etc/environment" "/var/log/dpkg.log"* "/etc/systemd/system/unifi.service.d/" "/lib/systemd/system/unifi.service" "/usr/lib/unifi/data/db/version" &> /dev/null
   elif "$(which dpkg)" -l tar 2> /dev/null | grep -iq "^ii\\|^hi\\|^ri\\|^pi\\|^ui"; then
     support_file="/tmp/eus-support-${support_file_uuid}${support_file_time}.tar.gz"
     support_file_name="$(basename "${support_file}")"
@@ -659,7 +659,7 @@ support_file() {
       jq --arg script_name "$script_name" --arg support_file_name "$support_file_name" --arg abort_reason "$abort_reason" '.scripts[$script_name] |= (. + {support: ((.support // {}) + {($support_file_name): {"abort-reason": $abort_reason,"upload-results": ""}})})' "${eus_dir}/db/db.json" > "${eus_dir}/db/db.json.tmp" 2>> "${eus_dir}/logs/eus-database-management.log"
     fi
     eus_database_move
-    tar czvfh "${support_file}" --exclude="${eus_dir}/go.tar.gz" --exclude="${eus_dir}/unifi_db" --exclude="/tmp/EUS/downloads" --exclude="/usr/lib/unifi/logs/remote" "/tmp/EUS" "${eus_dir}" "/usr/lib/unifi/logs" "/etc/apt/sources.list" "/etc/apt/sources.list.d/" "/etc/apt/preferences" "/etc/apt/keyrings" "/etc/apt/trusted.gpg.d/" "/etc/apt/preferences.d/" "/etc/default/unifi" "/etc/environment" "/var/log/dpkg.log"* "/etc/systemd/system/unifi.service.d/" "/lib/systemd/system/unifi.service" &> /dev/null
+    tar czvfh "${support_file}" --exclude="${eus_dir}/go.tar.gz" --exclude="${eus_dir}/unifi_db" --exclude="/tmp/EUS/downloads" --exclude="/usr/lib/unifi/logs/remote" "/tmp/EUS" "${eus_dir}" "/usr/lib/unifi/logs" "/etc/apt/sources.list" "/etc/apt/sources.list.d/" "/etc/apt/preferences" "/etc/apt/keyrings" "/etc/apt/trusted.gpg.d/" "/etc/apt/preferences.d/" "/etc/default/unifi" "/etc/environment" "/var/log/dpkg.log"* "/etc/systemd/system/unifi.service.d/" "/lib/systemd/system/unifi.service" "/usr/lib/unifi/data/db/version" &> /dev/null
   elif "$(which dpkg)" -l zip 2> /dev/null | grep -iq "^ii\\|^hi\\|^ri\\|^pi\\|^ui"; then
     support_file="/tmp/eus-support-${support_file_uuid}${support_file_time}.zip"
     support_file_name="$(basename "${support_file}")"
@@ -669,7 +669,7 @@ support_file() {
       jq --arg script_name "$script_name" --arg support_file_name "$support_file_name" --arg abort_reason "$abort_reason" '.scripts[$script_name] |= (. + {support: ((.support // {}) + {($support_file_name): {"abort-reason": $abort_reason,"upload-results": ""}})})' "${eus_dir}/db/db.json" > "${eus_dir}/db/db.json.tmp" 2>> "${eus_dir}/logs/eus-database-management.log"
     fi
     eus_database_move
-    zip -r "${support_file}" "/tmp/EUS/" "${eus_dir}/" "/usr/lib/unifi/logs/" "/etc/apt/sources.list" "/etc/apt/sources.list.d/" "/etc/apt/preferences" "/etc/apt/keyrings" "/etc/apt/trusted.gpg.d/" "/etc/apt/preferences.d/" "/etc/default/unifi" "/etc/environment" "/var/log/dpkg.log"* "/etc/systemd/system/unifi.service.d/" "/lib/systemd/system/unifi.service" -x "${eus_dir}/go.tar.gz" -x "${eus_dir}/unifi_db/*" -x "/tmp/EUS/downloads" -x "/usr/lib/unifi/logs/remote" &> /dev/null
+    zip -r "${support_file}" "/tmp/EUS/" "${eus_dir}/" "/usr/lib/unifi/logs/" "/etc/apt/sources.list" "/etc/apt/sources.list.d/" "/etc/apt/preferences" "/etc/apt/keyrings" "/etc/apt/trusted.gpg.d/" "/etc/apt/preferences.d/" "/etc/default/unifi" "/etc/environment" "/var/log/dpkg.log"* "/etc/systemd/system/unifi.service.d/" "/lib/systemd/system/unifi.service" "/usr/lib/unifi/data/db/version" -x "${eus_dir}/go.tar.gz" -x "${eus_dir}/unifi_db/*" -x "/tmp/EUS/downloads" -x "/usr/lib/unifi/logs/remote" &> /dev/null
   fi
   if [[ -n "${support_file}" ]]; then
     echo -e "${WHITE_R}#${RESET} Support file has been created here: ${support_file} \\n"
@@ -712,6 +712,7 @@ abort() {
     eus_database_move
   fi
   if [[ "${set_lc_all}" == 'true' ]]; then if [[ -n "${original_lang}" ]]; then export LANG="${original_lang}"; else unset LANG; fi; if [[ -n "${original_lcall}" ]]; then export LC_ALL="${original_lcall}"; else unset LC_ALL; fi; fi
+  if [[ "${stopped_unattended_upgrade}" == 'true' ]]; then systemctl start unattended-upgrades &>> "${eus_dir}/logs/unattended-upgrades.log"; unset stopped_unattended_upgrade; fi
   if [[ -f /tmp/EUS/services/stopped_list && -s /tmp/EUS/services/stopped_list ]]; then
     while read -r service; do
       echo -e "\\n${WHITE_R}#${RESET} Starting ${service}.."
@@ -805,6 +806,7 @@ start_script() {
   echo -e "\\n${WHITE_R}#${RESET} Starting the Easy UniFi Install Script.."
   echo -e "${WHITE_R}#${RESET} Thank you for using my Easy UniFi Install Script :-)\\n\\n"
   if [[ "${update_at_start_script}" != 'true' ]]; then update_at_start_script="true"; update_eus_db; fi
+  if pgrep -f unattended-upgrade &> /dev/null; then if systemctl stop unattended-upgrades &>> "${eus_dir}/logs/unattended-upgrades.log"; then stopped_unattended_upgrade="true"; fi; fi
 }
 start_script
 check_dns
@@ -1123,6 +1125,36 @@ check_package_cache_file_corruption() {
   fi
 }
 
+https_died_unexpectedly_check() {
+  while IFS= read -r log_file; do
+    if [[ -n "${GNUTLS_CPUID_OVERRIDE}" ]] && grep -sq "GNUTLS_CPUID_OVERRIDE=" "/etc/environment" &> /dev/null; then
+      previous_value="$(grep "GNUTLS_CPUID_OVERRIDE=" "/etc/environment" | cut -d '=' -f2)"
+      if [[ "${https_died_unexpectedly_check_logged_1}" != 'true' ]] && [[ "${previous_value}" == "0x1" ]]; then echo -e "$(date +%F-%R) | Previous GNUTLS_CPUID_OVERRIDE value is: ${previous_value}" &>> "${eus_dir}/logs/https-died-unexpectedly.log"; https_died_unexpectedly_check_logged_1="true"; fi
+      if [[ "${previous_value}" != "0x1" ]]; then
+        if sed -i 's/^GNUTLS_CPUID_OVERRIDE=.*/GNUTLS_CPUID_OVERRIDE=0x1/' "/etc/environment" &>> "${eus_dir}/logs/https-died-unexpectedly.log"; then
+          echo -e "$(date +%F-%R) | Successfully updated GNUTLS_CPUID_OVERRIDE to 0x1!" &>> "${eus_dir}/logs/https-died-unexpectedly.log"
+          # shellcheck disable=SC1091
+          source /etc/environment
+          repository_changes_applied="true"
+        else
+          echo -e "$(date +%F-%R) | Failed to update GNUTLS_CPUID_OVERRIDE to 0x1..." &>> "${eus_dir}/logs/https-died-unexpectedly.log"
+        fi
+      fi
+    else
+      echo -e "$(date +%F-%R) | Adding \"export GNUTLS_CPUID_OVERRIDE=0x1\" to /etc/environment..." &>> "${eus_dir}/logs/https-died-unexpectedly.log"
+      if echo "export GNUTLS_CPUID_OVERRIDE=0x1" &>> /etc/environment; then
+        echo -e "$(date +%F-%R) | Successfully added \"export GNUTLS_CPUID_OVERRIDE=0x1\" to /etc/environment..." &>> "${eus_dir}/logs/https-died-unexpectedly.log"
+        # shellcheck disable=SC1091
+        source /etc/environment
+        repository_changes_applied="true"
+      else
+        echo -e "$(date +%F-%R) | Failed to add \"export GNUTLS_CPUID_OVERRIDE=0x1\" to /etc/environment..." &>> "${eus_dir}/logs/https-died-unexpectedly.log"
+      fi
+    fi
+    sed -i "s/Method https has died unexpectedly!/Method https has died unexpectedly (completed)!/g" "${log_file}" 2>> "${eus_dir}/logs/https-died-unexpectedly.log"
+  done < <(grep -slE '^E: Method https has died unexpectedly!' /tmp/EUS/apt/*.log "${eus_dir}"/logs/*.log | sort -u 2>> /dev/null)
+}
+
 check_time_date_for_repositories() {
   if ls /tmp/EUS/apt/*.log 1> /dev/null 2>&1; then
     if grep -ioqE '^E: Release file for .* is not valid yet \(invalid for another' /tmp/EUS/apt/*.log; then
@@ -1396,6 +1428,7 @@ run_apt_get_update() {
     if "$(which dpkg)" -l dirmngr 2> /dev/null | awk '{print $1}' | grep -iq "^ii\\|^hi\\|^ri\\|^pi\\|^ui"; then if grep -qo 'NO_PUBKEY.*' /tmp/EUS/apt/apt-update.log; then run_apt_get_update; fi; fi
   fi
   check_package_cache_file_corruption
+  https_died_unexpectedly_check
   check_time_date_for_repositories
   cleanup_malformed_repositories
   cleanup_duplicated_repositories
@@ -2019,6 +2052,7 @@ fi
 
 cancel_script() {
   if [[ "${set_lc_all}" == 'true' ]]; then if [[ -n "${original_lang}" ]]; then export LANG="${original_lang}"; else unset LANG; fi; if [[ -n "${original_lcall}" ]]; then export LC_ALL="${original_lcall}"; else unset LC_ALL; fi; fi
+  if [[ "${stopped_unattended_upgrade}" == 'true' ]]; then systemctl start unattended-upgrades &>> "${eus_dir}/logs/unattended-upgrades.log"; unset stopped_unattended_upgrade; fi
   if [[ "${script_option_skip}" == 'true' ]]; then
     echo -e "\\n${WHITE_R}#########################################################################${RESET}\\n"
   else
@@ -2039,6 +2073,7 @@ http_proxy_found() {
 
 remove_yourself() {
   if [[ "${set_lc_all}" == 'true' ]]; then if [[ -n "${original_lang}" ]]; then export LANG="${original_lang}"; else unset LANG; fi; if [[ -n "${original_lcall}" ]]; then export LC_ALL="${original_lcall}"; else unset LC_ALL; fi; fi
+  if [[ "${stopped_unattended_upgrade}" == 'true' ]]; then systemctl start unattended-upgrades &>> "${eus_dir}/logs/unattended-upgrades.log"; unset stopped_unattended_upgrade; fi
   if [[ "${delete_script}" == 'true' || "${script_option_skip}" == 'true' ]]; then if [[ -e "${script_location}" ]]; then rm --force "${script_location}" 2> /dev/null; fi; fi
 }
 
@@ -2083,6 +2118,7 @@ author() {
   if [[ "${new_year_message}" == 'true' || "${christmas_message}" == 'true' ]]; then echo -e "\\n${WHITE_R}----${RESET}\\n"; fi
   if [[ "${archived_repo}" == 'true' && "${unifi_core_system}" != 'true' ]]; then echo -e "\\n${WHITE_R}----${RESET}\\n\\n${RED}# ${RESET}Looks like you're using a ${RED}EOL/unsupported${RESET} OS Release (${os_codename})\\n${RED}# ${RESET}Please update to a supported release...\\n"; fi
   if [[ "${archived_repo}" == 'true' && "${unifi_core_system}" == 'true' ]]; then echo -e "\\n${WHITE_R}----${RESET}\\n\\n${RED}# ${RESET}Please update to the latest UniFi OS Release!\\n"; fi
+  if [[ "${stopped_unattended_upgrade}" == 'true' ]]; then systemctl start unattended-upgrades &>> "${eus_dir}/logs/unattended-upgrades.log"; unset stopped_unattended_upgrade; fi
   echo -e "${WHITE_R}#${RESET} ${GRAY_R}Author   |  ${WHITE_R}Glenn R.${RESET}"
   echo -e "${WHITE_R}#${RESET} ${GRAY_R}Email    |  ${WHITE_R}glennrietveld8@hotmail.nl${RESET}"
   echo -e "${WHITE_R}#${RESET} ${GRAY_R}Website  |  ${WHITE_R}https://GlennR.nl${RESET}\\n\\n"
@@ -2410,6 +2446,27 @@ if ! grep -iq '^127.0.0.1.*localhost' /etc/hosts; then
   esac
 fi
 
+check_mongodb_installed() {
+  unset mongodb_installed
+  "$(which dpkg)" -l | grep "mongodb-server\\|mongodb-org-server\\|mongod-armv8" | grep "^ii\\|^hi" | awk '{print $3}' | sed 's/.*://' | sed 's/-.*//g' &> /tmp/EUS/mongodb_versions
+  if ! [[ -s "/tmp/EUS/mongodb_versions" ]]; then
+    if [[ -n "$(command -v mongod)" ]]; then
+      if "${mongocommand}" --port 27117 --eval "print(\"waited for connection\")" &> /dev/null; then
+        "$(which mongod)" --quiet --eval "db.version()" | sed 's/\.//g' | sed 's/.*://' | sed 's/-.*//g' &> /tmp/EUS/mongodb_versions
+      else
+        "$(which mongod)" --version --quiet | tr '[:upper:]' '[:lower:]' | sed -e '/db version/d' -e '/mongodb shell/d' -e 's/build info: //g' | jq -r '.version' &> /tmp/EUS/mongodb_versions
+      fi
+    fi
+  fi
+  mongodb_version_installed="$(sort -V /tmp/EUS/mongodb_versions | tail -n 1)"
+  mongodb_version_installed_no_dots="${mongodb_version_installed//./}"
+  if [[ -n "${mongodb_version_installed}" ]]; then mongodb_installed="true"; fi
+  if "$(which dpkg)" -l | grep "^ii\\|^hi" | grep -iq "mongodb-server\\|mongodb-org-server"; then mongodb_installed="true"; fi
+  rm --force /tmp/EUS/mongodb_versions &> /dev/null
+  first_digit_mongodb_version_installed="$(echo "${mongodb_version_installed}" | cut -d'.' -f1)"
+  second_digit_mongodb_version_installed="$(echo "${mongodb_version_installed}" | cut -d'.' -f2)"
+}
+
 check_and_add_to_path() {
   local directory="$1"
   if ! echo "${PATH}" | grep -qE "(^|:)$directory(:|$)"; then
@@ -2554,7 +2611,7 @@ attempt_recover_broken_packages() {
         echo -e "${RED}#${RESET} Failed to prevent ${broken_package} from screwing over apt...\\n"
       fi
     done < <(awk 'tolower($0) ~ /errors were encountered while processing/ {flag=1; next} flag {if (NF > 0) {gsub(/^[ ]+/, "", $0); lower=$0; tolower(lower); if (lower ~ /^[a-z0-9.-]+$/ && !seen[lower]++) {print $0}} else {flag=0}}' "${log_file}" | awk -F: '{print $1}' | sort -u)
-  done < <(grep -slE '^Errors were encountered while processing:' /tmp/EUS/apt/*.log "${eus_dir}"/*.log | sort -u 2>> /dev/null)
+  done < <(grep -slE '^Errors were encountered while processing:' /tmp/EUS/apt/*.log "${eus_dir}"/logs/*.log | sort -u 2>> /dev/null)
   check_dpkg_interrupted
 }
 
@@ -2683,7 +2740,7 @@ if [[ -d "/usr/lib/unifi/logs/" ]]; then
   if [[ "$(command -v zgrep)" ]]; then grep_command="zgrep"; else grep_command="grep"; fi
   while read -r found_mongodb_version; do
     while read -r file; do
-      if ! "${grep_command}" -A30 -aE "$(echo "${found_mongodb_version}" | cut -d'.' -f1)\.$(echo "${found_mongodb_version}" | cut -d'.' -f2)\.$(echo "${found_mongodb_version}" | cut -d'.' -f3)" "${file}" | grep -sqiaE "This version of MongoDB is too recent to start up on the existing data files|This may be due to an unsupported upgrade or downgrade.|UPGRADE PROBLEM|Cannot start server with an unknown storage engine"; then
+      if ! "${grep_command}" -A50 -aE "$(echo "${found_mongodb_version}" | cut -d'.' -f1)\.$(echo "${found_mongodb_version}" | cut -d'.' -f2)\.$(echo "${found_mongodb_version}" | cut -d'.' -f3)" "${file}" | sed -n "/$(echo "${found_mongodb_version}" | cut -d'.' -f1)\.$(echo "${found_mongodb_version}" | cut -d'.' -f2)\.$(echo "${found_mongodb_version}" | cut -d'.' -f3)/,/SERVER RESTARTED/p" | sed -e "1s/^.*$(echo "${found_mongodb_version}" | cut -d'.' -f1)\.$(echo "${found_mongodb_version}" | cut -d'.' -f2)\.$(echo "${found_mongodb_version}" | cut -d'.' -f3) //; $!d; /^.*SERVER RESTARTED/d" | grep -sqiaE "This version of MongoDB is too recent to start up on the existing data files|This may be due to an unsupported upgrade or downgrade.|UPGRADE PROBLEM|Cannot start server with an unknown storage engine"; then
         last_known_good_mongodb_version="${found_mongodb_version}"; wait; break
       fi
     done < <(find /usr/lib/unifi/logs/ -maxdepth 1 -type f -exec "${grep_command}" -Eial "db version v${found_mongodb_version}|buildInfo\":{\"version\":\"${found_mongodb_version}\"" {} \;)
@@ -2711,10 +2768,26 @@ if [[ -d "/usr/lib/unifi/logs/" ]]; then
   fi
 fi
 
+minimum_required_mongodb_version_check() {
+  if [[ "$(curl "${curl_argument[@]}" "https://api.glennr.nl/api/unifi-package-versions?status" | jq -r '.availability')" == "OK" ]]; then
+    if command -v jq &> /dev/null; then
+      minimum_required_mongodb_version="$(curl "${curl_argument[@]}" "https://api.glennr.nl/api/unifi-package-versions?unifi-version=${unifi_version}" | jq -r '."minimum_required_mongodb_version"')"
+    else
+      minimum_required_mongodb_version="$(curl "${curl_argument[@]}" "https://api.glennr.nl/api/unifi-package-versions?unifi-version=${unifi_version}" | sed -n 's/.*"minimum_required_mongodb_version":\s*"\([^"]*\)".*/\1/p')"
+    fi
+  else
+    first_digit_unifi_version="$(echo "${unifi_version}" | cut -d'.' -f1)"
+    second_digit_unifi_version="$(echo "${unifi_version}" | cut -d'.' -f2)"
+    if [[ "${first_digit_unifi_version}" -gt '7' ]] || [[ "${first_digit_unifi_version}" == '7' && "${second_digit_unifi_version}" -ge '5' ]]; then minimum_required_mongodb_version="36"; fi
+    if [[ "${first_digit_unifi_version}" == '7' && "${second_digit_unifi_version}" == '4' ]]; then minimum_required_mongodb_version="26"; fi
+  fi
+}
+
 unifi_package="$("$(which dpkg)" -l | grep "unifi " | awk '{print $1}' | tr '[:upper:]' '[:lower:]')"
 if [[ -z "${unifi_package}" ]]; then if [[ -e "/usr/lib/unifi/data/db/version" ]]; then recovery_required="true"; fi; fi
 if [[ -n "${unifi_package}" ]] || [[ "${recovery_required}" == 'true' ]]; then
   if ! [[ "${unifi_package}" =~ (hi|ii) ]] || [[ "${recovery_required}" == 'true' ]]; then
+    check_mongodb_installed
     broken_unifi_install="true"
     header_red
     echo -e "${RED}#${RESET} You have a broken UniFi Network Application installation...\\n"
@@ -2722,7 +2795,16 @@ if [[ -n "${unifi_package}" ]] || [[ "${recovery_required}" == 'true' ]]; then
     broken_unifi_install_version2="$(grep -saEio "UniFi [0-9].[0-9].[0-9]{1,3}" /usr/lib/unifi/logs/server.log* | sed 's/UniFi //g' | sort -V | tail -n1 | sed 's/^.*://')"
     broken_unifi_install_version3="$("$(which dpkg)" -l unifi | tail -n1 | awk '{print $3}' | cut -d"-" -f1)"
     broken_unifi_install_versions=("${broken_unifi_install_version1}" "${broken_unifi_install_version2}" "${broken_unifi_install_version3}")
-    broken_unifi_install_version="$(printf "%s\n" "${broken_unifi_install_versions[@]}" | sort -V | tail -n1)"
+    while read -r unifi_version; do
+      unset minimum_required_mongodb_version
+      minimum_required_mongodb_version_check
+      if [[ "${mongodb_version_installed_no_dots::2}" -lt "${minimum_required_mongodb_version}" ]]; then
+        continue
+      else
+        broken_unifi_install_version="${unifi_version}"
+      fi
+    done < <(printf "%s\n" "${broken_unifi_install_versions[@]}" | sort -V | awk '!seen[$0]++')
+    if [[ -z "${broken_unifi_install_version}" ]]; then broken_unifi_install_version="$(printf "%s\n" "${broken_unifi_install_versions[@]}" | sort -V | tail -n1)"; fi
     if [[ -n "${broken_unifi_install_version}" ]]; then
       broken_unifi_install_version_first_digit="$(echo "${broken_unifi_install_version}" | cut -d"." -f1)"
       broken_unifi_install_version_second_digit="$(echo "${broken_unifi_install_version}" | cut -d"." -f2)"
@@ -3545,26 +3627,6 @@ unifi_required_packages_check
 #                                                                                                                                                                                                 #
 ###################################################################################################################################################################################################
 
-check_mongodb_installed() {
-  unset mongodb_installed
-  "$(which dpkg)" -l | grep "mongodb-server\\|mongodb-org-server\\|mongod-armv8" | grep "^ii\\|^hi" | awk '{print $3}' | sed 's/.*://' | sed 's/-.*//g' &> /tmp/EUS/mongodb_versions
-  if ! [[ -s "/tmp/EUS/mongodb_versions" ]]; then
-    if [[ -n "$(command -v mongod)" ]]; then
-      if "${mongocommand}" --port 27117 --eval "print(\"waited for connection\")" &> /dev/null; then
-        "$(which mongod)" --quiet --eval "db.version()" | sed 's/\.//g' | sed 's/.*://' | sed 's/-.*//g' &> /tmp/EUS/mongodb_versions
-      else
-        "$(which mongod)" --version --quiet | tr '[:upper:]' '[:lower:]' | sed -e '/db version/d' -e '/mongodb shell/d' -e 's/build info: //g' | jq -r '.version' &> /tmp/EUS/mongodb_versions
-      fi
-    fi
-  fi
-  mongodb_version_installed="$(sort -V /tmp/EUS/mongodb_versions | tail -n 1)"
-  mongodb_version_installed_no_dots="${mongodb_version_installed//./}"
-  if [[ -n "${mongodb_version_installed}" ]]; then mongodb_installed="true"; fi
-  if "$(which dpkg)" -l | grep "^ii\\|^hi" | grep -iq "mongodb-server\\|mongodb-org-server"; then mongodb_installed="true"; fi
-  rm --force /tmp/EUS/mongodb_versions &> /dev/null
-  first_digit_mongodb_version_installed="$(echo "${mongodb_version_installed}" | cut -d'.' -f1)"
-  second_digit_mongodb_version_installed="$(echo "${mongodb_version_installed}" | cut -d'.' -f2)"
-}
 check_mongodb_installed
 #
 system_memory="$(awk '/MemTotal/ {printf( "%.0f\n", $2 / 1024 / 1024)}' /proc/meminfo)"
@@ -3674,8 +3736,6 @@ if [[ "${first_digit_unifi}" -gt '8' ]] || [[ "${first_digit_unifi}" == '8' && "
   unset add_mongodb_36_repo
   unset add_mongodb_34_repo
   mongo_version_not_supported="7.1"
-  required_java_version="openjdk-17"
-  required_java_version_short="17"
 elif [[ "${first_digit_unifi}" -gt '7' ]] || [[ "${first_digit_unifi}" == '7' && "${second_digit_unifi}" -ge "5" ]]; then
   mongo_version_max="44"
   mongo_version_max_with_dot="4.4"
@@ -3684,15 +3744,21 @@ elif [[ "${first_digit_unifi}" -gt '7' ]] || [[ "${first_digit_unifi}" == '7' &&
   unset add_mongodb_36_repo
   unset add_mongodb_34_repo
   mongo_version_not_supported="4.5"
-  required_java_version="openjdk-17"
-  required_java_version_short="17"
-elif [[ "${first_digit_unifi}" == '7' && "${second_digit_unifi}" =~ (3|4) ]]; then
-  required_java_version="openjdk-11"
-  required_java_version_short="11"
-else
-  required_java_version="openjdk-8"
-  required_java_version_short="8"
 fi
+
+java_required_variables() {
+  if [[ "${first_digit_unifi}" -gt '7' ]] || [[ "${first_digit_unifi}" == '7' && "${second_digit_unifi}" -ge "5" ]]; then
+    required_java_version="openjdk-17"
+    required_java_version_short="17"
+  elif [[ "${first_digit_unifi}" == '7' && "${second_digit_unifi}" =~ (3|4) ]]; then
+    required_java_version="openjdk-11"
+    required_java_version_short="11"
+  else
+    required_java_version="openjdk-8"
+    required_java_version_short="8"
+  fi
+}
+java_required_variables
 
 # Stick to 4.4 if cpu doesn't report avx support.
 mongodb_avx_support_check() {
@@ -4351,6 +4417,324 @@ daemon_reexec
 
 ##########################################################################################################################################################################
 #                                                                                                                                                                        #
+#                                                                         Java Install functions                                                                         #
+#                                                                                                                                                                        #
+##########################################################################################################################################################################
+
+adoptium_java() {
+  if [[ "${os_codename}" =~ (jessie|forky|lunar|impish|eoan|disco|cosmic|mantic) ]]; then
+    if ! curl "${curl_argument[@]}" "https://packages.adoptium.net/artifactory/deb/dists/" | sed -e 's/<[^>]*>//g' -e '/^$/d' -e '/\/\//d' -e '/function/d' -e '/location/d' -e '/}/d' -e 's/\///g' -e '/Name/d' -e '/Index/d' -e '/\.\./d' -e '/Artifactory/d' | awk '{print $1}' | grep -iq "${os_codename}"; then
+      if [[ "${os_codename}" =~ (jessie) ]]; then
+        os_codename="wheezy"
+        adoptium_adjusted_os_codename="true"
+      elif [[ "${os_codename}" =~ (forky) ]]; then
+        os_codename="bookworm"
+        adoptium_adjusted_os_codename="true"
+      elif [[ "${os_codename}" =~ (lunar|impish) ]]; then
+        os_codename="jammy"
+        adoptium_adjusted_os_codename="true"
+      elif [[ "${os_codename}" =~ (eoan|disco|cosmic) ]]; then
+        os_codename="focal"
+        adoptium_adjusted_os_codename="true"
+      elif [[ "${os_codename}" =~ (mantic) ]]; then
+        os_codename="noble"
+        adoptium_adjusted_os_codename="true"
+      fi
+    fi
+  fi
+  if curl "${curl_argument[@]}" "https://packages.adoptium.net/artifactory/deb/dists/" | sed -e 's/<[^>]*>//g' -e '/^$/d' -e '/\/\//d' -e '/function/d' -e '/location/d' -e '/}/d' -e 's/\///g' -e '/Name/d' -e '/Index/d' -e '/\.\./d' -e '/Artifactory/d' | awk '{print $1}' | grep -iq "${os_codename}"; then
+    echo -e "${WHITE_R}#${RESET} Adding the key for adoptium packages..."
+    aptkey_depreciated
+    if [[ "${apt_key_deprecated}" == 'true' ]]; then
+      echo -e "$(date +%F-%R) | packages.adoptium.net repository key.\\n" &>> "${eus_dir}/logs/repository-keys.log"
+      if curl "${curl_argument[@]}" -fSL "https://packages.adoptium.net/artifactory/api/gpg/key/public" 2>&1 | tee -a "${eus_dir}/logs/repository-keys.log" | gpg -o "/etc/apt/keyrings/packages-adoptium.gpg" --dearmor --yes &> /dev/null; then
+        adoptium_curl_exit_status="${PIPESTATUS[0]}"
+        adoptium_gpg_exit_status="${PIPESTATUS[2]}"
+        if [[ "${adoptium_curl_exit_status}" -eq "0" && "${adoptium_gpg_exit_status}" -eq "0" && -s "/etc/apt/keyrings/packages-adoptium.gpg" ]]; then
+          echo -e "${GREEN}#${RESET} Successfully added the key for adoptium packages! \\n"; signed_by_value_adoptium="signed-by=/etc/apt/keyrings/packages-adoptium.gpg"; deb822_signed_by_value="\nSigned-By: /etc/apt/keyrings/packages-adoptium.gpg"
+        else
+          abort_reason="Failed to add the key for adoptium packages."; abort
+        fi
+      else
+        abort_reason="Failed to fetch the key for adoptium packages."
+        abort
+      fi
+    else
+      echo -e "$(date +%F-%R) | packages.adoptium.net repository key.\\n" &>> "${eus_dir}/logs/repository-keys.log"
+      if curl "${curl_argument[@]}" -fSL "https://packages.adoptium.net/artifactory/api/gpg/key/public" 2>&1 | tee -a "${eus_dir}/logs/repository-keys.log" | apt-key add - &> /dev/null; then
+        adoptium_curl_exit_status="${PIPESTATUS[0]}"
+        adoptium_apt_key_exit_status="${PIPESTATUS[2]}"
+        if [[ "${adoptium_curl_exit_status}" -eq "0" && "${adoptium_apt_key_exit_status}" -eq "0" ]]; then
+          echo -e "${GREEN}#${RESET} Successfully added the key for adoptium packages! \\n"
+        else
+          abort_reason="Failed to add the key for adoptium packages."; abort
+        fi
+      else
+        abort_reason="Failed to fetch the key for adoptium packages."
+        abort
+      fi
+    fi
+    echo -e "${WHITE_R}#${RESET} Adding the adoptium packages repository..."
+    if [[ "${use_deb822_format}" == 'true' ]]; then
+      # DEB822 format
+      adoptium_repo_entry="Types: deb\nURIs: ${http_or_https}://packages.adoptium.net/artifactory/deb\nSuites: ${os_codename}\nComponents: main${deb822_signed_by_value}"
+    else
+      # Traditional format
+      adoptium_repo_entry="deb [ ${signed_by_value_adoptium} ] ${http_or_https}://packages.adoptium.net/artifactory/deb ${os_codename} main"
+    fi
+    if echo -e "${adoptium_repo_entry}" &> "/etc/apt/sources.list.d/glennr-packages-adoptium.${source_file_format}"; then
+      echo -e "${GREEN}#${RESET} Successfully added the adoptium packages repository!\\n" && sleep 2
+    else
+      abort_reason="Failed to add the adoptium packages repository."
+      abort
+    fi
+    check_default_repositories
+    if [[ "${os_codename}" =~ (jessie|stretch) ]]; then
+      repo_codename="buster"
+      repo_component="main"
+      get_repo_url
+      add_repositories
+      get_distro
+    fi
+    repo_component="main"
+    get_repo_url
+    add_repositories
+    run_apt_get_update
+  else
+    { echo "# Could not find \"${os_codename}\" on https://packages.adoptium.net/artifactory/deb/dists/"; echo "# List of what was found:"; curl "${curl_argument[@]}" "https://packages.adoptium.net/artifactory/deb/dists/" | sed -e 's/<[^>]*>//g' -e '/^$/d' -e '/\/\//d' -e '/function/d' -e '/location/d' -e '/}/d' -e 's/\///g' -e '/Name/d' -e '/Index/d' -e '/\.\./d' -e '/Artifactory/d' | awk '{print $1}'; } &>> "${eus_dir}/logs/adoptium.log"
+  fi
+  if [[ "${adoptium_adjusted_os_codename}" == 'true' ]]; then get_distro; fi
+}
+
+openjdk_java() {
+  if [[ "${repo_codename}" =~ (precise|trusty|xenial|bionic|cosmic) ]]; then
+    if [[ "${architecture}" =~ (amd64|i386) ]]; then
+      repo_url="http://ppa.launchpad.net/openjdk-r/ppa/ubuntu"
+      repo_component="main"
+      repo_key="EB9B1D8886F44E2A"
+      repo_key_name="openjdk-ppa"
+    else
+      repo_url="http://ports.ubuntu.com"
+      repo_codename_argument="-security"
+      repo_component="main universe"
+    fi
+    add_repositories
+  elif [[ "${repo_codename}" =~ (disco|eoan|focal|groovy|hirsute|impish|jammy|kinetic|lunar|mantic|noble|oracular) ]]; then
+    if [[ "${architecture}" =~ (amd64|i386) ]]; then
+      get_repo_url_security_url="true"
+      get_repo_url
+      repo_codename_argument="-security"
+      repo_component="main universe"
+    else
+      repo_url="http://ports.ubuntu.com"
+      repo_codename_argument="-security"
+      repo_component="main universe"
+    fi
+    add_repositories
+    repo_component="main"
+    add_repositories
+  elif [[ "${os_codename}" == "jessie" ]]; then
+    check_dpkg_lock
+    echo -e "${WHITE_R}#${RESET} ${openjdk_variable} ${required_java_version}-jre-headless..."
+    if ! DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install -t jessie-backports "${required_java_version}-jre-headless" &>> "${eus_dir}/logs/apt.log" || [[ "${old_openjdk_version}" == 'true' ]]; then
+      echo -e "${RED}#${RESET} Failed to ${openjdk_variable_3} ${required_java_version}-jre-headless in the first run...\\n"
+      if [[ "$(find /etc/apt/ -name "*.list" -type f -print0 | xargs -0 cat | grep -P -c "^deb http[s]*://archive.debian.org/debian jessie-backports main")" -eq "0" ]]; then
+        echo "deb http://archive.debian.org/debian jessie-backports main" >>/etc/apt/sources.list.d/glennr-install-script.list || abort
+        locate_http_proxy
+        if [[ -n "$http_proxy" ]]; then
+          apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --keyserver-options http-proxy="${http_proxy}" --recv-keys 8B48AD6246925553 7638D0442B90D010 || abort
+        elif [[ -f /etc/apt/apt.conf ]]; then
+          apt_http_proxy="$(grep "http.*Proxy" /etc/apt/apt.conf | awk '{print $2}' | sed 's/[";]//g')"
+          if [[ -n "${apt_http_proxy}" ]]; then
+            apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --keyserver-options http-proxy="${apt_http_proxy}" --recv-keys 8B48AD6246925553 7638D0442B90D010 || abort
+          fi
+        else
+          apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv 8B48AD6246925553 7638D0442B90D010 || abort
+        fi
+        echo -e "${WHITE_R}#${RESET} Running apt-get update..."
+        required_package="${required_java_version}-jre-headless"
+        if apt-get update -o Acquire::Check-Valid-Until="false" &> /dev/null; then echo -e "${GREEN}#${RESET} Successfully ran apt-get update! \\n"; else abort_reason="Failed to ran apt-get update."; abort; fi
+        echo -e "\\n------- ${required_package} installation ------- $(date +%F-%R) -------\\n" &>> "${eus_dir}/logs/apt.log"
+        if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install -t jessie-backports "${required_java_version}-jre-headless" &>> "${eus_dir}/logs/apt.log"; then echo -e "${GREEN}#${RESET} Successfully installed ${required_package}! \\n" && sleep 2; else abort_reason="Failed to install ${required_package}."; abort; fi
+        sed -i '/jessie-backports/d' /etc/apt/sources.list.d/glennr-install-script.list
+        unset required_package
+      fi
+    fi
+  elif [[ "${repo_codename}" =~ (stretch|buster|bullseye|bookworm|trixie|forky) ]]; then
+    if [[ "${required_java_version}" == "openjdk-8" ]]; then
+      repo_codename="stretch"
+      repo_component="main"
+      get_repo_url
+      add_repositories
+    elif [[ "${required_java_version}" =~ (openjdk-11|openjdk-17) ]]; then
+      if [[ "${repo_codename}" =~ (stretch|buster) ]] && [[ "${required_java_version}" =~ (openjdk-11) ]]; then repo_codename="bullseye"; fi
+      if [[ "${repo_codename}" =~ (bookworm|trixie|forky) ]] && [[ "${required_java_version}" =~ (openjdk-11) ]]; then repo_codename="unstable"; fi
+      if [[ "${repo_codename}" =~ (trixie|forky) ]] && [[ "${required_java_version}" =~ (openjdk-17) ]]; then repo_codename="bookworm"; fi
+      if [[ "${repo_codename}" =~ (stretch|buster) ]] && [[ "${required_java_version}" =~ (openjdk-17) ]]; then repo_codename="bullseye"; fi
+      repo_component="main"
+      get_repo_url
+      add_repositories
+    fi
+  fi
+}
+
+available_java_packages_check() {
+  if apt-cache search --names-only ^"openjdk-${required_java_version_short}-jre-headless" | grep -ioq "openjdk-${required_java_version_short}-jre-headless"; then openjdk_available="true"; else unset openjdk_available; fi
+  if apt-cache search --names-only ^"temurin-${required_java_version_short}-jre|temurin-${required_java_version_short}-jdk" | grep -ioq "temurin-${required_java_version_short}-jre\\|temurin-${required_java_version_short}-jdk"; then temurin_available="true"; else unset temurin_available; fi
+}
+
+update_ca_certificates() {
+  if [[ "${update_ca_certificates_ran}" != 'true' ]]; then
+    echo -e "${WHITE_R}#${RESET} Updating the ca-certificates..."
+    rm /etc/ssl/certs/java/cacerts 2> /dev/null
+    if update-ca-certificates -f &> /dev/null; then
+      echo -e "${GREEN}#${RESET} Successfully updated the ca-certificates\\n" && sleep 3
+      if [[ -e "/usr/bin/printf" ]]; then /usr/bin/printf '\xfe\xed\xfe\xed\x00\x00\x00\x02\x00\x00\x00\x00\xe2\x68\x6e\x45\xfb\x43\xdf\xa4\xd9\x92\xdd\x41\xce\xb6\xb2\x1c\x63\x30\xd7\x92' > /etc/ssl/certs/java/cacerts; fi
+      if [[ -e "/var/lib/dpkg/info/ca-certificates-java.postinst" ]]; then /var/lib/dpkg/info/ca-certificates-java.postinst configure &> /dev/null; fi
+      update_ca_certificates_ran="true"
+    else
+      echo -e "${RED}#${RESET} Failed to update the ca-certificates...\\n" && sleep 3
+    fi
+  fi
+}
+
+java_home_check() {
+  if [[ -z "${required_java_version_short}" ]]; then java_required_variables; fi
+  if "$(which dpkg)" -l | grep "^ii\\|^hi" | grep -iq "openjdk-${required_java_version_short}\\|temurin-${required_java_version_short}"; then
+    java_readlink="$(readlink -f "$( command -v java )" | sed "s:/bin/.*$::")"
+    if ! echo "${java_readlink}" | grep -ioq "${required_java_version_short}"; then java_readlink="$(update-java-alternatives --list | grep "${required_java_version_short}" | awk '{print $3}' | head -n1)"; fi
+    java_home_location="JAVA_HOME=${java_readlink}"
+    current_java_home="$(grep -si "^JAVA_HOME" /etc/default/unifi)"
+    if [[ -n "${java_home_location}" ]]; then
+      if [[ "${current_java_home}" != "${java_home_location}" ]]; then
+        if [[ -e "/etc/default/unifi" ]]; then sed -i '/JAVA_HOME/d' /etc/default/unifi; fi
+        echo "${java_home_location}" >> /etc/default/unifi
+      fi
+    fi
+    current_java_home="$(grep -si "^JAVA_HOME" /etc/environment)"
+    if [[ -n "${java_home_location}" ]]; then
+      if [[ "${current_java_home}" != "${java_home_location}" ]]; then
+        if [[ -e "/etc/default/unifi" ]]; then sed -i 's/^JAVA_HOME/#JAVA_HOME/' /etc/environment; fi
+        echo "${java_home_location}" >> /etc/environment
+        # shellcheck disable=SC1091
+        source /etc/environment
+      fi
+    fi
+  fi
+}
+
+java_cleanup_not_required_versions() {
+  get_unifi_version
+  java_required_variables
+  if "$(which dpkg)" -l | grep "^ii\\|^hi" | grep -iq "openjdk-${required_java_version_short}"; then
+    required_java_version_installed="true"
+  fi
+  if "$(which dpkg)" -l | grep "^ii\\|^hi" | grep -i "openjdk-.*-\\|oracle-java.*\\|temurin-.*-" | grep -vq "openjdk-${required_java_version_short}\\|oracle-java${required_java_version_short}\\|openjdk-${required_java_version_short}\\|temurin-${required_java_version_short}"; then
+    unsupported_java_version_installed="true"
+  fi
+  if [[ "${required_java_version_installed}" == 'true' && "${unsupported_java_version_installed}" == 'true' && "${script_option_skip}" != 'true' && "${unifi_core_system}" != 'true' ]]; then
+    header_red
+    echo -e "${WHITE_R}#${RESET} Unsupported JAVA version(s) are detected, do you want to uninstall them?"
+    echo -e "${WHITE_R}#${RESET} This may remove packages that depend on these java versions."
+    read -rp $'\033[39m#\033[0m Do you want to proceed with uninstalling the unsupported JAVA version(s)? (y/N) ' yes_no
+    case "$yes_no" in
+         [Yy]*)
+            header
+            while read -r java_package; do
+              echo -e "${WHITE_R}#${RESET} Removing ${java_package}..."
+              if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' remove "${java_package}" &>> "${eus_dir}/logs/java-uninstall.log"; then
+                echo -e "${GREEN}#${RESET} Successfully removed ${java_package}! \\n"
+              else
+                echo -e "${RED}#${RESET} Successfully removed ${java_package}... \\n"
+              fi
+            done < <("$(which dpkg)" -l | grep "^ii\\|^hi\\|^ri\\|^pi\\|^ui\\|^iU" | grep -i "openjdk-.*-\\|oracle-java.*\\|temurin-.*-" | grep -v "openjdk-${required_java_version_short}\\|oracle-java${required_java_version_short}\\|openjdk-${required_java_version_short}\\|temurin-${required_java_version_short}" | awk '{print $2}' | sed 's/:.*//')
+            sleep 3;;
+         [Nn]*|"") ;;
+    esac
+  fi
+}
+
+java_configure_default() {
+  if "$(which dpkg)" -l | grep "^ii\\|^hi" | grep -iq "openjdk-${required_java_version_short}\\|temurin-${required_java_version_short}"; then
+    update_java_alternatives="$(update-java-alternatives --list | grep "^java-1.${required_java_version_short}.*openjdk\\|temurin-${required_java_version_short}" | awk '{print $1}' | head -n1)"
+    if [[ -n "${update_java_alternatives}" ]]; then
+      update-java-alternatives --set "${update_java_alternatives}" &> /dev/null
+    fi
+    update_alternatives="$(update-alternatives --list java | grep "java-${required_java_version_short}-openjdk\\|temurin-${required_java_version_short}" | awk '{print $1}' | head -n1)"
+    if [[ -n "${update_alternatives}" ]]; then
+      update-alternatives --set java "${update_alternatives}" &> /dev/null
+    fi
+    header
+    update_ca_certificates
+  fi
+}
+
+java_install_check() {
+  java_required_variables
+  if "$(which dpkg)" -l | grep "^ii\\|^hi" | grep -iq "openjdk-8"; then
+    openjdk_version="$("$(which dpkg)" -l | grep "^ii\\|^hi" | grep "openjdk-8" | awk '{print $3}' | grep "^8u" | sed 's/-.*//g' | sed 's/8u//g' | grep -o '[[:digit:]]*' | sort -V | tail -n 1)"
+    if [[ "${openjdk_version}" -lt '131' && "${required_java_version}" == "openjdk-8" ]]; then old_openjdk_version="true"; fi
+  fi
+  if "$(which dpkg)" -l | grep "^ii\\|^hi" | grep -iq "temurin-${required_java_version_short}-jdk"; then
+    if ! "$(which dpkg)" -l | grep "^ii\\|^hi" | grep -iq "temurin-${required_java_version_short}-jre"; then
+      if apt-cache search --names-only "^temurin-${required_java_version_short}-jre" | grep -ioq "temurin-${required_java_version_short}-jre"; then
+        temurin_jdk_to_jre="true"
+      fi
+    fi
+  fi
+  if ! "$(which dpkg)" -l | grep "^ii\\|^hi" | grep -iq "openjdk-${required_java_version_short}\\|temurin-${required_java_version_short}" || [[ "${old_openjdk_version}" == 'true' ]] || [[ "${temurin_jdk_to_jre}" == 'true' ]]; then
+    if [[ "${old_openjdk_version}" == 'true' ]]; then
+      header_red
+      echo -e "${RED}#${RESET} OpenJDK ${required_java_version_short} is to old...\\n" && sleep 2
+      openjdk_variable="Updating"; openjdk_variable_3="Update"
+    else
+      header
+      echo -e "${GREEN}#${RESET} Preparing OpenJDK/Temurin ${required_java_version_short} installation...\\n" && sleep 2
+      openjdk_variable="Installing"; openjdk_variable_3="Install"
+    fi
+    openjdk_java
+    if [[ "${unifi_core_system}" != 'true' ]]; then adoptium_java; fi
+    run_apt_get_update
+    available_java_packages_check
+    java_install_attempts="$(apt-cache search --names-only ^"openjdk-${required_java_version_short}-jre-headless|temurin-${required_java_version_short}-jre|temurin-${required_java_version_short}-jdk" | awk '{print $1}' | wc -l)"
+    until [[ "${java_install_attempts}" == "0" ]]; do
+      if [[ "${openjdk_available}" == "true" && "${openjdk_attempted}" != 'true' ]]; then
+        required_package="openjdk-${required_java_version_short}-jre-headless"; apt_get_install_package; openjdk_attempted="true"
+        if "$(which dpkg)" -l | grep "^ii\\|^hi" | grep -iq "openjdk-${required_java_version_short}-jre-headless"; then break; fi
+      fi
+      if [[ "${temurin_available}" == "true" ]]; then
+        if apt-cache search --names-only ^"temurin-${required_java_version_short}-jre" | grep -ioq "temurin-${required_java_version_short}-jre" && [[ "${temurin_jre_attempted}" != 'true' ]]; then
+          required_package="temurin-${required_java_version_short}-jre"; apt_get_install_package; temurin_jre_attempted="true"
+          if "$(which dpkg)" -l | grep "^ii\\|^hi" | grep -iq "temurin-${required_java_version_short}-jre"; then break; fi
+        elif apt-cache search --names-only ^"temurin-${required_java_version_short}-jdk" | grep -ioq "temurin-${required_java_version_short}-jdk" && [[ "${temurin_jdk_attempted}" != 'true' ]]; then
+          required_package="temurin-${required_java_version_short}-jdk"; apt_get_install_package; temurin_jdk_attempted="true"
+          if "$(which dpkg)" -l | grep "^ii\\|^hi" | grep -iq "temurin-${required_java_version_short}-jdk"; then break; fi
+        fi
+      fi
+      ((java_install_attempts=java_install_attempts-1))
+    done
+    if ! "$(which dpkg)" -l | grep "^ii\\|^hi" | grep -iq "openjdk-${required_java_version_short}-jre-headless\\|temurin-${required_java_version_short}-jre\\|temurin-${required_java_version_short}-jdk"; then abort_reason="Failed to install the required java version."; abort; fi
+    unset java_install_attempts
+    if "$(which dpkg)" -l | grep "^ii\\|^hi" | grep -iq "temurin-${required_java_version_short}-jre" && "$(which dpkg)" -l | grep "^ii\\|^hi" | grep -iq "temurin-${required_java_version_short}-jdk"; then
+      echo -e "${WHITE_R}#${RESET} Removing temurin-${required_java_version_short}-jdk..."
+      if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg6::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' remove "temurin-${required_java_version_short}-jdk" &>> "${eus_dir}/logs/temurin-jdk-remove.log"; then
+        echo -e "${GREEN}#${RESET} Successfully removed temurin-${required_java_version_short}-jdk! \\n"
+      else
+        echo -e "${RED}#${RESET} Failed to remove temurin-${required_java_version_short}-jdk... \\n"
+      fi
+    fi
+  else
+    header
+    echo -e "${GREEN}#${RESET} Preparing OpenJDK/Temurin ${required_java_version_short} installation..."
+    echo -e "${WHITE_R}#${RESET} OpenJDK/Temurin ${required_java_version_short} is already installed! \\n"
+  fi
+  sleep 3
+  java_configure_default
+  java_home_check
+}
+
+##########################################################################################################################################################################
+#                                                                                                                                                                        #
 #                                                                     UniFi deb Package modification                                                                     #
 #                                                                                                                                                                        #
 ##########################################################################################################################################################################
@@ -4486,8 +4870,15 @@ ignore_unifi_package_dependencies() {
   if ! "$(which dpkg)" -l | grep "^ii\\|^hi" | grep -iq "mongodb-server\\|mongodb-org-server\\|mongod-armv8"; then echo -e "mongodb-server" &>> /tmp/EUS/ignore-depends; fi
   if "$(which dpkg)" -l | grep "^ii\\|^hi" | grep -iq "mongodb-server\\|mongodb-org-server\\|mongod-armv8"; then
     ignore_unifi_package_dependencies_mongodb_version="$("$(which dpkg)" -l | grep "mongodb-server\\|mongodb-org-server\\|mongod-armv8" | grep "^ii\\|^hi" | awk '{print $3}' | sed 's/.*://' | sed -e 's/-.*//g' -e 's/\.//g')"
-    if [[ "${ignore_unifi_package_dependencies_mongodb_version::2}" -gt "${unifi_mongo_version_max}" ]]; then  
+    unset minimum_required_mongodb_version
+    minimum_required_mongodb_version_check
+    if [[ "${ignore_unifi_package_dependencies_mongodb_version::2}" -gt "${unifi_mongo_version_max}" ]]; then
       echo -e "mongodb-server" &>> /tmp/EUS/ignore-depends
+    fi
+    if [[ -n "${minimum_required_mongodb_version}" ]]; then 
+      if [[ "${ignore_unifi_package_dependencies_mongodb_version::2}" -lt "${minimum_required_mongodb_version}" ]]; then
+        echo -e "mongodb-server" &>> /tmp/EUS/ignore-depends
+      fi
     fi
   fi
   if ! "$(which dpkg)" -l | grep "^ii\\|^hi" | grep -iq "${required_java_version}-jre-headless"; then echo -e "${required_java_version}-jre-headless" &>> /tmp/EUS/ignore-depends; fi
@@ -4542,7 +4933,7 @@ system_upgrade() {
     done < /tmp/EUS/upgrade/upgrade_list
     echo ""
   fi
-  if ls /tmp/EUS/apt/*.log 1> /dev/null 2>&1; then check_package_cache_file_corruption; check_time_date_for_repositories; cleanup_malformed_repositories; cleanup_duplicated_repositories; cleanup_unavailable_repositories; cleanup_conflicting_repositories; if [[ "${repository_changes_applied}" == 'true' ]]; then unset repository_changes_applied; run_apt_get_update; fi; fi
+  if ls /tmp/EUS/apt/*.log 1> /dev/null 2>&1; then check_package_cache_file_corruption; https_died_unexpectedly_check; check_time_date_for_repositories; cleanup_malformed_repositories; cleanup_duplicated_repositories; cleanup_unavailable_repositories; cleanup_conflicting_repositories; if [[ "${repository_changes_applied}" == 'true' ]]; then unset repository_changes_applied; run_apt_get_update; fi; fi
   check_dpkg_lock
   echo -e "\\n------- apt-get upgrade ------- $(date +%F-%R) -------\\n" &>> "${eus_dir}/logs/upgrade.log"
   echo -e "${WHITE_R}#${RESET} Running apt-get upgrade..."
@@ -5131,15 +5522,21 @@ else
     if [[ -n "${previous_mongodb_version}" ]]; then if [[ "${mongodb_version_no_dots::2}" != "${previous_mongodb_version::2}" ]] && [[ "${previous_mongodb_version::2}" != "$((${mongodb_version_no_dots::2} - 2))" ]]; then unsupported_database_version_change="true"; fi; fi
   fi
   if "$(which dpkg)" -l mongodb-org-server 2> /dev/null | awk '{print $1}' | grep -iq "^ii\\|^hi\\|^ri\\|^pi\\|^ui" && [[ "${glennr_compiled_mongod}" == 'true' && "${mongodb_version_installed_no_dots::2}" == "70" && "${unsupported_database_version_change}" != 'true' ]]; then
-    check_dpkg_lock
+    rm --force /tmp/EUS/mongodb/arm64_mongodb_purge_list &> /dev/null
+    if "$(which dpkg)" -l mongodb-org 2> /dev/null | awk '{print $1}' | grep -iq "^ii\\|^hi\\|^ri\\|^pi\\|^ui"; then echo "mongodb-org" &>> /tmp/EUS/mongodb/arm64_mongodb_purge_list; fi
+    if "$(which dpkg)" -l mongodb-org-database 2> /dev/null | awk '{print $1}' | grep -iq "^ii\\|^hi\\|^ri\\|^pi\\|^ui"; then echo "mongodb-org" &>> /tmp/EUS/mongodb/arm64_mongodb_purge_list; fi
+    if "$(which dpkg)" -l mongodb-org-server 2> /dev/null | awk '{print $1}' | grep -iq "^ii\\|^hi\\|^ri\\|^pi\\|^ui"; then echo "mongodb-org" &>> /tmp/EUS/mongodb/arm64_mongodb_purge_list; fi
     echo -e "${WHITE_R}#${RESET} Purging mongodb-org-server..."
     echo -e "\\n------- $(date +%F-%R) -------\\n" &>> "${eus_dir}/logs/arm64-purge-mongodb.log"
-    if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' purge mongodb-org mongodb-org-server mongodb-org-database &>> "${eus_dir}/logs/arm64-purge-mongodb.log"; then
-      echo -e "${GREEN}#${RESET} Successfully purged mongodb-org-server! \\n"
-    else
-      abort_reason="Failed to purge mongodb-org-server."
-      abort
-    fi
+    while read -r arm64_mongodb_package; do
+      check_dpkg_lock
+      if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' purge "${arm64_mongodb_package}" &>> "${eus_dir}/logs/arm64-purge-mongodb.log"; then
+        echo -e "${GREEN}#${RESET} Successfully purged ${arm64_mongodb_package}! \\n"
+      else
+        abort_reason="Failed to purge ${arm64_mongodb_package}."
+        abort
+      fi
+    done < /tmp/EUS/mongodb/arm64_mongodb_purge_list
     mongodb_installation
   fi
 fi
@@ -5380,8 +5777,9 @@ if [[ "${mongo_version_locked}" == '4.4.18' ]] || [[ "${unsupported_database_ver
       if [[ "${unifi_downloaded}" == 'true' ]]; then
         unset unifi_downloaded
         get_unifi_version
-        java_required_variables
+        java_install_check
         unifi_deb_package_modification
+        unifi_version="${reinstall_unifi_version}"
         ignore_unifi_package_dependencies
         echo -e "${WHITE_R}#${RESET} Re-installing UniFi Network Application version ${reinstall_unifi_version}..."
         echo "unifi unifi/has_backup boolean true" 2> /dev/null | debconf-set-selections
@@ -5443,303 +5841,9 @@ if [[ "${first_digit_unifi}" -gt '7' ]] || [[ "${first_digit_unifi}" == '7' && "
   fi
 fi
 
-adoptium_java() {
-  if [[ "${os_codename}" =~ (jessie|forky|lunar|impish|eoan|disco|cosmic|mantic) ]]; then
-    if ! curl "${curl_argument[@]}" "https://packages.adoptium.net/artifactory/deb/dists/" | sed -e 's/<[^>]*>//g' -e '/^$/d' -e '/\/\//d' -e '/function/d' -e '/location/d' -e '/}/d' -e 's/\///g' -e '/Name/d' -e '/Index/d' -e '/\.\./d' -e '/Artifactory/d' | awk '{print $1}' | grep -iq "${os_codename}"; then
-      if [[ "${os_codename}" =~ (jessie) ]]; then
-        os_codename="wheezy"
-        adoptium_adjusted_os_codename="true"
-      elif [[ "${os_codename}" =~ (forky) ]]; then
-        os_codename="bookworm"
-        adoptium_adjusted_os_codename="true"
-      elif [[ "${os_codename}" =~ (lunar|impish) ]]; then
-        os_codename="jammy"
-        adoptium_adjusted_os_codename="true"
-      elif [[ "${os_codename}" =~ (eoan|disco|cosmic) ]]; then
-        os_codename="focal"
-        adoptium_adjusted_os_codename="true"
-      elif [[ "${os_codename}" =~ (mantic) ]]; then
-        os_codename="noble"
-        adoptium_adjusted_os_codename="true"
-      fi
-    fi
-  fi
-  if curl "${curl_argument[@]}" "https://packages.adoptium.net/artifactory/deb/dists/" | sed -e 's/<[^>]*>//g' -e '/^$/d' -e '/\/\//d' -e '/function/d' -e '/location/d' -e '/}/d' -e 's/\///g' -e '/Name/d' -e '/Index/d' -e '/\.\./d' -e '/Artifactory/d' | awk '{print $1}' | grep -iq "${os_codename}"; then
-    echo -e "${WHITE_R}#${RESET} Adding the key for adoptium packages..."
-    aptkey_depreciated
-    if [[ "${apt_key_deprecated}" == 'true' ]]; then
-      echo -e "$(date +%F-%R) | packages.adoptium.net repository key.\\n" &>> "${eus_dir}/logs/repository-keys.log"
-      if curl "${curl_argument[@]}" -fSL "https://packages.adoptium.net/artifactory/api/gpg/key/public" 2>&1 | tee -a "${eus_dir}/logs/repository-keys.log" | gpg -o "/etc/apt/keyrings/packages-adoptium.gpg" --dearmor --yes &> /dev/null; then
-        adoptium_curl_exit_status="${PIPESTATUS[0]}"
-        adoptium_gpg_exit_status="${PIPESTATUS[2]}"
-        if [[ "${adoptium_curl_exit_status}" -eq "0" && "${adoptium_gpg_exit_status}" -eq "0" && -s "/etc/apt/keyrings/packages-adoptium.gpg" ]]; then
-          echo -e "${GREEN}#${RESET} Successfully added the key for adoptium packages! \\n"; signed_by_value_adoptium="signed-by=/etc/apt/keyrings/packages-adoptium.gpg"; deb822_signed_by_value="\nSigned-By: /etc/apt/keyrings/packages-adoptium.gpg"
-        else
-          abort_reason="Failed to add the key for adoptium packages."; abort
-        fi
-      else
-        abort_reason="Failed to fetch the key for adoptium packages."
-        abort
-      fi
-    else
-      echo -e "$(date +%F-%R) | packages.adoptium.net repository key.\\n" &>> "${eus_dir}/logs/repository-keys.log"
-      if curl "${curl_argument[@]}" -fSL "https://packages.adoptium.net/artifactory/api/gpg/key/public" 2>&1 | tee -a "${eus_dir}/logs/repository-keys.log" | apt-key add - &> /dev/null; then
-        adoptium_curl_exit_status="${PIPESTATUS[0]}"
-        adoptium_apt_key_exit_status="${PIPESTATUS[2]}"
-        if [[ "${adoptium_curl_exit_status}" -eq "0" && "${adoptium_apt_key_exit_status}" -eq "0" ]]; then
-          echo -e "${GREEN}#${RESET} Successfully added the key for adoptium packages! \\n"
-        else
-          abort_reason="Failed to add the key for adoptium packages."; abort
-        fi
-      else
-        abort_reason="Failed to fetch the key for adoptium packages."
-        abort
-      fi
-    fi
-    echo -e "${WHITE_R}#${RESET} Adding the adoptium packages repository..."
-    if [[ "${use_deb822_format}" == 'true' ]]; then
-      # DEB822 format
-      adoptium_repo_entry="Types: deb\nURIs: ${http_or_https}://packages.adoptium.net/artifactory/deb\nSuites: ${os_codename}\nComponents: main${deb822_signed_by_value}"
-    else
-      # Traditional format
-      adoptium_repo_entry="deb [ ${signed_by_value_adoptium} ] ${http_or_https}://packages.adoptium.net/artifactory/deb ${os_codename} main"
-    fi
-    if echo -e "${adoptium_repo_entry}" &> "/etc/apt/sources.list.d/glennr-packages-adoptium.${source_file_format}"; then
-      echo -e "${GREEN}#${RESET} Successfully added the adoptium packages repository!\\n" && sleep 2
-    else
-      abort_reason="Failed to add the adoptium packages repository."
-      abort
-    fi
-    check_default_repositories
-    if [[ "${os_codename}" =~ (jessie|stretch) ]]; then
-      repo_codename="buster"
-      repo_component="main"
-      get_repo_url
-      add_repositories
-      get_distro
-    fi
-    repo_component="main"
-    get_repo_url
-    add_repositories
-    run_apt_get_update
-  else
-    { echo "# Could not find \"${os_codename}\" on https://packages.adoptium.net/artifactory/deb/dists/"; echo "# List of what was found:"; curl "${curl_argument[@]}" "https://packages.adoptium.net/artifactory/deb/dists/" | sed -e 's/<[^>]*>//g' -e '/^$/d' -e '/\/\//d' -e '/function/d' -e '/location/d' -e '/}/d' -e 's/\///g' -e '/Name/d' -e '/Index/d' -e '/\.\./d' -e '/Artifactory/d' | awk '{print $1}'; } &>> "${eus_dir}/logs/adoptium.log"
-  fi
-  if [[ "${adoptium_adjusted_os_codename}" == 'true' ]]; then get_distro; fi
-}
-
-openjdk_java() {
-  if [[ "${repo_codename}" =~ (precise|trusty|xenial|bionic|cosmic) ]]; then
-    if [[ "${architecture}" =~ (amd64|i386) ]]; then
-      repo_url="http://ppa.launchpad.net/openjdk-r/ppa/ubuntu"
-      repo_component="main"
-      repo_key="EB9B1D8886F44E2A"
-      repo_key_name="openjdk-ppa"
-    else
-      repo_url="http://ports.ubuntu.com"
-      repo_codename_argument="-security"
-      repo_component="main universe"
-    fi
-    add_repositories
-  elif [[ "${repo_codename}" =~ (disco|eoan|focal|groovy|hirsute|impish|jammy|kinetic|lunar|mantic|noble|oracular) ]]; then
-    if [[ "${architecture}" =~ (amd64|i386) ]]; then
-      get_repo_url_security_url="true"
-      get_repo_url
-      repo_codename_argument="-security"
-      repo_component="main universe"
-    else
-      repo_url="http://ports.ubuntu.com"
-      repo_codename_argument="-security"
-      repo_component="main universe"
-    fi
-    add_repositories
-    repo_component="main"
-    add_repositories
-  elif [[ "${os_codename}" == "jessie" ]]; then
-    check_dpkg_lock
-    echo -e "${WHITE_R}#${RESET} ${openjdk_variable} ${required_java_version}-jre-headless..."
-    if ! DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install -t jessie-backports "${required_java_version}-jre-headless" &>> "${eus_dir}/logs/apt.log" || [[ "${old_openjdk_version}" == 'true' ]]; then
-      echo -e "${RED}#${RESET} Failed to ${openjdk_variable_3} ${required_java_version}-jre-headless in the first run...\\n"
-      if [[ "$(find /etc/apt/ -name "*.list" -type f -print0 | xargs -0 cat | grep -P -c "^deb http[s]*://archive.debian.org/debian jessie-backports main")" -eq "0" ]]; then
-        echo "deb http://archive.debian.org/debian jessie-backports main" >>/etc/apt/sources.list.d/glennr-install-script.list || abort
-        locate_http_proxy
-        if [[ -n "$http_proxy" ]]; then
-          apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --keyserver-options http-proxy="${http_proxy}" --recv-keys 8B48AD6246925553 7638D0442B90D010 || abort
-        elif [[ -f /etc/apt/apt.conf ]]; then
-          apt_http_proxy="$(grep "http.*Proxy" /etc/apt/apt.conf | awk '{print $2}' | sed 's/[";]//g')"
-          if [[ -n "${apt_http_proxy}" ]]; then
-            apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --keyserver-options http-proxy="${apt_http_proxy}" --recv-keys 8B48AD6246925553 7638D0442B90D010 || abort
-          fi
-        else
-          apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv 8B48AD6246925553 7638D0442B90D010 || abort
-        fi
-        echo -e "${WHITE_R}#${RESET} Running apt-get update..."
-        required_package="${required_java_version}-jre-headless"
-        if apt-get update -o Acquire::Check-Valid-Until="false" &> /dev/null; then echo -e "${GREEN}#${RESET} Successfully ran apt-get update! \\n"; else abort_reason="Failed to ran apt-get update."; abort; fi
-        echo -e "\\n------- ${required_package} installation ------- $(date +%F-%R) -------\\n" &>> "${eus_dir}/logs/apt.log"
-        if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install -t jessie-backports "${required_java_version}-jre-headless" &>> "${eus_dir}/logs/apt.log"; then echo -e "${GREEN}#${RESET} Successfully installed ${required_package}! \\n" && sleep 2; else abort_reason="Failed to install ${required_package}."; abort; fi
-        sed -i '/jessie-backports/d' /etc/apt/sources.list.d/glennr-install-script.list
-        unset required_package
-      fi
-    fi
-  elif [[ "${repo_codename}" =~ (stretch|buster|bullseye|bookworm|trixie|forky) ]]; then
-    if [[ "${required_java_version}" == "openjdk-8" ]]; then
-      repo_codename="stretch"
-      repo_component="main"
-      get_repo_url
-      add_repositories
-    elif [[ "${required_java_version}" =~ (openjdk-11|openjdk-17) ]]; then
-      if [[ "${repo_codename}" =~ (stretch|buster) ]] && [[ "${required_java_version}" =~ (openjdk-11) ]]; then repo_codename="bullseye"; fi
-      if [[ "${repo_codename}" =~ (bookworm|trixie|forky) ]] && [[ "${required_java_version}" =~ (openjdk-11) ]]; then repo_codename="unstable"; fi
-      if [[ "${repo_codename}" =~ (trixie|forky) ]] && [[ "${required_java_version}" =~ (openjdk-17) ]]; then repo_codename="bookworm"; fi
-      if [[ "${repo_codename}" =~ (stretch|buster) ]] && [[ "${required_java_version}" =~ (openjdk-17) ]]; then repo_codename="bullseye"; fi
-      repo_component="main"
-      get_repo_url
-      add_repositories
-    fi
-  fi
-}
-
-available_java_packages_check() {
-  if apt-cache search --names-only ^"openjdk-${required_java_version_short}-jre-headless" | grep -ioq "openjdk-${required_java_version_short}-jre-headless"; then openjdk_available="true"; else unset openjdk_available; fi
-  if apt-cache search --names-only ^"temurin-${required_java_version_short}-jre|temurin-${required_java_version_short}-jdk" | grep -ioq "temurin-${required_java_version_short}-jre\\|temurin-${required_java_version_short}-jdk"; then temurin_available="true"; else unset temurin_available; fi
-}
-
-if "$(which dpkg)" -l | grep "^ii\\|^hi" | grep -iq "openjdk-8"; then
-  openjdk_version="$("$(which dpkg)" -l | grep "^ii\\|^hi" | grep "openjdk-8" | awk '{print $3}' | grep "^8u" | sed 's/-.*//g' | sed 's/8u//g' | grep -o '[[:digit:]]*' | sort -V | tail -n 1)"
-  if [[ "${openjdk_version}" -lt '131' && "${required_java_version}" == "openjdk-8" ]]; then old_openjdk_version="true"; fi
-fi
-if "$(which dpkg)" -l | grep "^ii\\|^hi" | grep -iq "temurin-${required_java_version_short}-jdk"; then
-  if ! "$(which dpkg)" -l | grep "^ii\\|^hi" | grep -iq "temurin-${required_java_version_short}-jre"; then
-    if apt-cache search --names-only "^temurin-${required_java_version_short}-jre" | grep -ioq "temurin-${required_java_version_short}-jre"; then
-      temurin_jdk_to_jre="true"
-    fi
-  fi
-fi
-if ! "$(which dpkg)" -l | grep "^ii\\|^hi" | grep -iq "openjdk-${required_java_version_short}\\|temurin-${required_java_version_short}" || [[ "${old_openjdk_version}" == 'true' ]] || [[ "${temurin_jdk_to_jre}" == 'true' ]]; then
-  if [[ "${old_openjdk_version}" == 'true' ]]; then
-    header_red
-    echo -e "${RED}#${RESET} OpenJDK ${required_java_version_short} is to old...\\n" && sleep 2
-    openjdk_variable="Updating"; openjdk_variable_3="Update"
-  else
-    header
-    echo -e "${GREEN}#${RESET} Preparing OpenJDK/Temurin ${required_java_version_short} installation...\\n" && sleep 2
-    openjdk_variable="Installing"; openjdk_variable_3="Install"
-  fi
-  openjdk_java
-  if [[ "${unifi_core_system}" != 'true' ]]; then adoptium_java; fi
-  run_apt_get_update
-  available_java_packages_check
-  java_install_attempts="$(apt-cache search --names-only ^"openjdk-${required_java_version_short}-jre-headless|temurin-${required_java_version_short}-jre|temurin-${required_java_version_short}-jdk" | awk '{print $1}' | wc -l)"
-  until [[ "${java_install_attempts}" == "0" ]]; do
-    if [[ "${openjdk_available}" == "true" && "${openjdk_attempted}" != 'true' ]]; then
-      required_package="openjdk-${required_java_version_short}-jre-headless"; apt_get_install_package; openjdk_attempted="true"
-      if "$(which dpkg)" -l | grep "^ii\\|^hi" | grep -iq "openjdk-${required_java_version_short}-jre-headless"; then break; fi
-    fi
-    if [[ "${temurin_available}" == "true" ]]; then
-      if apt-cache search --names-only ^"temurin-${required_java_version_short}-jre" | grep -ioq "temurin-${required_java_version_short}-jre" && [[ "${temurin_jre_attempted}" != 'true' ]]; then
-        required_package="temurin-${required_java_version_short}-jre"; apt_get_install_package; temurin_jre_attempted="true"
-        if "$(which dpkg)" -l | grep "^ii\\|^hi" | grep -iq "temurin-${required_java_version_short}-jre"; then break; fi
-      elif apt-cache search --names-only ^"temurin-${required_java_version_short}-jdk" | grep -ioq "temurin-${required_java_version_short}-jdk" && [[ "${temurin_jdk_attempted}" != 'true' ]]; then
-        required_package="temurin-${required_java_version_short}-jdk"; apt_get_install_package; temurin_jdk_attempted="true"
-        if "$(which dpkg)" -l | grep "^ii\\|^hi" | grep -iq "temurin-${required_java_version_short}-jdk"; then break; fi
-      fi
-    fi
-    ((java_install_attempts=java_install_attempts-1))
-  done
-  if ! "$(which dpkg)" -l | grep "^ii\\|^hi" | grep -iq "openjdk-${required_java_version_short}-jre-headless\\|temurin-${required_java_version_short}-jre\\|temurin-${required_java_version_short}-jdk"; then abort_reason="Failed to install the required java version."; abort; fi
-  unset java_install_attempts
-  if "$(which dpkg)" -l | grep "^ii\\|^hi" | grep -iq "temurin-${required_java_version_short}-jre" && "$(which dpkg)" -l | grep "^ii\\|^hi" | grep -iq "temurin-${required_java_version_short}-jdk"; then
-    echo -e "${WHITE_R}#${RESET} Removing temurin-${required_java_version_short}-jdk..."
-    if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg6::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' remove "temurin-${required_java_version_short}-jdk" &>> "${eus_dir}/logs/temurin-jdk-remove.log"; then
-      echo -e "${GREEN}#${RESET} Successfully removed temurin-${required_java_version_short}-jdk! \\n"
-    else
-      echo -e "${RED}#${RESET} Failed to remove temurin-${required_java_version_short}-jdk... \\n"
-    fi
-  fi
-else
-  header
-  echo -e "${GREEN}#${RESET} Preparing OpenJDK/Temurin ${required_java_version_short} installation..."
-  echo -e "${WHITE_R}#${RESET} OpenJDK/Temurin ${required_java_version_short} is already installed! \\n"
-fi
-sleep 3
-
-if "$(which dpkg)" -l | grep "^ii\\|^hi" | grep -iq "openjdk-${required_java_version_short}"; then
-  required_java_version_installed="true"
-fi
-if "$(which dpkg)" -l | grep "^ii\\|^hi" | grep -i "openjdk-.*-\\|oracle-java.*\\|temurin-.*-" | grep -vq "openjdk-${required_java_version_short}\\|oracle-java${required_java_version_short}\\|openjdk-${required_java_version_short}\\|temurin-${required_java_version_short}"; then
-  unsupported_java_version_installed="true"
-fi
-if [[ "${required_java_version_installed}" == 'true' && "${unsupported_java_version_installed}" == 'true' && "${script_option_skip}" != 'true' && "${unifi_core_system}" != 'true' ]]; then
-  header_red
-  echo -e "${WHITE_R}#${RESET} Unsupported JAVA version(s) are detected, do you want to uninstall them?"
-  echo -e "${WHITE_R}#${RESET} This may remove packages that depend on these java versions."
-  read -rp $'\033[39m#\033[0m Do you want to proceed with uninstalling the unsupported JAVA version(s)? (y/N) ' yes_no
-  case "$yes_no" in
-       [Yy]*)
-          header
-          while read -r java_package; do
-            echo -e "${WHITE_R}#${RESET} Removing ${java_package}..."
-            if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' remove "${java_package}" &>> "${eus_dir}/logs/java-uninstall.log"; then
-              echo -e "${GREEN}#${RESET} Successfully removed ${java_package}! \\n"
-            else
-              echo -e "${RED}#${RESET} Successfully removed ${java_package}... \\n"
-            fi
-          done < <("$(which dpkg)" -l | grep "^ii\\|^hi\\|^ri\\|^pi\\|^ui\\|^iU" | grep -i "openjdk-.*-\\|oracle-java.*\\|temurin-.*-" | grep -v "openjdk-${required_java_version_short}\\|oracle-java${required_java_version_short}\\|openjdk-${required_java_version_short}\\|temurin-${required_java_version_short}" | awk '{print $2}' | sed 's/:.*//')
-          sleep 3;;
-       [Nn]*|"") ;;
-  esac
-fi
-
-update_ca_certificates() {
-  if [[ "${update_ca_certificates_ran}" != 'true' ]]; then
-    echo -e "${WHITE_R}#${RESET} Updating the ca-certificates..."
-    rm /etc/ssl/certs/java/cacerts 2> /dev/null
-    if update-ca-certificates -f &> /dev/null; then
-      echo -e "${GREEN}#${RESET} Successfully updated the ca-certificates\\n" && sleep 3
-      if [[ -e "/usr/bin/printf" ]]; then /usr/bin/printf '\xfe\xed\xfe\xed\x00\x00\x00\x02\x00\x00\x00\x00\xe2\x68\x6e\x45\xfb\x43\xdf\xa4\xd9\x92\xdd\x41\xce\xb6\xb2\x1c\x63\x30\xd7\x92' > /etc/ssl/certs/java/cacerts; fi
-      if [[ -e "/var/lib/dpkg/info/ca-certificates-java.postinst" ]]; then /var/lib/dpkg/info/ca-certificates-java.postinst configure &> /dev/null; fi
-      update_ca_certificates_ran="true"
-    else
-      echo -e "${RED}#${RESET} Failed to update the ca-certificates...\\n" && sleep 3
-    fi
-  fi
-}
-
-if "$(which dpkg)" -l | grep "^ii\\|^hi" | grep -iq "openjdk-${required_java_version_short}\\|temurin-${required_java_version_short}"; then
-  update_java_alternatives="$(update-java-alternatives --list | grep "^java-1.${required_java_version_short}.*openjdk\\|temurin-${required_java_version_short}" | awk '{print $1}' | head -n1)"
-  if [[ -n "${update_java_alternatives}" ]]; then
-    update-java-alternatives --set "${update_java_alternatives}" &> /dev/null
-  fi
-  update_alternatives="$(update-alternatives --list java | grep "java-${required_java_version_short}-openjdk\\|temurin-${required_java_version_short}" | awk '{print $1}' | head -n1)"
-  if [[ -n "${update_alternatives}" ]]; then
-    update-alternatives --set java "${update_alternatives}" &> /dev/null
-  fi
-  header
-  update_ca_certificates
-fi
-
-if "$(which dpkg)" -l | grep "^ii\\|^hi" | grep -iq "openjdk-${required_java_version_short}\\|temurin-${required_java_version_short}"; then
-  java_readlink="$(readlink -f "$( command -v java )" | sed "s:/bin/.*$::")"
-  if ! echo "${java_readlink}" | grep -ioq "${required_java_version_short}"; then java_readlink="$(update-java-alternatives --list | grep "${required_java_version_short}" | awk '{print $3}' | head -n1)"; fi
-  java_home_location="JAVA_HOME=${java_readlink}"
-  current_java_home="$(grep -si "^JAVA_HOME" /etc/default/unifi)"
-  if [[ -n "${java_home_location}" ]]; then
-    if [[ "${current_java_home}" != "${java_home_location}" ]]; then
-      if [[ -e "/etc/default/unifi" ]]; then sed -i '/JAVA_HOME/d' /etc/default/unifi; fi
-      echo "${java_home_location}" >> /etc/default/unifi
-    fi
-  fi
-  current_java_home="$(grep -si "^JAVA_HOME" /etc/environment)"
-  if [[ -n "${java_home_location}" ]]; then
-    if [[ "${current_java_home}" != "${java_home_location}" ]]; then
-      if [[ -e "/etc/default/unifi" ]]; then sed -i 's/^JAVA_HOME/#JAVA_HOME/' /etc/environment; fi
-      echo "${java_home_location}" >> /etc/environment
-      # shellcheck disable=SC1091
-      source /etc/environment
-    fi
-  fi
-fi
+# Java Installation Process
+java_install_check
+java_cleanup_not_required_versions
 
 if [[ "${required_java_version}" == "openjdk-8" ]]; then
   unifi_dependencies_list=( "binutils" "ca-certificates-java" "java-common" "jsvc" "libcommons-daemon-java" )
@@ -5834,6 +5938,7 @@ else
   echo -e "${GREEN}#${RESET} UniFi Network Application version ${unifi_clean} has already been downloaded! \n"
 fi
 unifi_deb_package_modification
+unifi_version="${unifi_clean}"
 ignore_unifi_package_dependencies
 check_service_overrides
 unifi_required_packages_check
