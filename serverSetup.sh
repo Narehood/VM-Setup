@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Ask the user if they are using XCP-NG
-read -p "Do you want to install XCP-NG Tools? (y/n): " install_xen_tools
+# Ask the user if they want to install XCP-NG Tools
+read -p "Do you want to install XCP-NG Tools? (XCP-NG Server Client) (y/n): " install_xen_tools
 if [ "$install_xen_tools" == "y" ]; then
 
 # Check if the system is Debian, Ubuntu, Red Hat, Arch, or SUSE based
