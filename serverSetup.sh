@@ -20,6 +20,7 @@ if [ "$install_xen_tools" == "y" ]; then
                sudo mount /dev/cdrom /mnt
                cd /mnt/Linux
                bash install.sh
+               cd
             else
                echo "Unsupported system. Exiting."
                exit 1
