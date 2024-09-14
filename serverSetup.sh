@@ -23,6 +23,7 @@ if [ "$install_xen_tools" == "y" ]; then
             else
                echo "Unsupported system. Exiting."
             exit 1
+            fi
         fi
     elif [ -f /etc/redhat-release ]; then
         # Red Hat-based system (including Fedora)
