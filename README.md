@@ -8,6 +8,7 @@ This script automates the installation of XCP-NG Tools and standard server tools
 - Installs standard server tools (`net-tools`, `cockpit`, `htop`) on Debian, Ubuntu, Red Hat, Arch, and SUSE based systems.
 - Option to change the hostname.
 - Clones a dotfiles repository and runs its installation script.
+   ![-Dotfiles-Example](Dotfiles-Example.png)
 
 ## Usage
 
