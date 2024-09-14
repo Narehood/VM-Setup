@@ -14,7 +14,7 @@ if [ "$install_xen_tools" == "y" ]; then
             sudo apt install -y xe-guest-utilities
         else
             # Debian system
-            read -p "You are running a Debian based system. Is the guest-tools.iso attached to this VM?(Y/n) [y]: " install_xen_tools-debian
+            read -p "You are running a Debian based system. Is the guest-tools.iso attached to this VM?(Y/n) [y]: " install_xen_tools_debian
             install_xen_tools-debian=${install_xen_tools_debian:-y}
             if [ "$install_xen_tools_debian" == "y" ]; then
             sudo mnt /dev/cdrom
