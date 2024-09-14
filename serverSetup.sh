@@ -17,10 +17,12 @@ if [ "$install_xen_tools" == "y" ]; then
             read -p "You are running a Debian based system. Is the guest-tools.iso attached to this VM?(Y/n) [y]: " install_xen_tools_debian
             install_xen_tools-debian=${install_xen_tools_debian:-y}
             if [ "$install_xen_tools_debian" == "y" ]; then
-            sudo mnt /dev/cdrom
-            sudo cd /dev/cdrom/Linux
-            bash install.sh
-            fi
+               sudo mnt /dev/cdrom
+               sudo cd /dev/cdrom/Linux
+               bash install.sh
+            else
+               echo "Unsupported system. Exiting."
+            exit 1
         fi
     elif [ -f /etc/redhat-release ]; then
         # Red Hat-based system (including Fedora)
