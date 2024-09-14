@@ -15,14 +15,14 @@ if [ "$install_xen_tools" == "y" ]; then
         else
             # Debian system
             read -p "You are running a Debian based system. Is the guest-tools.iso attached to this VM?(Y/n) [y]: " install_xen_tools_debian
-            install_xen_tools-debian=${install_xen_tools_debian:-y}
+            install_xen_tools_debian=${install_xen_tools_debian:-y}
             if [ "$install_xen_tools_debian" == "y" ]; then
-               sudo mnt /dev/cdrom
-               sudo cd /dev/cdrom/Linux
+               sudo mount /dev/cdrom /mnt
+               cd /mnt/Linux
                bash install.sh
             else
                echo "Unsupported system. Exiting."
-            exit 1
+               exit 1
             fi
         fi
     elif [ -f /etc/redhat-release ]; then
@@ -43,7 +43,6 @@ if [ "$install_xen_tools" == "y" ]; then
         exit 1
     fi
 fi
-
 
 # Install Standard Server Tools
     
