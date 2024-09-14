@@ -1,7 +1,9 @@
 #!/bin/bash
 
 # Ask the user if they want to install XCP-NG Tools
-read -p "Do you want to install XCP-NG Tools? (XCP-NG Server Client) (y/n): " install_xen_tools
+read -p "Do you want to install XCP-NG Tools? (XCP-NG Server Client) (y/n) [y]: " install_xen_tools
+install_xen_tools=${install_xen_tools:-y}
+
 if [ "$install_xen_tools" == "y" ]; then
 
     # Check if the system is Debian, Ubuntu, Red Hat, Arch, or SUSE based
@@ -12,7 +14,7 @@ if [ "$install_xen_tools" == "y" ]; then
             sudo apt install -y xe-guest-utilities
         else
             # Debian system
-            sudo apt update -y
+            sudo mnt /dev/cdrom
             sudo apt install -y xe-guest-utilities
         fi
     elif [ -f /etc/redhat-release ]; then
