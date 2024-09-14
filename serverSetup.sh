@@ -46,8 +46,6 @@ fi
 
 
 # Install Standard Server Tools
-    
-fi
 
 # Check if the system is Debian, Ubuntu, Red Hat, Arch, or SUSE based
 if [ -f /etc/debian_version ]; then
