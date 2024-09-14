@@ -20,6 +20,7 @@ if [ "$install_xen_tools" == "y" ]; then
                sudo mount /dev/cdrom /mnt
                cd /mnt/Linux
                bash install.sh
+               y
                cd
             else
                echo "Unsupported system. Exiting."
@@ -73,12 +74,15 @@ else
 fi
 
 # Ask the user if they want to change the hostname
-read -p "Do you want to change the hostname? (y/n): " change_hostname
+read -p "Do you want to change the hostname? (y/N): " change_hostname
+change_hostname=${change_hostname:-n}
+
 if [ "$change_hostname" == "y" ]; then
     read -p "Enter the new hostname: " new_hostname
     sudo hostnamectl set-hostname "$new_hostname"
     echo "Hostname changed to $new_hostname."
 fi
+
 
 # Clone the dotfiles repository
 git clone https://github.com/Narehood/dotfiles.git
