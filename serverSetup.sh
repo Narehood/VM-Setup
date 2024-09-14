@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Ask the user if they want to install XCP-NG Tools
-read -p "Do you want to install XCP-NG Tools? (XCP-NG Server Client) (Y/n) [y]: " install_xen_tools
+read -p "Do you want to install XCP-NG Tools? (XCP-NG Server Client) (Y/n): " install_xen_tools
 install_xen_tools=${install_xen_tools:-y}
 
 if [ "$install_xen_tools" == "y" ]; then
@@ -14,7 +14,7 @@ if [ "$install_xen_tools" == "y" ]; then
             sudo apt install -y xe-guest-utilities
         else
             # Debian system
-            read -p "You are running a Debian based system. Is the guest-tools.iso attached to this VM?(Y/n) [y]: " install_xen_tools_debian
+            read -p "You are running a Debian based system. Is the guest-tools.iso attached to this VM?(Y/n): " install_xen_tools_debian
             install_xen_tools_debian=${install_xen_tools_debian:-y}
             if [ "$install_xen_tools_debian" == "y" ]; then
                sudo mount /dev/cdrom /mnt
@@ -43,6 +43,7 @@ if [ "$install_xen_tools" == "y" ]; then
         exit 1
     fi
 fi
+
 
 # Install Standard Server Tools
     
