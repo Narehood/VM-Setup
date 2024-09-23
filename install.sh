@@ -25,19 +25,6 @@ show_menu() {
     echo "====================================="
 }
 
-# Function to display system information
-show_system_info() {
-    echo "====================================="
-    echo "          System Information"
-    echo "====================================="
-    echo "Linux Distribution: $(lsb_release -d | cut -f2)"
-    echo "Kernel Version: $(uname -r)"
-    echo "CPU Usage: $(top -bn1 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | awk '{print 100 - $1"%"}')"
-    echo "Memory Usage: $(free -m | awk 'NR==2{printf "Memory Usage: %s/%sMB (%.2f%%)\n", $3,$2,$3*100/$2 }')"
-    echo "Disk Usage: $(df -h | awk '$NF=="/"{printf "Disk Usage: %d/%dGB (%s)\n", $3,$2,$5}')"
-    echo "====================================="
-}
-
 # Function to check for updates
 check_for_updates() {
     local repo_url="https://github.com/Narehood/VM-Setup"
@@ -63,9 +50,6 @@ check_for_updates() {
     else
         echo "install.sh is up to date."
     fi
-
-    # Clean up the temporary file
-    rm -f /tmp/install.sh
 }
 
 while true; do
