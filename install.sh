@@ -32,7 +32,7 @@ check_for_updates() {
     local remote_file="https://raw.githubusercontent.com/Narehood/VM-Setup/main/install.sh"
 
     # Download the remote file to a temporary location
-    curl -s -o /tmp/install.sh $remote_file
+    https://github.com/Narehood/VM-Setup/main/install.sh /tmp/install.sh $remote_file
 
     # Compare the local and remote files
     if ! cmp -s $local_file /tmp/install.sh; then
