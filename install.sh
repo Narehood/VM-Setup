@@ -1,55 +1,55 @@
-1#!/bin/bash
+#!/bin/bash
 
 # Function to display the menu
 show_menu() {
     clear
     echo "====================================="
-    echo "          Version 1.0.0"
+    echo "          \e[1;34mVM Setup Menu\e[0m"
     echo "====================================="
-    echo "====================================="
-    echo "          System Information"
-    echo "====================================="
-    echo "Linux Distribution: $(lsb_release -d | cut -f2)"
-    echo "Kernel Version: $(uname -r)"
-    echo "CPU Usage: $(top -bn1 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | awk '{print 100 - $1"%"}')"
-    echo "Memory Usage: $(free -m | awk 'NR==2{printf "Memory Usage: %s/%sMB (%.2f%%)\n", $3,$2,$3*100/$2 }')"
-    echo "Disk Usage: $(df -h | awk '$NF=="/"{printf "Disk Usage: %d/%dGB (%s)\n", $3,$2,$5}')"
-    echo "====================================="
-    echo "          VM Setup Menu"
-    echo "====================================="
-    echo "1. XCP-NG / Virtual Machine Initial Configuration"
-    echo "2. Xen Orchestra"
-    echo "3. UniFi Controller"
-    echo "4. Docker Host Prep"
-    echo "5. Check for Updates"
-    echo "6. Exit"
+    echo -e "\e[1;32mSystem Information\e[0m"
+    echo "-------------------------------------"
+    echo -e "Linux Distribution: \e[1;33m$(lsb_release -d | cut -f2)\e[0m"
+    echo -e "Kernel Version: \e[1;33m$(uname -r)\e[0m"
+    echo -e "CPU Usage: \e[1;33m$(top -bn1 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | awk '{print 100 - $1"%"}')\e[0m"
+    echo -e "Memory Usage: \e[1;33m$(free -m | awk 'NR==2{printf "Memory Usage: %s/%sMB (%.2f%%)\n", $3,$2,$3*100/$2 }')\e[0m"
+    echo -e "Disk Usage: \e[1;33m$(df -h | awk '$NF=="/"{printf "Disk Usage: %d/%dGB (%s)\n", $3,$2,$5}')\e[0m"
+    echo "-------------------------------------"
+    echo -e "\e[1;32mOptions\e[0m"
+    echo "-------------------------------------"
+    echo -e "\e[1;36m1.\e[0m XCP-NG / Virtual Machine Initial Configuration"
+    echo -e "\e[1;36m2.\e[0m Xen Orchestra"
+    echo -e "\e[1;36m3.\e[0m UniFi Controller"
+    echo -e "\e[1;36m4.\e[0m Docker Host Prep"
+    echo -e "\e[1;36m5.\e[0m Check for Updates"
+    echo -e "\e[1;36m6.\e[0m Exit"
     echo "====================================="
 }
 
 # Function to check for updates
 check_for_updates() {
     local repo_url="https://github.com/Narehood/VM-Setup"
-    local local_file="/VM-Setup/install.sh"
-    local remote_file="https://github.com/Narehood/VM-Setup/edit/main/install.sh"
+    local local_dir="/VM-Setup"
+    local temp_dir="/tmp/VM-Setup"
 
-    # Download the remote file to a temporary location
-    wget https://github.com/Narehood/VM-Setup/main/install.sh /tmp/install.sh $remote_file
+    # Clone the remote repository to a temporary location
+    git clone $repo_url $temp_dir
 
-    # Compare the local and remote files
-    if ! cmp -s $local_file /tmp/install.sh; then
-        echo "A new version of install.sh is available."
+    # Compare the local and remote directories
+    if ! diff -qr $local_dir $temp_dir > /dev/null; then
+        echo "A new version of the VM-Setup repository is available."
         read -p "Do you want to update? [y/n]: " update_choice
         if [[ $update_choice == "y" || $update_choice == "Y" ]]; then
-            echo "Updating install.sh..."
-            mv /tmp/install.sh $local_file
-            chmod +x $local_file
-            echo "Running the updated install.sh..."
-            $local_file
+            echo "Updating VM-Setup..."
+            rm -rf $local_dir
+            mv $temp_dir $local_dir
+            echo "VM-Setup has been updated."
         else
             echo "Update canceled."
+            rm -rf $temp_dir
         fi
     else
-        echo "install.sh is up to date."
+        echo "VM-Setup is up to date."
+        rm -rf $temp_dir
     fi
 }
 
