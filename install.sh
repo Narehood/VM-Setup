@@ -20,37 +20,9 @@ show_menu() {
     echo -e "\e[1;36m2.\e[0m Xen Orchestra"
     echo -e "\e[1;36m3.\e[0m UniFi Controller"
     echo -e "\e[1;36m4.\e[0m Docker Host Prep"
-    echo -e "\e[1;36m5.\e[0m Check for Updates"
+    echo -e "\e[1;36m5.\e[0m Check for Updates (Coming Soon)"
     echo -e "\e[1;36m6.\e[0m Exit"
     echo -e "====================================="
-}
-
-# Function to check for updates
-check_for_updates() {
-    local repo_url="https://github.com/Narehood/VM-Setup"
-    local local_dir="/VM-Setup"
-    local temp_dir="/tmp/VM-Setup"
-
-    # Clone the remote repository to a temporary location
-    git clone $repo_url $temp_dir
-
-    # Compare the local and remote directories
-    if ! diff -qr $local_dir $temp_dir > /dev/null; then
-        echo "A new version of the VM-Setup repository is available."
-        read -p "Do you want to update? [y/n]: " update_choice
-        if [[ $update_choice == "y" || $update_choice == "Y" ]]; then
-            echo "Updating VM-Setup..."
-            rm -rf $local_dir
-            mv $temp_dir $local_dir
-            echo "VM-Setup has been updated."
-        else
-            echo "Update canceled."
-            rm -rf $temp_dir
-        fi
-    else
-        echo "VM-Setup is up to date."
-        rm -rf $temp_dir
-    fi
 }
 
 while true; do
@@ -78,8 +50,7 @@ while true; do
             bash install.sh
             ;;
         5)
-            echo "Checking for updates..."
-            check_for_updates
+            echo "Check for Updates feature is coming soon!"
             ;;
         6)
             echo "Exiting..."
