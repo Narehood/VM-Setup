@@ -6,6 +6,9 @@ show_menu() {
     echo "====================================="
     echo "          System Information"
     echo "====================================="
+    echo "====================================="
+    echo "          System Information"
+    echo "====================================="
     echo "Linux Distribution: $(lsb_release -d | cut -f2)"
     echo "Kernel Version: $(uname -r)"
     echo "CPU Usage: $(top -bn1 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | awk '{print 100 - $1"%"}')"
@@ -27,7 +30,7 @@ show_menu() {
 check_for_updates() {
     local repo_url="https://github.com/Narehood/VM-Setup"
     local local_file="/VM-Setup/install.sh"
-    local remote_file="https://raw.githubusercontent.com/Narehood/VM-Setup/main/install.sh"
+    local remote_file="https://github.com/Narehood/VM-Setup/edit/main/install.sh"
 
     # Download the remote file to a temporary location
     wget https://github.com/Narehood/VM-Setup/main/install.sh /tmp/install.sh $remote_file
@@ -57,7 +60,6 @@ while true; do
     case $choice in
         1)
             echo "You chose XCP-NG/Virtual Machine Initial Configuration"
-            cd VM-Setup
             bash serverSetup.sh
             ;;
         2)
