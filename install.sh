@@ -12,8 +12,6 @@ show_menu() {
     echo "Memory Usage: $(free -m | awk 'NR==2{printf "Memory Usage: %s/%sMB (%.2f%%)\n", $3,$2,$3*100/$2 }')"
     echo "Disk Usage: $(df -h | awk '$NF=="/"{printf "Disk Usage: %d/%dGB (%s)\n", $3,$2,$5}')"
     echo "====================================="
-
-    echo "====================================="
     echo "          VM Setup Menu"
     echo "====================================="
     echo "1. XCP-NG / Virtual Machine Initial Configuration"
