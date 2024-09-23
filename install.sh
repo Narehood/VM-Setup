@@ -66,22 +66,22 @@ while true; do
     case $choice in
         1)
             echo "You chose XCP-NG Initial Configuration"
-            git clone https://github.com/your-repo/xcp-ng-setup.git /VM-Setup/xcp-ng-setup
+            git clone https://github.com/Narehood/xcp-ng-setup.git /VM-Setup/xcp-ng-setup
             cd /VM-Setup/xcp-ng-setup
             ;;
         2)
             echo "You chose Xen Orchestra"
-            git clone https://github.com/your-repo/xen-orchestra-setup.git /VM-Setup/xen-orchestra-setup
+            git clone https://github.com/Narehood/xen-orchestra-setup.git /VM-Setup/xen-orchestra-setup
             cd /VM-Setup/xen-orchestra-setup
             ;;
         3)
             echo "You chose UniFi Controller"
-            git clone https://github.com/your-repo/unifi-controller-setup.git /VM-Setup/unifi-controller-setup
+            git clone https://github.com/Narehood/unifi-controller-setup.git /VM-Setup/unifi-controller-setup
             cd /VM-Setup/unifi-controller-setup
             ;;
         4)
             echo "You chose Docker Host Prep"
-            git clone https://github.com/your-repo/docker-host-prep.git /VM-Setup/docker-host-prep
+            git clone https://github.com/Narehood/docker-host-prep.git /VM-Setup/docker-host-prep
             cd /VM-Setup/docker-host-prep
             ;;
         5)
