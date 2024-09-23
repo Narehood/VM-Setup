@@ -2,6 +2,15 @@
 
 # Function to display the menu
 show_menu() {
+    echo "====================================="
+    echo "          System Information"
+    echo "====================================="
+    echo "Linux Distribution: $(lsb_release -d | cut -f2)"
+    echo "Kernel Version: $(uname -r)"
+    echo "CPU Usage: $(top -bn1 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | awk '{print 100 - $1"%"}')"
+    echo "Memory Usage: $(free -m | awk 'NR==2{printf "Memory Usage: %s/%sMB (%.2f%%)\n", $3,$2,$3*100/$2 }')"
+    echo "Disk Usage: $(df -h | awk '$NF=="/"{printf "Disk Usage: %d/%dGB (%s)\n", $3,$2,$5}')"
+    echo "====================================="
     clear
     echo "====================================="
     echo "          VM Setup Menu"
@@ -59,29 +68,28 @@ check_for_updates() {
 }
 
 while true; do
-    show_system_info
     show_menu
     read -p "Enter your choice [1-6]: " choice
 
     case $choice in
         1)
             echo "You chose XCP-NG/Virtual Machine Initial Configuration"
-            cd /VM-Setup
+            cd VM-Setup
             bash serverSetup.sh
             ;;
         2)
             echo "You chose Xen Orchestra"
-            cd /VM-Setup/Installers
+            cd VM-Setup/Installers
             bash XenOrchestra.sh
             ;;
         3)
             echo "You chose UniFi Controller"
-            cd /VM-Setup/Installers/UniFi-Controller.sh
+            cd VM-Setup/Installers/UniFi-Controller.sh
             ;;
         4)
             echo "You chose Docker Host Prep"
             git clone https://github.com/Narehood/Docker-Prep.git
-            cd /Docker-Prep
+            cd Docker-Prep
             bash install.sh
             ;;
         5)
