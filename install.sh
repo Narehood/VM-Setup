@@ -49,7 +49,7 @@ while true; do
             echo "You chose Docker Host Prep"
             cd VM-Setup/Installers/
             cd Installers/
-            bash install.sh
+            bash Docker-Prep.sh
             ;;
         5)
             echo "Check for Updates feature is coming soon!"
