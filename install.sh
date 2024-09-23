@@ -4,7 +4,7 @@
 show_menu() {
     clear
     echo "====================================="
-    echo "          System Information"
+    echo "          Version 1.0.0"
     echo "====================================="
     echo "====================================="
     echo "          System Information"
