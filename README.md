@@ -37,21 +37,6 @@ This script is a **menu-driven utility** for setting up various virtual machine 
 
 3. **Handles User Input**: Continuously prompts the user to select an option and executes the corresponding script or action.
 
-Would you like to know more about any specific part of the script?
-
-
-## XCP-NG Tools Installation
-The script first asks if you want to install XCP-NG Tools. If you choose 'Y' “yes”, it will detect your Linux distribution and install the appropriate packages. If you are not using XCP-NG as your hypervisor select 'N'
-
-## Standard Server Tools Installation
-The script then installs standard server tools (net-tools, cockpit, htop) based on your Linux distribution.
-
-## Change Hostname
-The script provides an option to change the hostname of your system. If you choose “yes”, you will be prompted to enter the new hostname.
-
-## Clone Dotfiles Repository
-Finally, the script installs a dotfiles config and runs its installation script to customize your shell.
-
 <br /><br /><br />
 ## Credit/License
 
