@@ -30,12 +30,10 @@ This script is a **menu-driven utility** for setting up various virtual machine 
 2. **Presents a Menu**: Offers options for different setup tasks:
    - **XCP-NG / Virtual Machine Initial Configuration**: Runs `serverSetup.sh` for initial VM setup.
    - **Xen Orchestra**: Runs `XenOrchestra.sh` to set up Xen Orchestra.
-   - **UniFi Controller**: Runs `UniFi-Controller.sh` to set up the UniFi Controller.
+   - **UniFi Controller**: Runs `UniFi-Controller.sh` to set up a UniFi Controller.
    - **Docker Host Prep**: Prepares the system for Docker by running `install.sh` in the Docker-Prep directory.
    - **Check for Updates**: Placeholder for a future update-checking feature.
    - **Exit**: Exits the script.
-
-3. **Handles User Input**: Continuously prompts the user to select an option and executes the corresponding script or action.
 
 <br /><br /><br />
 ## Credit/License
