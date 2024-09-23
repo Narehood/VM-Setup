@@ -1,4 +1,4 @@
-#!/bin/bash
+1#!/bin/bash
 
 # Function to display the menu
 show_menu() {
@@ -6,7 +6,7 @@ show_menu() {
     echo "====================================="
     echo "          VM Setup Menu"
     echo "====================================="
-    echo "1. XCP-NG Initial Configuration"
+    echo "1. XCP-NG / Virtual Machine Initial Configuration"
     echo "2. Xen Orchestra"
     echo "3. UniFi Controller"
     echo "4. Docker Host Prep"
@@ -65,24 +65,24 @@ while true; do
 
     case $choice in
         1)
-            echo "You chose XCP-NG Initial Configuration"
-            git clone https://github.com/Narehood/xcp-ng-setup.git /VM-Setup/xcp-ng-setup
-            cd /VM-Setup/xcp-ng-setup
+            echo "You chose XCP-NG/Virtual Machine Initial Configuration"
+            cd /VM-Setup
+            bash serverSetup.sh
             ;;
         2)
             echo "You chose Xen Orchestra"
-            git clone https://github.com/Narehood/xen-orchestra-setup.git /VM-Setup/xen-orchestra-setup
-            cd /VM-Setup/xen-orchestra-setup
+            cd /VM-Setup/Installers
+            bash XenOrchestra.sh
             ;;
         3)
             echo "You chose UniFi Controller"
-            git clone https://github.com/Narehood/unifi-controller-setup.git /VM-Setup/unifi-controller-setup
-            cd /VM-Setup/unifi-controller-setup
+            cd /VM-Setup/Installers/UniFi-Controller.sh
             ;;
         4)
             echo "You chose Docker Host Prep"
-            git clone https://github.com/Narehood/docker-host-prep.git /VM-Setup/docker-host-prep
-            cd /VM-Setup/docker-host-prep
+            git clone https://github.com/Narehood/Docker-Prep.git
+            cd /Docker-Prep
+            bash install.sh
             ;;
         5)
             echo "Checking for updates..."
