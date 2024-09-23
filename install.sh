@@ -32,23 +32,23 @@ while true; do
     case $choice in
         1)
             echo "You chose XCP-NG/Virtual Machine Initial Configuration"
-            cd VM-Setup/Installers
+            cd Installers/
             bash serverSetup.sh
             ;;
         2)
             echo "You chose Xen Orchestra"
-            cd VM-Setup/Installers
+            cd Installers/
             bash XenOrchestra.sh
             ;;
         3)
             echo "You chose UniFi Controller"
-            cd VM-Setup/Installers/
+            cd Installers/
             bash UniFi-Controller.sh
             ;;
         4)
             echo "You chose Docker Host Prep"
             cd VM-Setup/Installers/
-            cd Docker-Prep
+            cd Installers/
             bash install.sh
             ;;
         5)
