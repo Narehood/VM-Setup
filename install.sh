@@ -2,6 +2,7 @@
 
 # Function to display the menu
 show_menu() {
+    clear
     echo "====================================="
     echo "          System Information"
     echo "====================================="
@@ -11,7 +12,7 @@ show_menu() {
     echo "Memory Usage: $(free -m | awk 'NR==2{printf "Memory Usage: %s/%sMB (%.2f%%)\n", $3,$2,$3*100/$2 }')"
     echo "Disk Usage: $(df -h | awk '$NF=="/"{printf "Disk Usage: %d/%dGB (%s)\n", $3,$2,$5}')"
     echo "====================================="
-    clear
+
     echo "====================================="
     echo "          VM Setup Menu"
     echo "====================================="
