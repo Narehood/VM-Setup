@@ -17,9 +17,11 @@ if [ "$install_xen_tools" == "y" ]; then
             read -p "You are running a Debian based system. Is the guest-tools.iso attached to this VM?(Y/n): " install_xen_tools_debian
             install_xen_tools_debian=${install_xen_tools_debian:-y}
             if [ "$install_xen_tools_debian" == "y" ]; then
+               apt install sudo
+               y
                sudo mount /dev/cdrom /mnt
                cd /mnt/Linux
-               bash install.sh
+               sudo bash install.sh
                y
                cd
             else
