@@ -21,7 +21,7 @@ This script automates the installation of XCP-NG Tools and standard server tools
 2. **Run The Script:**
 
    ```bash
-   bash serverSetup.sh
+   bash install.sh
 
 # Script Details
 ## XCP-NG Tools Installation
