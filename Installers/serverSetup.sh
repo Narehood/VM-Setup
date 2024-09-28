@@ -19,6 +19,7 @@ if [ "$install_xen_tools" == "y" ]; then
             if [ "$install_xen_tools_debian" == "y" ]; then
                apt install sudo
                y
+               sudo apt update
                sudo mount /dev/cdrom /mnt
                cd /mnt/Linux
                sudo bash install.sh
