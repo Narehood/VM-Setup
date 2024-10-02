@@ -55,7 +55,7 @@ if [ "$install_xen_tools" == "y" ]; then
             sudo dnf install -y epel-release
             sudo dnf install -y xe-guest-utilities
             ;;
-        rocky)
+        rocky|almalinux)
             sudo yum update -y
             sudo yum install -y epel-release
             sudo yum install -y xe-guest-utilities
@@ -87,7 +87,7 @@ case "$OS" in
         sudo apt upgrade -y
         sudo apt install -y net-tools cockpit htop
         ;;
-    redhat|rocky)
+    redhat|rocky|almalinux)
         sudo yum update -y
         sudo yum install -y net-tools cockpit htop
         ;;
