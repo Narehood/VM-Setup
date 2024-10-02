@@ -33,8 +33,10 @@ if [ "$install_xen_tools" == "y" ]; then
     elif [ -f /etc/redhat-release ]; then
         # Red Hat-based system (including Fedora)
         sudo yum update -y
+        sudo yum install -y epel-release
         sudo yum install -y xe-guest-utilities
         sudo dnf update -y
+        sudo dnf install -y epel-release
         sudo dnf install -y xe-guest-utilities
     elif [ -f /etc/arch-release ]; then
         # Arch-based system
