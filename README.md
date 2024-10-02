@@ -46,5 +46,3 @@ Feel free to submit issues or pull requests if you have any improvements or sugg
 ### Acknowledgments
 Thanks to the open-source community for providing the tools and resources used in this script.
 =======
-This branch is for the Hacktoberfest 2024 event. If you feel you can contribute to this project feel free.
->>>>>>> Hacktoberfest-2024
