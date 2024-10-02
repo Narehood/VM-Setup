@@ -4,7 +4,7 @@
 show_menu() {
     clear
     echo -e "====================================="
-    echo -e "          \e[1;34mVM Setup Menu 1.0.0\e[0m"
+    echo -e "          \e[1;34mVM Setup Menu 1.1.0\e[0m"
     echo -e "====================================="
     echo -e "\e[1;32mSystem Information\e[0m"
     echo -e "-------------------------------------"
@@ -31,22 +31,22 @@ while true; do
 
     case $choice in
         1)
-            echo "You chose XCP-NG/Virtual Machine Initial Configuration"
+            echo "You have selected XCP-NG/Virtual Machine Initial Configuration"
             cd Installers/
             bash serverSetup.sh
             ;;
         2)
-            echo "You chose Xen Orchestra"
+            echo "You have selected Xen Orchestra"
             cd Installers/
             bash XenOrchestra.sh
             ;;
         3)
-            echo "You chose UniFi Controller"
+            echo "You have selected UniFi Controller"
             cd Installers/
             bash UniFi-Controller.sh
             ;;
         4)
-            echo "You chose Docker Host Prep"
+            echo "You haved selected Docker Host Prep"
             cd VM-Setup/Installers/
             cd Installers/
             bash Docker-Prep.sh
