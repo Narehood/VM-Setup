@@ -1,4 +1,3 @@
-<<<<<<< main
 # XCP-NG Tools and Server Setup Script
 
 This script automates the installation of XCP-NG Tools and standard server tools on various Linux distributions. It also provides an option to change the hostname and clone a dotfiles repository.
