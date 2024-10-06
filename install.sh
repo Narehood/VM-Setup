@@ -20,8 +20,9 @@ show_menu() {
     echo -e "\e[1;36m2.\e[0m Xen Orchestra"
     echo -e "\e[1;36m3.\e[0m UniFi Controller"
     echo -e "\e[1;36m4.\e[0m Docker Host Prep"
-    echo -e "\e[1;36m5.\e[0m Check for Updates (Coming Soon)"
-    echo -e "\e[1;36m6.\e[0m Exit"
+    echo -e "\e[1;36m5.\e[0m Enable Automated Security Patches"    
+    echo -e "\e[1;36m6.\e[0m Check for Updates (Coming Soon)"
+    echo -e "\e[1;36m7.\e[0m Exit"
     echo -e "====================================="
 }
 
@@ -52,9 +53,15 @@ while true; do
             bash Docker-Prep.sh
             ;;
         5)
+            echo "You haved selected Docker Host Prep"
+            cd VM-Setup/Installers/
+            cd Installers/
+            bash Automated-Security-Patches.sh
+            ;;            
+        6)
             echo "Check for Updates feature is coming soon!"
             ;;
-        6)
+        7)
             echo "Exiting..."
             exit 0
             ;;
