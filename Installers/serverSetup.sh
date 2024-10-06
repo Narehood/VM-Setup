@@ -19,12 +19,11 @@ detect_os() {
 }
 
 # Ask the user if they want to install XCP-NG Tools
-read -p "Do you want to install XCP-NG Tools? (XCP-NG Server Client) (Y/n): " install_xen_tools
+read -p "Would You Like To Install XCP-NG Tools? (XCP-NG Server Client) (Y/n): " install_xen_tools
 install_xen_tools=${install_xen_tools:-y}
 
 if [ "$install_xen_tools" == "y" ]; then
     detect_os
-
     case "$OS" in
         ubuntu|debian)
             if [ "$OS" == "ubuntu" ]; then
@@ -45,7 +44,7 @@ if [ "$install_xen_tools" == "y" ]; then
                 fi
             fi
             ;;
-        redhat)
+        redhat|centos)
             sudo yum update -y
             sudo yum install -y epel-release
             sudo yum install -y xe-guest-utilities
@@ -87,7 +86,7 @@ case "$OS" in
         sudo apt upgrade -y
         sudo apt install -y net-tools cockpit htop
         ;;
-    redhat|rocky|almalinux)
+    redhat|centos|rocky|almalinux)
         sudo yum update -y
         sudo yum install -y net-tools cockpit htop
         ;;
