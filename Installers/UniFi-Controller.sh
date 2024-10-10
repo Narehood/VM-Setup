@@ -57,7 +57,7 @@
 ###################################################################################################################################################################################################
 
 # Script                | UniFi Network Easy Installation Script
-# Version               | 7.9.8
+# Version               | 8.0.0
 # Application version   | 8.5.6-1x29lm155t
 # Debian Repo version   | 8.5.6-27036-1
 # Author                | Glenn Rietveld
@@ -6095,7 +6095,7 @@ if [[ "${first_digit_unifi}" == "7" && "${second_digit_unifi}" == "2" && "${thir
 fi
 
 header
-echo -e "${WHITE_R}#${RESET} Installing your UniFi Network Application ( ${WHITE_R}${unifi_clean}${RESET} )...\\n"
+echo -e "${WHITE_R}#${RESET} Installing your UniFi Network Application ${WHITE_R}${unifi_clean}${RESET}...\\n"
 sleep 2
 if [[ "${unifi_network_application_downloaded}" != 'true' ]]; then
   eus_directory_location="/tmp/EUS"
@@ -6160,6 +6160,9 @@ ignore_unifi_package_dependencies
 check_service_overrides
 unifi_required_packages_check
 system_properties_check
+system_properties_free_memory_check
+unifi_autobackup_dir_check
+unifi_folder_permission_check
 echo -e "${WHITE_R}#${RESET} Installing the UniFi Network Application..."
 echo -e "\\n------- $(date +%F-%R) -------\\n" &>> "${eus_dir}/logs/unifi-install.log"
 echo "unifi unifi/has_backup boolean true" 2> /dev/null | debconf-set-selections
@@ -6176,6 +6179,7 @@ system_properties_free_memory_check
 unifi_autobackup_dir_check
 unifi_folder_permission_check
 if ! [[ -d "/var/run/unifi" ]]; then install -o unifi -g unifi -m 750 -d /var/run/unifi &>> "${eus_dir}/logs/unifi-var-run-missing.log"; fi
+if ! [[ -d "$(readlink -f /usr/lib/unifi/logs)" ]]; then install -o unifi -g unifi -m 750 -d "$(readlink -f /usr/lib/unifi/logs)" &>> "${eus_dir}/logs/unifi-logs-dir-missing.log"; fi
 if [[ "$(dpkg-query --showformat='${Version}' --show jq | sed -e 's/.*://' -e 's/-.*//g' -e 's/[^0-9.]//g' -e 's/\.//g' | sort -V | tail -n1)" -ge "16" ]]; then
   jq '."scripts"."'"${script_name}"'" += {"install-date": "'"$(date +%s)"'"}' "${eus_dir}/db/db.json" > "${eus_dir}/db/db.json.tmp" 2>> "${eus_dir}/logs/eus-database-management.log"
 else
