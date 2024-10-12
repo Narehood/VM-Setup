@@ -11,10 +11,6 @@ sudo apt update
 echo "Installing Apache..."
 sudo apt install -y apache2
 
-# Check Apache status
-echo "Checking Apache status..."
-sudo systemctl status apache2
-
 # Install MySQL
 echo "Installing MySQL..."
 sudo apt install -y mysql-server
