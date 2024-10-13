@@ -20,19 +20,39 @@ show_menu() {
     echo -e "\e[1;36m2.\e[0m Xen Orchestra"
     echo -e "\e[1;36m3.\e[0m UniFi Controller"
     echo -e "\e[1;36m4.\e[0m Docker Host Prep"
-    echo -e "\e[1;36m5.\e[0m Enable Automated Security Patches"    
-    echo -e "\e[1;36m6.\e[0m Check for Updates (Coming Soon)"
+    echo -e "\e[1;36m5.\e[0m Enable Automated Security Patches"
+    echo -e "\e[1;36m6.\e[0m Check for Updates"
     echo -e "\e[1;36m7.\e[0m Exit"
     echo -e "====================================="
 }
 
+# Function to check for updates in the repository
+check_for_updates() {
+    echo "Checking for updates in VM-Setup repository..."
+    git remote update
+    LOCAL=$(git rev-parse @)
+    REMOTE=$(git rev-parse @{u})
+    if [ "$LOCAL" = "$REMOTE" ]; then
+        echo "VM-Setup is up to date."
+    else
+        echo "VM-Setup has updates available."
+        read -p "Do you want to pull the latest changes? (y/n): " pull_choice
+        if [ "$pull_choice" = "y" ]; then
+            git pull
+            echo "Repository updated successfully."
+        else
+            echo "Update aborted."
+        fi
+    fi
+}
+
+# Main loop
 while true; do
     show_menu
-    read -p "Enter your choice [1-6]: " choice
-
+    read -p "Enter your choice [1-7]: " choice
     case $choice in
         1)
-            echo "You have selected XCP-NG/Virtual Machine Initial Configuration"
+            echo "You have selected XCP-NG / Virtual Machine Initial Configuration"
             cd Installers/
             bash serverSetup.sh
             ;;
@@ -47,26 +67,27 @@ while true; do
             bash UniFi-Controller.sh
             ;;
         4)
-            echo "You haved selected Docker Host Prep"
+            echo "You have selected Docker Host Prep"
             cd VM-Setup/Installers/
             cd Installers/
             bash Docker-Prep.sh
             ;;
         5)
-            echo "You haved selected Docker Host Prep"
+            echo "You have selected Enable Automated Security Patches"
             cd VM-Setup/Installers/
             cd Installers/
             bash Automated-Security-Patches.sh
-            ;;            
+            ;;
         6)
-            echo "Check for Updates feature is coming soon!"
+            echo "Checking for updates..."
+            check_for_updates
             ;;
         7)
             echo "Exiting..."
             exit 0
             ;;
         *)
-            echo "Invalid option. Please choose a number between 1 and 6."
+            echo "Invalid option. Please choose a number between 1 and 7."
             ;;
     esac
 done
