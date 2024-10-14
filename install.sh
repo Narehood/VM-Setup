@@ -1,37 +1,10 @@
 #!/bin/bash
 
-# Function to check for updates in the repository
-check_for_updates() {
-    echo "Checking for updates in VM-Setup repository..."
-    git remote update
-    LOCAL=$(git rev-parse @)
-    REMOTE=$(git rev-parse @{u})
-    if [ "$LOCAL" = "$REMOTE" ]; then
-        echo "VM-Setup is up to date."
-    else
-        echo "VM-Setup has updates available."
-        read -p "Do you want to pull the latest changes? (y/n): " pull_choice
-        if [ "$pull_choice" = "y" ]; then
-            git pull
-            echo "Repository updated successfully."
-            echo "Restarting the script to apply updates..."
-            exec "$0"
-            7
-            bash install.sh
-        else
-            echo "Update aborted."
-        fi
-    fi
-}
-
-# Check for updates at launch
-check_for_updates
-
 # Function to display the menu
 show_menu() {
     clear
     echo -e "====================================="
-    echo -e "          \e[1;34mVM Setup Menu 1.2.4\e[0m"
+    echo -e "          \e[1;34mVM Setup Menu 1.2.5\e[0m"
     echo -e "====================================="
     echo -e "\e[1;32mSystem Information\e[0m"
     echo -e "-------------------------------------"
@@ -51,6 +24,28 @@ show_menu() {
     echo -e "\e[1;36m6.\e[0m Check for Updates"
     echo -e "\e[1;36m7.\e[0m Exit"
     echo -e "====================================="
+}
+
+# Function to check for updates in the repository
+check_for_updates() {
+    echo "Checking for updates in VM-Setup repository..."
+    git remote update
+    LOCAL=$(git rev-parse @)
+    REMOTE=$(git rev-parse @{u})
+    if [ "$LOCAL" = "$REMOTE" ]; then
+        echo "VM-Setup is up to date."
+    else
+        echo "VM-Setup has updates available."
+        read -p "Do you want to pull the latest changes? (y/n): " pull_choice
+        if [ "$pull_choice" = "y" ]; then
+            git pull
+            echo "Repository updated successfully."
+            7
+            bash install.sh
+        else
+            echo "Update aborted."
+        fi
+    fi
 }
 
 # Main loop
