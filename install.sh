@@ -16,6 +16,8 @@ check_for_updates() {
             echo "Repository updated successfully."
             echo "Restarting the script to apply updates..."
             exec "$0"
+            7
+            bash install.sh
         else
             echo "Update aborted."
         fi
@@ -29,7 +31,7 @@ check_for_updates
 show_menu() {
     clear
     echo -e "====================================="
-    echo -e "          \e[1;34mVM Setup Menu 1.2.3\e[0m"
+    echo -e "          \e[1;34mVM Setup Menu 1.2.4\e[0m"
     echo -e "====================================="
     echo -e "\e[1;32mSystem Information\e[0m"
     echo -e "-------------------------------------"
