@@ -92,4 +92,8 @@ while true; do
             echo "Invalid option. Please choose a number between 1 and 7."
             ;;
     esac
+    read -p "Press [Enter] key to return to menu or type 'exit' to exit: " next_action
+    if [ "$next_action" = "exit" ]; then
+        exit 0
+    fi
 done
