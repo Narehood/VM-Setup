@@ -38,7 +38,7 @@
 #                       | Linux Mint 19 ( Tara | Tessa | Tina | Tricia )
 #                       | Linux Mint 20 ( Ulyana | Ulyssa | Uma | Una )
 #                       | Linux Mint 21 ( Vanessa | Vera | Victoria | Virginia )
-#                       | Linux Mint 22 ( Wilma )
+#                       | Linux Mint 22 ( Wilma | Xia )
 #                       | Linux Mint 2 ( Betsy )
 #                       | Linux Mint 3 ( Cindy )
 #                       | Linux Mint 4 ( Debbie )
@@ -58,7 +58,7 @@
 ###################################################################################################################################################################################################
 
 # Script                | UniFi Network Easy Installation Script
-# Version               | 8.2.0
+# Version               | 8.2.7
 # Application version   | 8.5.6-1x29lm155t
 # Debian Repo version   | 8.5.6-27036-1
 # Author                | Glenn Rietveld
@@ -769,8 +769,25 @@ eus_create_directories() {
   eus_directory_location="${eus_dir}"
 }
 
-eus_tmp_directories_cleanup() {
-  find "${eus_dir}/tmp/" -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} + 2> /dev/null
+eus_tmp_directory_check() {
+  if [[ "${eus_tmp_directory_cleanup_done}" != 'true' ]] || [[ "${eus_tmp_directory_cleanup}" == 'true' ]]; then find "${eus_dir}/tmp/" -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} + 2> /dev/null; eus_tmp_directory_cleanup_done="true"; fi
+  if [[ "${eus_tmp_directory_cleanup}" == 'true' ]]; then return 0; fi
+  eus_tmp_directory_create_attempts="${eus_tmp_directory_create_attempts:-0}"
+  if [[ -z "${eus_tmp_directory_location}" ]]; then eus_tmp_directory_location="$(mktemp -d "$(date +%Y%m%d)_XXXXX" --tmpdir="${eus_dir}/tmp/" 2>> "${eus_dir}/logs/create-tmp-dir-file.log")"; fi
+  if [[ -d "${eus_tmp_directory_location}" ]]; then
+    if [[ "${eus_tmp_directory_location}" != "${eus_tmp_created_directory_location}" ]]; then eus_tmp_created_directory_location="${eus_tmp_directory_location}"; echo -e "$(date +%F-%R) | EUS Temporary directory created: ${eus_tmp_directory_location}" &>> "${eus_dir}/logs/create-tmp-dir-file.log"; fi
+  else
+    unset eus_tmp_directory_location
+    ((eus_tmp_directory_create_attempts++))
+    if [[ "${eus_tmp_directory_create_attempts}" -le 3 ]]; then
+      echo -e "$(date +%F-%R) | Retrying to create the EUS temporary directory... (Attempt ${eus_tmp_directory_create_attempts})" &>> "${eus_dir}/logs/create-tmp-dir-file.log"
+      eus_tmp_directory_check
+    else
+      echo -e "$(date +%F-%R) | Failed to create the EUS temporary directory after 3 attempts..." &>> "${eus_dir}/logs/create-tmp-dir-file.log"
+      abort_reason="Failed to create the EUS temporary directory after 3 attempts."
+      abort
+    fi
+  fi
 }
 
 eus_directories() {
@@ -787,10 +804,9 @@ eus_directories() {
     is_cloudkey="false"
   fi
   if [[ "${eus_dir}" == '/srv/EUS' ]]; then if findmnt -no OPTIONS "$(df --output=target /srv | tail -1)" | grep -ioq "ro"; then eus_dir='/usr/lib/EUS'; fi; fi
-  eus_tmp_directories_cleanup
   eus_directory_location="${eus_dir}"
   eus_create_directories "logs" "tmp"
-  eus_tmp_directory_location="$(mktemp -d "$(date +%Y%m%d)_XXXXX" --tmpdir="${eus_dir}/tmp/" 2>> "${eus_dir}/logs/create-tmp-dir-file.log")"
+  eus_tmp_directory_check
   if ! rm -rf /tmp/EUS &> /dev/null; then abort_reason="Failed to remove /tmp/EUS."; header_red; abort; fi
   eus_directory_location="/tmp/EUS"
   eus_create_directories "upgrade" "dpkg" "repository"
@@ -2260,7 +2276,7 @@ christmass_new_year() {
 }
 
 author() {
-  eus_tmp_directories_cleanup
+  eus_tmp_directory_cleanup="true"; eus_tmp_directory_check
   check_apt_listbugs
   update_eus_db
   cleanup_codename_mismatch_repos
@@ -2323,7 +2339,7 @@ get_distro() {
     elif [[ "${os_codename}" =~ ^(bionic|tara|tessa|tina|tricia|hera|juno)$ ]]; then repo_codename="bionic"; os_codename="bionic"; os_id="ubuntu"
     elif [[ "${os_codename}" =~ ^(focal|ulyana|ulyssa|uma|una|odin|jolnir)$ ]]; then repo_codename="focal"; os_codename="focal"; os_id="ubuntu"
     elif [[ "${os_codename}" =~ ^(jammy|vanessa|vera|victoria|virginia|horus|cade)$ ]]; then repo_codename="jammy"; os_codename="jammy"; os_id="ubuntu"
-    elif [[ "${os_codename}" =~ ^(noble|wilma|scootski)$ ]]; then repo_codename="noble"; os_codename="noble"; os_id="ubuntu"
+    elif [[ "${os_codename}" =~ ^(noble|wilma|xia|scootski)$ ]]; then repo_codename="noble"; os_codename="noble"; os_id="ubuntu"
     elif [[ "${os_codename}" =~ ^(oracular)$ ]]; then repo_codename="oracular"; os_codename="oracular"; os_id="ubuntu"
     elif [[ "${os_codename}" =~ ^(jessie|betsy)$ ]]; then repo_codename="jessie"; os_codename="jessie"; os_id="debian"
     elif [[ "${os_codename}" =~ ^(stretch|continuum|helium|cindy)$ ]]; then repo_codename="stretch"; os_codename="stretch"; os_id="debian"
@@ -2794,8 +2810,8 @@ attempt_recover_broken_packages() {
   while IFS= read -r log_file; do
     while IFS= read -r broken_package; do
       broken_package="$(echo "${broken_package}" | xargs)"
-      if ! dpkg -l | awk '{print $2}' | grep -iq "^${broken_package}$"; then continue; fi
       echo -e "\\n------- $(date +%F-%R) -------\\n" &>> "${eus_dir}/logs/attempt-recover-broken-packages.log"
+      if ! dpkg -l | awk '{print $2}' | grep -iq "${broken_package}"; then echo -e "Failed to locate ${broken_package} in dpkg list..." &>> "${eus_dir}/logs/attempt-recover-broken-packages.log"; continue; fi
       echo -e "${GRAY_R}#${RESET} Attempting to recover broken packages..."
       check_dpkg_lock
       if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install -f &>> "${eus_dir}/logs/attempt-recover-broken-packages.log"; then
@@ -3100,7 +3116,8 @@ if [[ -n "${unifi_package}" ]] || [[ "${recovery_required}" == 'true' ]]; then
       fi
       if [[ -n "${unifi_download_link}" || -n "${unifi_gr_api_download_link}" || -n "${unifi_gr_download_link}" ]]; then
         echo -e "${GRAY_R}#${RESET} Checking if we need to change the version that the script will install..."
-        if [[ -z "${unifi_temp}" ]]; then unifi_temp="$(mktemp --tmpdir="${eus_tmp_directory_location}" "unifi_sysvinit_all_${broken_unifi_install_version}_XXXXX.deb" 2>> "${eus_dir}/logs/create-tmp-dir-file.log")"; fi
+        eus_tmp_directory_check
+        unifi_temp="$(mktemp --tmpdir="${eus_tmp_directory_location}" "unifi_sysvinit_all_${broken_unifi_install_version}_XXXXX.deb" 2>> "${eus_dir}/logs/create-tmp-dir-file.log")"
         unifi_deb_dl_urls=("${unifi_download_link}" "${unifi_gr_api_download_link}" "${unifi_gr_download_link}")
         for unifi_download_link in "${unifi_deb_dl_urls[@]}"; do
           echo -e "$(date +%F-%R) | Downloading ${unifi_download_link} to ${unifi_temp}" &>> "${eus_dir}/logs/unifi-broken-install-download.log"
@@ -3469,7 +3486,8 @@ custom_url_upgrade_check() {
 }
 
 custom_url_download_check() {
-  if [[ -z "${unifi_temp}" ]]; then unifi_temp="$(mktemp --tmpdir="${eus_tmp_directory_location}" "unifi_sysvinit_all_XXXXX.deb" 2>> "${eus_dir}/logs/create-tmp-dir-file.log")"; fi
+  eus_tmp_directory_check
+  unifi_temp="$(mktemp --tmpdir="${eus_tmp_directory_location}" "unifi_sysvinit_all_XXXXX.deb" 2>> "${eus_dir}/logs/create-tmp-dir-file.log")"
   header
   echo -e "${GRAY_R}#${RESET} Downloading the application release..."
   echo -e "$(date +%F-%R) | Downloading ${custom_download_url} to ${unifi_temp}" &>> "${eus_dir}/logs/unifi_custom_url_download.log"
@@ -3985,6 +4003,7 @@ unifi_required_packages_check() {
 unifi_required_packages_check
 
 repackage_deb_file() {
+  eus_tmp_directory_check
   repackage_deb_file_required_package
   repackage_deb_file_temp_dir="$(mktemp -d "${repackage_deb_name}_XXXXX" --tmpdir="${eus_tmp_directory_location}")"
   cd "${repackage_deb_file_temp_dir}" || return
@@ -5480,7 +5499,8 @@ unifi_deb_package_modification() {
       unifi_deb_package_modification_message_1="${non_default_java_package}"
     fi
     if [[ -n "${pre_build_fw_update_dl_link}" ]]; then
-      if [[ -z "${gr_unifi_temp}" ]]; then gr_unifi_temp="$(mktemp --tmpdir="${eus_tmp_directory_location}" "${unifi_deb_file_name}_${first_digit_unifi}.${second_digit_unifi}.${third_digit_unifi}_XXXXX.deb" 2>> "${eus_dir}/logs/create-tmp-dir-file.log")"; fi
+      eus_tmp_directory_check
+      gr_unifi_temp="$(mktemp --tmpdir="${eus_tmp_directory_location}" "${unifi_deb_file_name}_${first_digit_unifi}.${second_digit_unifi}.${third_digit_unifi}_XXXXX.deb" 2>> "${eus_dir}/logs/create-tmp-dir-file.log")"
       echo -e "$(date +%F-%R) | Downloading ${pre_build_fw_update_dl_link} to ${gr_unifi_temp}" &>> "${eus_dir}/logs/unifi-download.log"
       echo -e "${GRAY_R}#${RESET} Downloading UniFi Network Application version ${first_digit_unifi}.${second_digit_unifi}.${third_digit_unifi} built for ${unifi_deb_package_modification_message_1}..."
       if curl "${nos_curl_argument[@]}" --output "$gr_unifi_temp" "${pre_build_fw_update_dl_link}" &>> "${eus_dir}/logs/unifi-download.log"; then
@@ -5816,6 +5836,30 @@ mongodb_installation() {
         libssl_installation_check
         continue
       fi
+      if [[ "${glennr_mongod_dependency}" =~ (libc6) ]]; then
+        glennr_mongod_libc6_required_version="$(apt-cache show "${gr_mongod_name}${install_mongod_version_with_equality_sign}" | grep -i "libc6" | grep -oP "libc6 \(>= \K[0-9\.]+")"
+        installed_libc_version="$(dpkg-query -W -f='${Version}' libc6)"
+        if dpkg --compare-versions "${installed_libc_version}" lt "${glennr_mongod_libc6_required_version}"; then
+          if [[ "${os_codename}" =~ (trusty|qiana|rebecca|rafaela|rosa|xenial|bionic|cosmic|disco|eoan|focal|groovy|hirsute|impish|jammy) ]]; then
+            if [[ "${architecture}" =~ (amd64|i386) ]]; then
+              repo_url="http://security.ubuntu.com/ubuntu"
+              repo_codename_argument="-security"
+              repo_component="main"
+            else
+              repo_url="http://ports.ubuntu.com"
+              repo_codename_argument="-security"
+              repo_component="main universe"
+            fi
+            repo_codename="noble"
+          elif [[ "${os_codename}" =~ (wheezy|jessie|stretch|buster|bullseye) ]]; then
+            repo_codename="bookworm"
+            get_repo_url
+            repo_component="main"
+          fi
+          add_repositories
+          run_apt_get_update
+        fi
+      fi
       if "$(which dpkg)" -l mongodb-mongosh-shared-openssl11 "${glennr_mongod_dependency}" 2> /dev/null | awk '{print $1}' | grep -iq "^ii\\|^hi\\|^ri\\|^pi\\|^ui"; then
         glennr_mongod_dependency_version_current="$(dpkg-query --showformat='${Version}' --show "${glennr_mongod_dependency}" | awk -F'[-.]' '{print $1}')"
       else
@@ -5898,6 +5942,22 @@ mongodb_installation() {
     libssl_installation_check
     mongodb_installation_server_package="mongodb-org-server${install_mongodb_version_with_equality_sign}"
   fi
+  te_mongodb_org_server_version="${install_mongodb_version//./}"
+  if "$(which dpkg)" -l mongodb-org-database-tools-extra 2> /dev/null | awk '{print $1}' | grep -iq "^ii\\|^hi\\|^ri\\|^pi\\|^ui" && [[ "${te_mongodb_org_server_version::2}" -lt "44" ]]; then
+    mongodb_tools_extra_dependencies=()
+    if "$(which dpkg)" -l | awk '{print $2}' | grep -ioq "mongodb-org-database$"; then tools_extra_dependency_1="mongodb-org-database"; mongodb_tools_extra_dependencies+=("mongodb-org-database"); fi
+    if "$(which dpkg)" -l | awk '{print $2}' | grep -ioq "mongodb-org-tools$"; then tools_extra_dependency_2="mongodb-org-tools"; mongodb_tools_extra_dependencies+=("mongodb-org-tools"); fi
+    if "$(which dpkg)" -l | awk '{print $2}' | grep -ioq "mongodb-org$"; then tools_extra_dependency_3="mongodb-org"; mongodb_tools_extra_dependencies+=("mongodb-org"); fi
+    if [[ "${#mongodb_tools_extra_dependencies[@]}" -gt 0 ]]; then tools_extra_dependency_extra_packages_message=", $(IFS=,; echo "${mongodb_tools_extra_dependencies[*]}" | sed 's/,/, /g; s/,\([^,]*\)$/ and\1/')"; fi
+    check_dpkg_lock
+    echo -e "${GRAY_R}#${RESET} Purging package mongodb-org-database-tools-extra${tools_extra_dependency_extra_packages_message}..."
+    if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' purge "mongodb-org-database-tools-extra" "${tools_extra_dependency_1}" "${tools_extra_dependency_2}" "${tools_extra_dependency_3}" &>> "${eus_dir}/logs/unifi-database-required.log"; then
+      echo -e "${GREEN}#${RESET} Successfully purged mongodb-org-database-tools-extra${tools_extra_dependency_extra_packages_message}! \\n"
+    else
+      echo -e "${RED}#${RESET} Failed to purge mongodb-org-database-tools-extra${tools_extra_dependency_extra_packages_message}...\\n"
+      abort_function_skip_reason="true"; abort_reason="Failed to purge mongodb-org-database-tools-extra${tools_extra_dependency_extra_packages_message}."; abort
+    fi
+  fi
   if "$(which dpkg)" -l mongo-tools 2> /dev/null | awk '{print $1}' | grep -iq "^ii\\|^hi\\|^ri\\|^pi\\|^ui"; then
     check_dpkg_lock
     echo -e "${GRAY_R}#${RESET} Purging package mongo-tools..."
@@ -5963,9 +6023,16 @@ mongodb_installation() {
   fi
   if [[ "${install_mongod_version::1}" -ge "5" ]]; then
     if ! "$(which dpkg)" -l mongodb-mongosh-shared-openssl11 mongodb-mongosh-shared-openssl3 mongodb-mongosh mongosh 2> /dev/null | awk '{print $1}' | grep -iq "^ii\\|^hi\\|^ri\\|^pi\\|^ui"; then
-      mongodb_mongosh_libssl_version="$(apt-cache depends "mongodb-org-server${install_mongodb_version_with_equality_sign}" | sed -e 's/>//g' -e 's/<//g' | grep -io "libssl1.1$\\|libssl3$")"
-      if [[ -z "${mongodb_mongosh_libssl_version}" ]]; then
-        mongodb_mongosh_libssl_version="$(apt-cache depends "mongodb-org-server" | sed -e 's/>//g' -e 's/<//g' | grep -io "libssl1.1$\\|libssl3$")"
+      if "$(which dpkg)" -l | grep "^ii\\|^hi\\|^ri\\|^pi\\|^ui\\|^iU" | grep -iq "${gr_mongod_name}"; then
+        mongodb_mongosh_libssl_version="$(apt-cache depends "${gr_mongod_name}${install_mongod_version_with_equality_sign}" | sed -e 's/>//g' -e 's/<//g' | grep -io "libssl1.1$\\|libssl3$")"
+        if [[ -z "${mongodb_mongosh_libssl_version}" ]]; then
+          mongodb_mongosh_libssl_version="$(apt-cache depends "${gr_mongod_name}" | sed -e 's/>//g' -e 's/<//g' | grep -io "libssl1.1$\\|libssl3$")"
+        fi
+      else
+        mongodb_mongosh_libssl_version="$(apt-cache depends "mongodb-org-server${install_mongodb_version_with_equality_sign}" | sed -e 's/>//g' -e 's/<//g' | grep -io "libssl1.1$\\|libssl3$")"
+        if [[ -z "${mongodb_mongosh_libssl_version}" ]]; then
+          mongodb_mongosh_libssl_version="$(apt-cache depends "mongodb-org-server" | sed -e 's/>//g' -e 's/<//g' | grep -io "libssl1.1$\\|libssl3$")"
+        fi
       fi
       if [[ "${mongodb_mongosh_libssl_version}" == 'libssl3' ]]; then
         mongodb_mongosh_install_package_name="mongodb-mongosh-shared-openssl3"
@@ -6557,7 +6624,8 @@ if [[ "${mongo_version_locked}" == '4.4.18' ]] || [[ "${unsupported_database_ver
         fw_update_dl_link="$(curl "${curl_argument[@]}" --location --request GET "https://fw-update.ui.com/api/firmware-latest?filter=eq~~version_major~~$(awk -F'.' '{print $1}' <<< "${reinstall_unifi_version}")&filter=eq~~version_minor~~$(awk -F'.' '{print $2}' <<< "${reinstall_unifi_version}")&filter=eq~~version_patch~~$(awk -F'.' '{print $3}' <<< "${reinstall_unifi_version}")&filter=eq~~platform~~debian" 2> /dev/null | jq -r "._embedded.firmware[0]._links.data.href" 2> /dev/null | sed '/null/d' 2> "${eus_dir}/logs/locate-download.log")"
         fw_update_dl_link_sha256sum="$(curl "${curl_argument[@]}" --location --request GET "https://fw-update.ui.com/api/firmware-latest?filter=eq~~version_major~~$(awk -F'.' '{print $1}' <<< "${reinstall_unifi_version}")&filter=eq~~version_minor~~$(awk -F'.' '{print $2}' <<< "${reinstall_unifi_version}")&filter=eq~~version_patch~~$(awk -F'.' '{print $3}' <<< "${reinstall_unifi_version}")&filter=eq~~platform~~debian" 2> /dev/null | jq -r "._embedded.firmware[0].sha256_checksum" 2> /dev/null | sed '/null/d' 2> "${eus_dir}/logs/locate-download.log")"
       fi
-      if [[ -z "${unifi_temp}" ]]; then unifi_temp="$(mktemp --tmpdir="${eus_tmp_directory_location}" "${unifi_deb_file_name}_${reinstall_unifi_version}_XXXXX.deb" 2>> "${eus_dir}/logs/create-tmp-dir-file.log")"; fi
+      eus_tmp_directory_check
+      unifi_temp="$(mktemp --tmpdir="${eus_tmp_directory_location}" "${unifi_deb_file_name}_${reinstall_unifi_version}_XXXXX.deb" 2>> "${eus_dir}/logs/create-tmp-dir-file.log")"
       if [[ -n "${fw_update_gr_dl_link}" ]]; then
         fw_update_dl_links=("${fw_update_dl_link}" "${fw_update_gr_dl_link}")
       else
@@ -6639,7 +6707,7 @@ fi
 if [[ "${first_digit_unifi}" -gt '7' ]] || [[ "${first_digit_unifi}" == '7' && "${second_digit_unifi}" -ge '4' ]] || [[ "${first_digit_unifi}" == '7' && "${second_digit_unifi}" -ge '5' ]]; then
   if [[ "${first_digit_unifi}" -gt '7' ]] || [[ "${first_digit_unifi}" == '7' && "${second_digit_unifi}" -ge '5' ]]; then minimum_required_mongodb_version_dot="3.6"; minimum_required_mongodb_version="36"; unifi_latest_supported_version_number="7.4"; fi
   if [[ "${first_digit_unifi}" == '7' && "${second_digit_unifi}" == '4' ]]; then minimum_required_mongodb_version_dot="2.6"; minimum_required_mongodb_version="26"; unifi_latest_supported_version_number="7.3"; fi
-  mongodb_server_version="$("$(which dpkg)" -l | grep "^ii\\|^hi\\|^ri\\|^pi\\|^ui\\|^iU" | grep "mongodb-server \\|mongodb-org-server " | awk '{print $3}' | sed 's/\.//g' | sed 's/.*://' | sed 's/-.*//g')"
+  mongodb_server_version="$("$(which dpkg)" -l | grep "^ii\\|^hi\\|^ri\\|^pi\\|^ui\\|^iU" | grep "mongodb-server\\|mongodb-org-server\\|mongod-armv8\\|mongod-amd64" | awk '{print $3}' | sed 's/\.//g' | sed 's/.*://' | sed 's/-.*//g')"
   if [[ -z "${mongodb_server_version}" ]]; then
     if [[ -n "$(command -v mongod)" ]]; then
       if "${mongocommand}" --port 27117 --eval "print(\"waited for connection\")" &> /dev/null; then
@@ -6684,7 +6752,8 @@ header
 echo -e "${GRAY_R}#${RESET} Installing your UniFi Network Application ${GRAY_R}${unifi_clean}${RESET}...\\n"
 sleep 2
 if [[ "${unifi_network_application_downloaded}" != 'true' ]]; then
-  if [[ -z "${unifi_temp}" ]]; then unifi_temp="$(mktemp --tmpdir="${eus_tmp_directory_location}" "unifi_sysvinit_all_${unifi_clean}_XXX.deb" 2>> "${eus_dir}/logs/create-tmp-dir-file.log")"; fi
+  eus_tmp_directory_check
+  unifi_temp="$(mktemp --tmpdir="${eus_tmp_directory_location}" "unifi_sysvinit_all_${unifi_clean}_XXX.deb" 2>> "${eus_dir}/logs/create-tmp-dir-file.log")"
   unifi_fwupdate="$(curl "${curl_argument[@]}" "https://fw-update.ui.com/api/firmware-latest?filter=eq~~version_major~~${first_digit_unifi}&filter=eq~~version_minor~~${second_digit_unifi}&filter=eq~~version_patch~~${third_digit_unifi}&filter=eq~~platform~~debian" 2> /dev/null | jq -r "._embedded.firmware[]._links.data.href" 2> /dev/null | sed '/null/d' 2> "${eus_dir}/logs/locate-download.log")"
   if [[ -z "${unifi_fwupdate}" ]]; then unifi_fwupdate="$(curl "${curl_argument[@]}" "http://fw-update.ui.com/api/firmware-latest?filter=eq~~version_major~~${first_digit_unifi}&filter=eq~~version_minor~~${second_digit_unifi}&filter=eq~~version_patch~~${third_digit_unifi}&filter=eq~~platform~~debian" 2> /dev/null | jq -r "._embedded.firmware[]._links.data.href" 2> /dev/null | sed '/null/d' 2> "${eus_dir}/logs/locate-download.log")"; fi
   if [[ "$(curl "${curl_argument[@]}" https://api.glennr.nl/api/network-release?status 2> /dev/null | jq -r '.[]' 2> /dev/null)" == "OK" ]]; then
