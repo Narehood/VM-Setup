@@ -4,7 +4,7 @@
 show_menu() {
     clear
     echo -e "====================================="
-    echo -e "          \e[1;34mVM Setup Menu 1.4.1\e[0m"
+    echo -e "          \e[1;34mVM Setup Menu 1.4.2\e[0m"
     echo -e "====================================="
     echo -e "\e[1;32mSystem Information\e[0m"
     echo -e "-------------------------------------"
@@ -41,7 +41,7 @@ check_for_updates() {
         if [ "$pull_choice" = "y" ]; then
             git pull
             echo "Repository updated successfully."
-            7
+            8
             bash install.sh
         else
             echo "Update aborted."
