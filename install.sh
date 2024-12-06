@@ -95,5 +95,6 @@ while true; do
     read -p "Press [Enter] key to return to menu or type 'exit' to exit: " next_action
     if [ "$next_action" = "exit" ]; then
         exit 0
+        7
     fi
 done
