@@ -21,8 +21,8 @@ show_menu() {
     echo -e "\e[1;36m3.\e[0m UniFi Controller"
     echo -e "\e[1;36m4.\e[0m Docker Host Prep"
     echo -e "\e[1;36m5.\e[0m Enable Automated Security Patches"
-    echo -e "\e[1;36m6.\e[0m Check for Updates (This App)"
-    echo -e "\e[1;36m7.\e[0m Check for System Updates"
+    echo -e "\e[1;36m6.\e[0m Check for System Updates"    
+    echo -e "\e[1;36m7.\e[0m Check for Menu Updates"
     echo -e "\e[1;36m8.\e[0m Exit"
     echo -e "====================================="
 }
@@ -82,13 +82,13 @@ while true; do
             bash Automated-Security-Patches.sh
             ;;
         6)
-            echo "Checking for updates..."
-            check_for_updates
-            ;;
-        7)
             echo "You have selected System Update"
             cd Installers/
             bash systemUpdate.sh
+            ;;
+        7)
+            echo "Checking for updates..."
+            check_for_updates
             ;;
         8)
             echo "Exiting..."
