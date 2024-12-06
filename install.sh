@@ -4,7 +4,7 @@
 show_menu() {
     clear
     echo -e "====================================="
-    echo -e "          \e[1;34mVM Setup Menu 1.3.2\e[0m"
+    echo -e "          \e[1;34mVM Setup Menu 1.4.0\e[0m"
     echo -e "====================================="
     echo -e "\e[1;32mSystem Information\e[0m"
     echo -e "-------------------------------------"
@@ -21,8 +21,9 @@ show_menu() {
     echo -e "\e[1;36m3.\e[0m UniFi Controller"
     echo -e "\e[1;36m4.\e[0m Docker Host Prep"
     echo -e "\e[1;36m5.\e[0m Enable Automated Security Patches"
-    echo -e "\e[1;36m6.\e[0m Check for Updates"
-    echo -e "\e[1;36m7.\e[0m Exit"
+    echo -e "\e[1;36m6.\e[0m Check for Updates (This App)"
+    echo -e "\e[1;36m7.\e[0m Check for System Updates"
+    echo -e "\e[1;36m8.\e[0m Exit"
     echo -e "====================================="
 }
 
@@ -85,6 +86,11 @@ while true; do
             check_for_updates
             ;;
         7)
+            echo "You have selected System Update"
+            cd Installers/
+            bash systemUpdate.sh
+            ;;
+        8)
             echo "Exiting..."
             exit 0
             ;;
@@ -95,6 +101,6 @@ while true; do
     read -p "Press [Enter] key to return to menu or type 'exit' to exit: " next_action
     if [ "$next_action" = "exit" ]; then
         exit 0
-        7
+        8
     fi
 done
