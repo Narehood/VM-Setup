@@ -4,7 +4,7 @@
 show_menu() {
     clear
     echo -e "====================================="
-    echo -e "          \e[1;34mVM Setup Menu 1.4.2\e[0m"
+    echo -e "          \e[1;34mVM Setup Menu 1.5.0\e[0m"
     echo -e "====================================="
     echo -e "\e[1;32mResource Information\e[0m"
     echo -e "-------------------------------------"
