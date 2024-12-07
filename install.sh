@@ -17,7 +17,7 @@ show_menu() {
     echo -e "\e[1;32mSystem Information\e[0m"
     echo -e "-------------------------------------"
     echo -e "Machine Name: \e[1;33m$(hostname)\e[0m"
-    echo -e "IP Address: $(hostname -I | awk '{print $1}')"
+    echo -e "IP Address: $(hostname -I | awk '{print $1}')\e[0m"
     echo -e "Default Gateway: \e[1;33m$(ip route | grep default | awk '{print $3}')\e[0m"
     echo -e "-------------------------------------"
     echo -e "\e[1;32mOptions\e[0m"
