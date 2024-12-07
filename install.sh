@@ -1,28 +1,16 @@
 #!/bin/bash
 
-# Function to detect the system name
-get_system_name() {
-    if [ -f /etc/os-release ]; then
-        . /etc/os-release
-        SYSTEM_NAME=$NAME
-    else
-        SYSTEM_NAME=$(uname -s)
-    fi
-}
-
 # Function to display the menu
 show_menu() {
     clear
-    get_system_name
     echo -e "====================================="
     echo -e "          \e[1;34mVM Setup Menu 1.4.2\e[0m"
     echo -e "====================================="
     echo -e "\e[1;32mSystem Information\e[0m"
     echo -e "-------------------------------------"
-    echo -e "System Name: \e[1;33m$SYSTEM_NAME\e[0m"
     echo -e "Linux Distribution: \e[1;33m$(lsb_release -d | cut -f2)\e[0m"
     echo -e "Kernel Version: \e[1;33m$(uname -r)\e[0m"
-    echo -e "CPU Usage: \e[1;33m$(top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\([0-9.]*\)%* id.*/\1/' | awk '{print 100 - $1"%"}')\e[0m"
+    echo -e "CPU Usage: \e[1;33m$(top -bn1 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | awk '{print 100 - $1"%"}')\e[0m"
     echo -e "Memory Usage: \e[1;33m$(free -m | awk 'NR==2{printf "Memory Usage: %s/%sMB (%.2f%%)\n", $3,$2,$3*100/$2 }')\e[0m"
     echo -e "Disk Usage: \e[1;33m$(df -h | awk '$NF=="/"{printf "Disk Usage: %d/%dGB (%s)\n", $3,$2,$5}')\e[0m"
     echo -e "-------------------------------------"
@@ -53,6 +41,7 @@ check_for_updates() {
         if [ "$pull_choice" = "y" ]; then
             git pull
             echo "Repository updated successfully."
+            8
             bash install.sh
         else
             echo "Update aborted."
@@ -63,7 +52,7 @@ check_for_updates() {
 # Main loop
 while true; do
     show_menu
-    read -p "Enter your choice [1-8]: " choice
+    read -p "Enter your choice [1-7]: " choice
     case $choice in
         1)
             echo "You have selected XCP-NG / Virtual Machine Initial Configuration"
@@ -78,4 +67,40 @@ while true; do
         3)
             echo "You have selected UniFi Controller"
             cd Installers/
-            bash UniFi-Controller
+            bash UniFi-Controller.sh
+            ;;
+        4)
+            echo "You have selected Docker Host Prep"
+            cd VM-Setup/Installers/
+            cd Installers/
+            bash Docker-Prep.sh
+            ;;
+        5)
+            echo "You have selected Enable Automated Security Patches"
+            cd VM-Setup/Installers/
+            cd Installers/
+            bash Automated-Security-Patches.sh
+            ;;
+        6)
+            echo "You have selected System Update"
+            cd Installers/
+            bash systemUpdate.sh
+            ;;
+        7)
+            echo "Checking for updates..."
+            check_for_updates
+            ;;
+        8)
+            echo "Exiting..."
+            exit 0
+            ;;
+        *)
+            echo "Invalid option. Please choose a number between 1 and 7."
+            ;;
+    esac
+    read -p "Press [Enter] key to return to menu or type 'exit' to exit: " next_action
+    if [ "$next_action" = "exit" ]; then
+        exit 0
+        8
+    fi
+done
