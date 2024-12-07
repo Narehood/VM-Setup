@@ -14,15 +14,11 @@ show_menu() {
     echo -e "CPU Usage: \e[1;33m$(top -bn1 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | awk '{print 100 - $1"%"}')\e[0m"
     echo -e "Memory Usage: \e[1;33m$(free -m | awk 'NR==2{printf "Memory Usage: %s/%sMB (%.2f%%)\n", $3,$2,$3*100/$2 }')\e[0m"
     echo -e "Disk Usage: \e[1;33m$(df -h | awk '$NF=="/"{printf "Disk Usage: %d/%dGB (%s)\n", $3,$2,$5}')\e[0m"
-
-echo "Network Information:"
-echo "===================="
-echo "IP Address: $(hostname -I)"
-echo "Subnet Mask: $(ip -o -f inet addr show | awk '/scope global/ {print $4}' | cut -d/ -f2)"
-echo "Default Gateway: $(ip route | grep default | awk '{print $3}')"
-echo "DNS Servers: $(cat /etc/resolv.conf | grep nameserver | awk '{print $2}')"
-
-    
+    echo -e "====================================="
+    echo -e "          \e[1;34mNetwork Information\e[0m"
+    echo -e "====================================="
+    echo -e "IP Address: \e[1;33m$(hostname -I)\e[0m"
+    echo -e "Default Gateway: \e[1;33m$(ip route | grep default | awk '{print $3}')\e[0m"
     echo -e "-------------------------------------"
     echo -e "\e[1;32mOptions\e[0m"
     echo -e "-------------------------------------"
