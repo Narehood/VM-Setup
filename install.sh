@@ -18,7 +18,7 @@ show_menu() {
     echo -e "          \e[1;34mNetwork Information\e[0m"
     echo -e "====================================="
     echo -e "IP Address: \e[1;33m$(hostname -I)\e[0m"
-    echo -e "Default Gateway: \e[1;33m$(ip route | grep default | awk '{print $3}')\e[0m"
+    echo -e "Default Gateway: $(ip route | grep default | awk '{print $3}')"
     echo -e "-------------------------------------"
     echo -e "\e[1;32mOptions\e[0m"
     echo -e "-------------------------------------"
