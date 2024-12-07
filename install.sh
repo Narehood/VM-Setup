@@ -8,7 +8,7 @@ show_menu() {
     echo -e "====================================="
     echo -e "\e[1;32mSystem Information\e[0m"
     echo -e "-------------------------------------"
-    echo -e "Machine Name: $(hostname)"
+    echo -e "Machine Name: \e[1;33m$(hostname)\e[0m"
     echo -e "Linux Distribution: \e[1;33m$(lsb_release -d | cut -f2)\e[0m"
     echo -e "Kernel Version: \e[1;33m$(uname -r)\e[0m"
     echo -e "CPU Usage: \e[1;33m$(top -bn1 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | awk '{print 100 - $1"%"}')\e[0m"
