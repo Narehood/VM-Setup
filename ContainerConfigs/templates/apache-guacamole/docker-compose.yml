@@ -1,0 +1,16 @@
+version: '3.9'
+services:
+  guacamole:
+    image: unsafetypin/guacamole
+    network_mode: 'bridge'
+    environment:
+      - EXTENSIONS=auth-totp
+    volumes:
+      - ./config:/config
+    ports:
+      - "8585:8080"
+    restart: always
+networks:
+  default:
+    external:
+      name: bridge
