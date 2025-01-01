@@ -1,54 +1,51 @@
-# XCP-NG Tools and Server Setup Script
+# XCP-NG VM-Setup
 
-This script automates the installation of XCP-NG Tools and standard server tools on various Linux distributions. It also provides an option to change the hostname and clone a dotfiles repository.
+VM-Setup is a simple and versatile script designed to configure virtual machines running on XCP-NG. With this tool, you can effortlessly set up your virtual machine as a Docker Host, UniFi Controller, or Xen Orchestra, or simply install XCP-NG Tools. Additionally, VM-Setup includes features for enabling automated security updates and self-updating, ensuring your VMs are always up-to-date with the latest features and secure. Many of these tools are pulled from other projects and are credited below.
+
+You may use and change this script however you wish. If you encounter any bugs you can report them, but they may or may not get fixed.
+
+This tool should work on most Linux systems but is mainly tested on Alma, Debian, Suse, and Ubuntu.
 
 ## Features
 
-- Installs XCP-NG Tools on Debian, Ubuntu, Red Hat, Arch, and SUSE based systems.
-- Installs standard server tools (`net-tools`, `cockpit`, `htop`) on Debian, Ubuntu, Red Hat, Arch, and SUSE based systems.
-- Option to change the hostname.
-- Installs Dotfiles to make your shell look like the example below.</br>
-   ![-Dotfiles-Example](Dotfiles-Example.png)</br>
-- Enable automated security patches</br>
-- Enable automated updates to this script</br>
-- Configure Installation for a Docker Host, UniFi Controller, Xen Orchestra</br>
-- More coming soon</br>
+- Install XCP-NG Tools
+- Install dotfiles to give your console a custom look
+- Configure VM as Docker Host
+- Set up UniFi Controller
+- Set up Xen Orchestra
+- Self-update capability
+- Enable security updates
+
+## Installation
+
+1. **Clone the repository**:
+    ```sh
+    git clone https://github.com/Narehood/VM-Setup.git
+    ```
+2. **Navigate to the project directory**:
+    ```sh
+    cd VM-Setup
+    ```
 
 ## Usage
 
-1. **Clone the Repository:**
+1. **Navigate to the project directory**:
+    ```sh
+    bash install.sh
+    ```
 
-   ```bash
-   git clone https://github.com/Narehood/VM-Setup
-   cd VM-Setup
+**Follow the on-screen instructions** to select your desired configuration:
+    1. XCP-NG / Virtual Machine Initial Configuration
+    2. Xen Orchestra
+    3. UniFi Controller
+    4. Docker Host Prep
+    5. Enable Automated Security Patches
+    6. Check for System Updates
+    7. Check for Menu Updates
+    8. Exit
 
-2. **Run The Script:**
 
-   ```bash
-   bash install.sh
+## Credits
 
-# Script Details
-## XCP-NG Tools Installation
-The script first asks if you want to install XCP-NG Tools. If you choose 'Y' “yes”, it will detect your Linux distribution and install the appropriate packages. If you are not using XCP-NG as your hypervisor select 'N'
-
-## Standard Server Tools Installation
-The script then installs standard server tools (net-tools, cockpit, htop) based on your Linux distribution.
-
-## Change Hostname
-The script provides an option to change the hostname of your system. If you choose “yes”, you will be prompted to enter the new hostname.
-
-## Clone Dotfiles Repository
-Finally, the script installs a dotfiles config and runs its installation script to customize your shell.
-
-<br /><br /><br />
-## Credit/License
-
-### License
-This project is licensed under the MIT License - see the LICENSE file for details.
-### Contributing
-Feel free to submit issues or pull requests if you have any improvements or suggestions.
-### Acknowledgments
-Thanks to the open-source community for providing the tools and resources used in this script.
-=======
-
-More detailed documentation coming soon. 
+- UniFi Controller: https://glennr.nl/s/unifi-network-controller
+- Xen Orchestra: https://github.com/ronivay/XenOrchestraInstallerUpdater
