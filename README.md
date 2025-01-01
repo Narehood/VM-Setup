@@ -9,6 +9,10 @@ This script automates the installation of XCP-NG Tools and standard server tools
 - Option to change the hostname.
 - Installs Dotfiles to make your shell look like the example below.</br>
    ![-Dotfiles-Example](Dotfiles-Example.png)</br>
+- Enable automated security patches</br>
+- Enable automated updates to this script</br>
+- Configure Installation for a Docker Host, UniFi Controller, Xen Orchestra</br>
+- More coming soon</br>
 
 ## Usage
 
