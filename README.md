@@ -20,7 +20,7 @@ This tool should work on most Linux systems but is mainly tested on Alma, Debian
 
 1. **Clone the repository**:
     ```sh
-    git clone https://github.com/Narehood/VM-Setup.git
+    git clone https://github.com/Narehood/VM-Setup
     ```
 2. **Navigate to the project directory**:
     ```sh
