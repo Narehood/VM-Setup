@@ -4,7 +4,7 @@
 show_menu() {
     clear
     echo -e "====================================="
-    echo -e "          \e[1;34mVM Setup Menu 1.5.8\e[0m"
+    echo -e "          \e[1;34mVM Setup Menu 1.5.9\e[0m"
     echo -e "====================================="
     echo -e "\e[1;32mResource Information\e[0m"
     echo -e "-------------------------------------"
@@ -98,7 +98,6 @@ while true; do
             ;;
         8)
             echo "Exiting..."
-            exit
             exit 0
             ;;
         *)
