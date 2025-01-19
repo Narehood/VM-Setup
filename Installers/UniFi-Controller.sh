@@ -58,7 +58,7 @@
 ###################################################################################################################################################################################################
 
 # Script                | UniFi Network Easy Installation Script
-# Version               | 8.5.5
+# Version               | 8.5.6
 # Application version   | 9.0.108-u598f2io2a
 # Debian Repo version   | 9.0.108-27982-1
 # Author                | Glenn Rietveld
@@ -5532,7 +5532,7 @@ java_install_check() {
       fi
     fi
   fi
-  if ! "$(which dpkg)" -l | grep "^ii\\|^hi" | grep -iq "openjdk-${required_java_version_short}.*:${architecture}\\|temurin-${required_java_version_short}.*:${architecture}"; then incorrect_architecture_java="true"; java_architecture_flag=":${architecture}"; fi
+  if [[ -n "$(dpkg --print-foreign-architectures)" ]]; then if ! dpkg-query --show --showformat='${Package}:${Architecture}\n' | grep -iq "openjdk-${required_java_version_short}.*:${architecture}\\|temurin-${required_java_version_short}.*:${architecture}"; then incorrect_architecture_java="true"; java_architecture_flag=":${architecture}"; fi; fi
   if ! "$(which dpkg)" -l | grep "^ii\\|^hi" | grep -iq "openjdk-${required_java_version_short}\\|temurin-${required_java_version_short}" || [[ "${incorrect_architecture_java}" == 'true' ]] || [[ "${old_openjdk_version}" == 'true' ]] || [[ "${temurin_jdk_to_jre}" == 'true' ]]; then
     if [[ "${old_openjdk_version}" == 'true' ]]; then
       header_red
