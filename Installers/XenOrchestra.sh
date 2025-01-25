@@ -5,6 +5,7 @@ repo_dir="XenOrchestraInstallerUpdater"
 repo_url="https://github.com/Narehood/XenOrchestraInstallerUpdater"
 
 # Check if the directory exists
+cd
 if [ -d "$repo_dir" ]; then
     # Remove the directory and its contents
     rm -rf "$repo_dir"
