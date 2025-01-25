@@ -1,0 +1,27 @@
+version: '3.8'
+services:
+  adguard:
+    image: adguard/adguardhome:latest
+    container_name: adguard-home
+    restart: unless-stopped
+    network_mode: host
+    ports:
+      - "53:53/tcp"       # DNS over TCP
+      - "53:53/udp"       # DNS over UDP
+      - "67:67/udp"       # DHCP server
+      - "68:68/udp"       # DHCP client
+      - "80:80/tcp"       # Web UI HTTP
+      - "443:443/tcp"     # Web UI HTTPS
+      - "443:443/udp"     # Web UI HTTPS
+      - "3000:3000/tcp"   # Web Dashboard
+      - "853:853/tcp"     # DNS over TLS
+      - "853:853/udp"     # DNS over TLS (UDP)
+      - "5443:5443/tcp"   # DoH (DNS over HTTPS)
+      - "5443:5443/udp"   # DoH (DNS over HTTPS)
+      - "6060:6060/tcp"   # Prometheus metrics
+    volumes:
+      - adguard_data:/opt/adguardhome/work
+      - adguard_conf:/opt/adguardhome/conf
+volumes:
+  adguard_data:
+  adguard_conf:
