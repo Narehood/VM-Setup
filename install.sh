@@ -4,7 +4,7 @@
 show_menu() {
     clear
     echo -e "====================================="
-    echo -e "          \e[1;34mVM Setup Menu 1.6.1\e[0m"
+    echo -e "          \e[1;34mVM Setup Menu 1.6.2\e[0m"
     echo -e "====================================="
     echo -e "\e[1;32mResource Information\e[0m"
     echo -e "-------------------------------------"
@@ -102,8 +102,10 @@ while true; do
             echo "Invalid option. Please choose a number between 1 and 8."
             ;;
     esac
-    read -p "Press [Enter] key to return to menu or type 'exit' to exit: " next_action
-    if [ "$next_action" = "exit" ]; then
-        exit 0
+    if [ "$choice" -ne 8 ]; then
+        read -p "Press [Enter] key to return to menu or type 'exit' to exit: " next_action
+        if [ "$next_action" = "exit" ]; then
+            exit 0
+        fi
     fi
 done
