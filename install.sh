@@ -4,7 +4,7 @@
 show_menu() {
     clear
     echo -e "====================================="
-    echo -e "          \e[1;34mVM Setup Menu 1.6.0\e[0m"
+    echo -e "          \e[1;34mVM Setup Menu 1.6.1\e[0m"
     echo -e "====================================="
     echo -e "\e[1;32mResource Information\e[0m"
     echo -e "-------------------------------------"
@@ -47,12 +47,18 @@ check_for_updates() {
         if [ "$pull_choice" = "y" ]; then
             git pull
             echo "Repository updated successfully."
-            8
             bash install.sh
         else
             echo "Update aborted."
         fi
     fi
+}
+
+# Function to navigate to installers and execute a script
+execute_installer_script() {
+    local script_name=$1
+    cd Installers/
+    bash "$script_name"
 }
 
 # Main loop
@@ -62,35 +68,27 @@ while true; do
     case $choice in
         1)
             echo "You have selected XCP-NG / Virtual Machine Initial Configuration"
-            cd Installers/
-            bash serverSetup.sh
+            execute_installer_script "serverSetup.sh"
             ;;
         2)
             echo "You have selected Xen Orchestra"
-            cd Installers/
-            bash XenOrchestra.sh
+            execute_installer_script "XenOrchestra.sh"
             ;;
         3)
             echo "You have selected UniFi Controller"
-            cd Installers/
-            bash UniFi-Controller.sh
+            execute_installer_script "UniFi-Controller.sh"
             ;;
         4)
             echo "You have selected Docker Host Prep"
-            cd VM-Setup/Installers/
-            cd Installers/
-            bash Docker-Prep.sh
+            execute_installer_script "Docker-Prep.sh"
             ;;
         5)
             echo "You have selected Enable Automated Security Patches"
-            cd VM-Setup/Installers/
-            cd Installers/
-            bash Automated-Security-Patches.sh
+            execute_installer_script "Automated-Security-Patches.sh"
             ;;
         6)
             echo "You have selected System Update"
-            cd Installers/
-            bash systemUpdate.sh
+            execute_installer_script "systemUpdate.sh"
             ;;
         7)
             echo "Checking for updates..."
@@ -101,12 +99,11 @@ while true; do
             exit 0
             ;;
         *)
-            echo "Invalid option. Please choose a number between 1 and 7."
+            echo "Invalid option. Please choose a number between 1 and 8."
             ;;
     esac
     read -p "Press [Enter] key to return to menu or type 'exit' to exit: " next_action
     if [ "$next_action" = "exit" ]; then
         exit 0
-        8
     fi
 done
