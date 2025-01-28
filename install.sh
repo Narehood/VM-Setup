@@ -55,7 +55,7 @@ check_for_updates() {
 }
 
 # Function to navigate to installers and execute a script
-execute_installer_script() {
+execute_installerScript() {
     local script_name=$1
     cd Installers/
     bash "$script_name"
@@ -68,27 +68,27 @@ while true; do
     case $choice in
         1)
             echo "You have selected XCP-NG / Virtual Machine Initial Configuration"
-            execute_installer_script "serverSetup.sh"
+            execute_installerScript "serverSetup.sh"
             ;;
         2)
             echo "You have selected Xen Orchestra"
-            execute_installer_script "XenOrchestra.sh"
+            execute_installerScript "XenOrchestra.sh"
             ;;
         3)
             echo "You have selected UniFi Controller"
-            execute_installer_script "UniFi-Controller.sh"
+            execute_installerScript "UniFi-Controller.sh"
             ;;
         4)
             echo "You have selected Docker Host Prep"
-            execute_installer_script "Docker-Prep.sh"
+            execute_installerScript "Docker-Prep.sh"
             ;;
         5)
             echo "You have selected Enable Automated Security Patches"
-            execute_installer_script "Automated-Security-Patches.sh"
+            execute_installerScript "Automated-Security-Patches.sh"
             ;;
         6)
             echo "You have selected System Update"
-            execute_installer_script "systemUpdate.sh"
+            execute_installerScript "systemUpdate.sh"
             ;;
         7)
             echo "Checking for updates..."
