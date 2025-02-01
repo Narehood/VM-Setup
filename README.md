@@ -4,6 +4,8 @@
 [![License](https://img.shields.io/badge/License-MIT-blue)](https://github.com/Narehood/VM-Setup/blob/main/LICENSE)
 [![issues - VM-Setup](https://img.shields.io/github/issues/Narehood/VM-Setup)](https://github.com/Narehood/VM-Setup/issues)
 
+![Bash Script](https://img.shields.io/badge/bash_script-%23121011.svg?style=for-the-badge&logo=gnu-bash&logoColor=white)
+
 # XCP-NG VM-Setup
 
 VM-Setup is a simple and versatile script designed to configure virtual machines running on XCP-NG. With this tool, you can effortlessly set up your virtual machine as a Docker Host, UniFi Controller, or Xen Orchestra, or simply install XCP-NG Tools. Additionally, VM-Setup includes features for enabling automated security updates and self-updating, ensuring your VMs are always up-to-date with the latest features and secure. Many of these tools are pulled from other projects and are credited below.
