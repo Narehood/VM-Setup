@@ -3,7 +3,6 @@
 [![forks - VM-Setup](https://img.shields.io/github/forks/Narehood/VM-Setup?style=social)](https://github.com/Narehood/VM-Setup)
 [![License](https://img.shields.io/badge/License-MIT-blue)](https://github.com/Narehood/VM-Setup/blob/main/LICENSE)
 [![issues - VM-Setup](https://img.shields.io/github/issues/Narehood/VM-Setup)](https://github.com/Narehood/VM-Setup/issues)
-
 ![Bash Script](https://img.shields.io/badge/bash_script-%23121011.svg?style=for-the-badge&logo=gnu-bash&logoColor=white)
 
 # XCP-NG VM-Setup
