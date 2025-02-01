@@ -1,7 +1,6 @@
 [![Narehood - VM-Setup](https://img.shields.io/static/v1?label=Narehood&message=VM-Setup&color=blue&logo=github)](https://github.com/Narehood/VM-Setup "Go to GitHub repo")
 [![stars - VM-Setup](https://img.shields.io/github/stars/Narehood/VM-Setup?style=social)](https://github.com/Narehood/VM-Setup)
 [![forks - VM-Setup](https://img.shields.io/github/forks/Narehood/VM-Setup?style=social)](https://github.com/Narehood/VM-Setup)
-[![GitHub tag](https://img.shields.io/github/tag/Narehood/VM-Setup?include_prereleases=&sort=semver&color=blue)](https://github.com/Narehood/VM-Setup/releases/)
 [![License](https://img.shields.io/badge/License-MIT-blue)](https://github.com/Narehood/VM-Setup/blob/main/LICENSE)
 [![issues - VM-Setup](https://img.shields.io/github/issues/Narehood/VM-Setup)](https://github.com/Narehood/VM-Setup/issues)
 
