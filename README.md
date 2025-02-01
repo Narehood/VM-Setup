@@ -35,15 +35,15 @@ This tool should work on most Linux systems but is mainly tested on Alma, Debian
     ```
 
 **Follow the on-screen instructions** to select your desired configuration:
-    1. XCP-NG / Virtual Machine Initial Configuration
-    2. Xen Orchestra
-    3. UniFi Controller
-    4. Docker Host Prep
-    5. Enable Automated Security Patches
-    6. Check for System Updates
-    7. Check for Menu Updates
-    8. Exit
 
+1. XCP-NG / Virtual Machine Initial Configuration
+2. Xen Orchestra
+3. UniFi Controller
+4. Docker Host Prep
+5. Enable Automated Security Patches
+6. Check for System Updates
+7. Check for Menu Updates
+8. Exit
 
 ## Credits
 
