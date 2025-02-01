@@ -3,34 +3,34 @@
 # Function to display the menu
 show_menu() {
     clear
-    echo -e "====================================="
-    echo -e "          \e[1;34mVM Setup Menu 1.6.4\e[0m"
-    echo -e "====================================="
-    echo -e "\e[1;32mResource Information\e[0m"
+    echo -e "\033[0;32m=====================================\033[0m"
+    echo -e "          \033[1;34mVM Setup Menu 1.7.0\033[0m"
+    echo -e "\033[0;32m=====================================\033[0m"
+    echo -e "\033[1;32mResource Information\033[0m"
     echo -e "-------------------------------------"
-    echo -e "Linux Distribution: \e[1;33m$(lsb_release -d | cut -f2)\e[0m"
-    echo -e "Kernel Version: \e[1;33m$(uname -r)\e[0m"
-    echo -e "CPU Usage: \e[1;33m$(top -bn1 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | awk '{print 100 - $1"%"}')\e[0m"
-    echo -e "Memory Usage: \e[1;33m$(free -m | awk 'NR==2{printf "Memory Usage: %s/%sMB (%.2f%%)\n", $3,$2,$3*100/$2 }')\e[0m"
-    echo -e "Disk Usage: \e[1;33m$(df -h | awk '$NF=="/"{printf "Disk Usage: %d/%dGB (%s)\n", $3,$2,$5}')\e[0m"
-    echo -e "====================================="
-    echo -e "\e[1;32mSystem Information\e[0m"
+    echo -e "Linux Distribution: \033[1;33m$(lsb_release -d | cut -f2)\033[0m"
+    echo -e "Kernel Version: \033[1;33m$(uname -r)\033[0m"
+    echo -e "CPU Usage: \033[1;33m$(top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\([0-9.]*\)%* id.*/\1/' | awk '{print 100 - $1"%"}')\033[0m"
+    echo -e "Memory Usage: \033[1;33m$(free -m | awk 'NR==2{printf "Memory Usage: %s/%sMB (%.2f%%)\n", $3,$2,$3*100/$2 }')\033[0m"
+    echo -e "Disk Usage: \033[1;33m$(df -h | awk '$NF=="/"{printf "Disk Usage: %d/%dGB (%s)\n", $3,$2,$5}')\033[0m"
+    echo -e "\033[0;32m=====================================\033[0m"
+    echo -e "\033[1;32mSystem Information\033[0m"
     echo -e "-------------------------------------"
-    echo -e "Machine Name: \e[1;33m$(hostname)\e[0m"
-    echo -e "IP Address: \e[1;33m$(hostname -I | awk '{print $1}')\e[0m"
-    echo -e "Default Gateway: \e[1;33m$(ip route | grep default | awk '{print $3}')\e[0m"
+    echo -e "Machine Name: \033[1;33m$(hostname)\033[0m"
+    echo -e "IP Address: \033[1;33m$(hostname -I | awk '{print $1}')\033[0m"
+    echo -e "Default Gateway: \033[1;33m$(ip route | grep default | awk '{print $3}')\033[0m"
     echo -e "-------------------------------------"
-    echo -e "\e[1;32mOptions\e[0m"
+    echo -e "\033[1;32mOptions\033[0m"
     echo -e "-------------------------------------"
-    echo -e "\e[1;36m1.\e[0m XCP-NG / Virtual Machine Initial Configuration"
-    echo -e "\e[1;36m2.\e[0m Xen Orchestra"
-    echo -e "\e[1;36m3.\e[0m UniFi Controller"
-    echo -e "\e[1;36m4.\e[0m Docker Host Prep"
-    echo -e "\e[1;36m5.\e[0m Enable Automated Security Patches"
-    echo -e "\e[1;36m6.\e[0m Check for System Updates"    
-    echo -e "\e[1;36m7.\e[0m Check for Menu Updates"
-    echo -e "\e[1;36m8.\e[0m Exit"
-    echo -e "====================================="
+    echo -e "\033[1;36m1.\033[0m XCP-NG / Virtual Machine Initial Configuration"
+    echo -e "\033[1;36m2.\033[0m Xen Orchestra"
+    echo -e "\033[1;36m3.\033[0m UniFi Controller"
+    echo -e "\033[1;36m4.\033[0m Docker Host Prep"
+    echo -e "\033[1;36m5.\033[0m Enable Automated Security Patches"
+    echo -e "\033[1;36m6.\033[0m Check for System Updates"
+    echo -e "\033[1;36m7.\033[0m Check for Menu Updates"
+    echo -e "\033[1;36m8.\033[0m Exit"
+    echo -e "\033[0;32m=====================================\033[0m"
 }
 
 # Function to check for updates in the repository
@@ -99,7 +99,7 @@ while true; do
             exit 0
             ;;
         *)
-            echo "Invalid option. Please choose a number between 1 and 8."
+            echo -e "\033[0;31mInvalid option. Please choose a number between 1 and 8.\033[0m"
             ;;
     esac
     if [ "$choice" -ne 8 ]; then
