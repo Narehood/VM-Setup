@@ -4,7 +4,7 @@
 show_menu() {
     clear
     echo -e "\033[0;32m=====================================\033[0m"
-    echo -e "          \033[1;34mVM Setup Menu 1.7.5\033[0m"
+    echo -e "          \033[1;34mVM Setup Menu 1.7.6\033[0m"
     echo -e "\033[0;32m=====================================\033[0m"
     echo -e "\033[1;32mResource Information\033[0m"
     echo -e "-------------------------------------"
@@ -26,10 +26,11 @@ show_menu() {
     echo -e "\033[1;36m2.\033[0m Xen Orchestra"
     echo -e "\033[1;36m3.\033[0m UniFi Controller"
     echo -e "\033[1;36m4.\033[0m Docker Host Prep"
-    echo -e "\033[1;36m5.\033[0m Enable Automated Security Patches"
-    echo -e "\033[1;36m6.\033[0m Check for System Updates"
-    echo -e "\033[1;36m7.\033[0m Check for Menu Updates"
-    echo -e "\033[1;36m8.\033[0m Exit"
+    echo -e "\033[1;36m5.\033[0m Other Installers"
+    echo -e "\033[1;36m6.\033[0m Enable Automated Security Patches"
+    echo -e "\033[1;36m7.\033[0m Check for System Updates"
+    echo -e "\033[1;36m8.\033[0m Check for Menu Updates"
+    echo -e "\033[1;36m9.\033[0m Exit"
     echo -e "\033[0;32m=====================================\033[0m"
 }
 
@@ -83,18 +84,22 @@ while true; do
             execute_installerScript "Docker-Prep.sh"
             ;;
         5)
+            echo "You have selected Other Installers"
+            execute_installerScript "installerMenu.sh"
+            ;;
+        6)
             echo "You have selected Enable Automated Security Patches"
             execute_installerScript "Automated-Security-Patches.sh"
             ;;
-        6)
+        7)
             echo "You have selected System Update"
             execute_installerScript "systemUpdate.sh"
             ;;
-        7)
+        8)
             echo "Checking for updates..."
             check_for_updates
             ;;
-        8)
+        9)
             echo "Exiting..."
             exit 0
             ;;
