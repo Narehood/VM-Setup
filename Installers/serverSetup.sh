@@ -84,7 +84,7 @@ case "$OS" in
     ubuntu|debian)
         sudo apt update -y
         sudo apt upgrade -y
-        sudo apt install -y net-tools cockpit htop
+        sudo apt install -y net-tools cockpit htop plocate
         ;;
     redhat|centos|rocky|almalinux)
         sudo yum update -y
