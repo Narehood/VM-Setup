@@ -1,5 +1,5 @@
 #/bin/sh
-# Credit https://linux.how2shout.com/
+# Credit (original script, this version is modified) https://linux.how2shout.com/
 install_dir="/var/www/html"
 #Creating Random WP Database Credentials
 db_name="wp`date +%s`"
