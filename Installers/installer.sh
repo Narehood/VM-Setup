@@ -55,7 +55,7 @@ while true; do
             ;;
         4)
             echo "You have selected Pterodactyl"
-            execute_installerScript "UniFi-Controller.sh"
+            execute_installerScript "Pterodactyl.sh"
             ;;
         9)
             echo "Exiting..."
