@@ -25,6 +25,7 @@ show_menu() {
     echo -e "\033[1;36m1.\033[0m WordPress"
     echo -e "\033[1;36m2.\033[0m Xen Orchestra"
     echo -e "\033[1;36m3.\033[0m UniFi Controller"
+    echo -e "\033[1;36m4.\033[0m Pterodactyl"
     echo -e "\033[1;36m9.\033[0m Exit"
     echo -e "\033[0;32m=====================================\033[0m"
 }
@@ -50,6 +51,10 @@ while true; do
             ;;
         3)
             echo "You have selected UniFi Controller"
+            execute_installerScript "UniFi-Controller.sh"
+            ;;
+        4)
+            echo "You have selected Pterodactyl"
             execute_installerScript "UniFi-Controller.sh"
             ;;
         9)
