@@ -12,6 +12,35 @@ if [[ "$(whoami)" != "root" ]]; then
     exit 1
 fi
 
+# Detect Linux distribution
+if [[ -f /etc/os-release ]]; then
+    . /etc/os-release
+    OS=$ID
+else
+    echo "Error: Unable to determine Linux distribution."
+    exit 1
+fi
+
+# Check if whois is installed
+if ! command -v whois &> /dev/null; then
+    echo "Error: whois is not installed."
+    case "$OS" in
+        ubuntu|debian)
+            echo "Install with: sudo apt install whois"
+            ;;
+        centos|rhel|fedora)
+            echo "Install with: sudo yum install whois"
+            ;;
+        arch)
+            echo "Install with: sudo pacman -S whois"
+            ;;
+        *)
+            echo "Unsupported Linux distribution. Please install whois manually."
+            ;;
+    esac
+    exit 1
+fi
+
 # Check domain registration date using whois
 REG_DATE=$(whois "$DOMAIN" | grep -i "created" | awk '{print $NF}')
 if [[ -z "$REG_DATE" ]]; then
