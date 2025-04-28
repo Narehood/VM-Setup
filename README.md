@@ -54,5 +54,6 @@ This tool should work on most Linux systems but is mainly tested on Alma, Debian
 
 ## Credits
 
-- UniFi Controller: https://glennr.nl/s/unifi-network-controller
-- Xen Orchestra: https://github.com/ronivay/XenOrchestraInstallerUpdater
+- UniFi Controller Script: https://glennr.nl/s/unifi-network-controller
+- Xen Orchestra Script: https://github.com/ronivay/XenOrchestraInstallerUpdater
+- Pterodactyl Script: https://github.com/pterodactyl-installer/pterodactyl-installer
