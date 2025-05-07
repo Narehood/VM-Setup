@@ -84,26 +84,26 @@ case "$OS" in
     ubuntu|debian)
         sudo apt update -y
         sudo apt upgrade -y
-        sudo apt install -y net-tools cockpit htop plocate neofetch whois
+        sudo apt install -y net-tools cockpit btop plocate neofetch whois
         ;;
     redhat|centos|rocky|almalinux)
         sudo yum update -y
-        sudo yum install -y net-tools cockpit htop neofetch whois
+        sudo yum install -y net-tools cockpit btop neofetch whois
         ;;
     fedora)
         sudo dnf update -y
-        sudo dnf install -y net-tools cockpit htop neofetch whois
+        sudo dnf install -y net-tools cockpit btop neofetch whois
         ;;
     arch)
-        sudo pacman -Syu --noconfirm net-tools cockpit htop neofetch whois
+        sudo pacman -Syu --noconfirm net-tools cockpit btop neofetch whois
         ;;
     suse)
         sudo zypper refresh
-        sudo zypper install -y net-tools cockpit htop neofetch whois
+        sudo zypper install -y net-tools cockpit btop neofetch whois
         ;;
     alpine)
         sudo apk update
-        sudo apk add net-tools cockpit htop neofetch whois
+        sudo apk add net-tools cockpit btop neofetch whois
         ;;
     *)
         echo "Unsupported system. Exiting."
