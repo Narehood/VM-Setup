@@ -45,6 +45,7 @@ if [ "$install_xen_tools" == "y" ]; then
             sudo zypper install -y xe-guest-utilities
             ;;
         alpine)
+            echo "https://dl-cdn.alpinelinux.org/alpine/edge/community" >> /etc/apk/repositories
             apk update
             apk add sudo xe-guest-utilities
             rc-update add xe-guest-utilities default
@@ -83,7 +84,7 @@ case "$OS" in
         ;;
     alpine)
         apk update
-        apk add sudo net-tools
+        apk add sudo net-tools nano
         ;;
     *)
         echo "Unsupported system. Exiting."
@@ -101,9 +102,10 @@ if [ "$change_hostname" == "y" ]; then
     echo "Hostname changed to $new_hostname."
 fi
 
-# Clone the dotfiles repository
-git clone https://github.com/Narehood/dotfiles.git
-cd dotfiles
-# Run the install.sh script
-bash install.sh
-cd
+# Clone the dotfiles repository (Skip for Alpine)
+if [ "$OS" != "alpine" ]; then
+    git clone https://github.com/Narehood/dotfiles.git
+    cd dotfiles
+    bash install.sh
+    cd
+fi
