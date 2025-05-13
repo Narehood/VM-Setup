@@ -45,9 +45,10 @@ if [ "$install_xen_tools" == "y" ]; then
             sudo zypper install -y xe-guest-utilities
             ;;
         alpine)
-            echo "https://dl-cdn.alpinelinux.org/alpine/edge/community" >> /etc/apk/repositories
             apk update
             apk add sudo xe-guest-utilities
+            rc-update add xe-guest-utilities default
+            /etc/init.d/xe-guest-utilities start
             ;;
         *)
             echo "Unsupported system. Exiting."
@@ -82,7 +83,7 @@ case "$OS" in
         ;;
     alpine)
         apk update
-        apk add sudo net-tools btop whois
+        apk add sudo net-tools
         ;;
     *)
         echo "Unsupported system. Exiting."
