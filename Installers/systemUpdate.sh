@@ -12,39 +12,41 @@ detect_os() {
     elif [ -f /etc/debian_version ]; then
         OS="debian"
         VERSION=$(cat /etc/debian_version)
+    elif grep -q "Alpine Linux" /etc/os-release; then
+        OS="alpine"
+        VERSION=$(cat /etc/alpine-release)
     else
         OS=$(uname -s)
         VERSION=$(uname -r)
     fi
 }
 
-# Function to update the system
+# Function to update existing packages only (no new installations)
 update_system() {
     detect_os
     case "$OS" in
         ubuntu|debian)
             sudo apt update -y
             sudo apt upgrade -y
-            sudo apt install -y net-tools cockpit htop
             ;;
         redhat|centos|rocky|almalinux)
             sudo yum update -y
-            sudo yum install -y net-tools cockpit htop
+            sudo yum upgrade -y
             ;;
         fedora)
             sudo dnf update -y
-            sudo dnf install -y net-tools cockpit htop
+            sudo dnf upgrade -y
             ;;
         arch)
-            sudo pacman -Syu --noconfirm net-tools cockpit htop
+            sudo pacman -Syu --noconfirm
             ;;
         suse)
             sudo zypper refresh
-            sudo zypper install -y net-tools cockpit htop
+            sudo zypper update -y
             ;;
         alpine)
             sudo apk update
-            sudo apk add net-tools cockpit htop
+            sudo apk upgrade
             ;;
         *)
             echo "Unsupported system. Exiting."
@@ -53,5 +55,5 @@ update_system() {
     esac
 }
 
-# Update the system
+# Update the system without installing new packages
 update_system
