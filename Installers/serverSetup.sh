@@ -26,38 +26,16 @@ if [ "$install_xen_tools" == "y" ]; then
     detect_os
     case "$OS" in
         ubuntu|debian)
-            if [ "$OS" == "ubuntu" ]; then
-                sudo apt update -y
-                sudo apt install -y xe-guest-utilities
-            else
-                read -p "You are running a Debian based system. Is the guest-tools.iso attached to this VM? (Y/n): " install_xen_tools_debian
-                install_xen_tools_debian=${install_xen_tools_debian:-y}
-                if [ "$install_xen_tools_debian" == "y" ]; then
-                    sudo apt update
-                    sudo mount /dev/cdrom /mnt
-                    cd /mnt/Linux
-                    sudo bash install.sh
-                    cd
-                else
-                    echo "Unsupported system. Exiting."
-                    exit 1
-                fi
-            fi
+            sudo apt update -y
+            sudo apt install -y xe-guest-utilities
             ;;
-        redhat|centos)
+        redhat|centos|rocky|almalinux)
             sudo yum update -y
-            sudo yum install -y epel-release
-            sudo yum install -y xe-guest-utilities
+            sudo yum install -y epel-release xe-guest-utilities
             ;;
         fedora)
             sudo dnf update -y
-            sudo dnf install -y epel-release
-            sudo dnf install -y xe-guest-utilities
-            ;;
-        rocky|almalinux)
-            sudo yum update -y
-            sudo yum install -y epel-release
-            sudo yum install -y xe-guest-utilities
+            sudo dnf install -y epel-release xe-guest-utilities
             ;;
         arch)
             sudo pacman -Syu --noconfirm xe-guest-utilities
@@ -67,8 +45,9 @@ if [ "$install_xen_tools" == "y" ]; then
             sudo zypper install -y xe-guest-utilities
             ;;
         alpine)
-            sudo apk update
-            sudo apk add xe-guest-utilities
+            echo "https://dl-cdn.alpinelinux.org/alpine/edge/community" >> /etc/apk/repositories
+            apk update
+            apk add sudo xe-guest-utilities
             ;;
         *)
             echo "Unsupported system. Exiting."
@@ -84,26 +63,26 @@ case "$OS" in
     ubuntu|debian)
         sudo apt update -y
         sudo apt upgrade -y
-        sudo apt install -y net-tools cockpit btop plocate neofetch whois
+        sudo apt install -y net-tools btop plocate whois
         ;;
     redhat|centos|rocky|almalinux)
         sudo yum update -y
-        sudo yum install -y net-tools cockpit btop neofetch whois
+        sudo yum install -y net-tools btop whois
         ;;
     fedora)
         sudo dnf update -y
-        sudo dnf install -y net-tools cockpit btop neofetch whois
+        sudo dnf install -y net-tools btop whois
         ;;
     arch)
-        sudo pacman -Syu --noconfirm net-tools cockpit btop neofetch whois
+        sudo pacman -Syu --noconfirm net-tools btop whois
         ;;
     suse)
         sudo zypper refresh
-        sudo zypper install -y net-tools cockpit btop neofetch whois
+        sudo zypper install -y net-tools btop whois
         ;;
     alpine)
-        sudo apk update
-        sudo apk add net-tools cockpit btop neofetch whois
+        apk update
+        apk add sudo net-tools btop whois
         ;;
     *)
         echo "Unsupported system. Exiting."
