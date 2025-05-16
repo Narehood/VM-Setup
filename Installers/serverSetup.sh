@@ -25,31 +25,31 @@ install_xen_tools=${install_xen_tools:-y}
 if [ "$install_xen_tools" == "y" ]; then
     detect_os
     case "$OS" in
-        ubuntu|debian)
-            sudo apt update -y
-            sudo apt install -y xe-guest-utilities
-            ;;
-        redhat|centos|rocky|almalinux)
-            sudo yum update -y
-            sudo yum install -y epel-release xe-guest-utilities
-            ;;
-        fedora)
-            sudo dnf update -y
-            sudo dnf install -y epel-release xe-guest-utilities
-            ;;
-        arch)
-            sudo pacman -Syu --noconfirm xe-guest-utilities
-            ;;
-        suse)
-            sudo zypper refresh
-            sudo zypper install -y xe-guest-utilities
-            ;;
         alpine)
             echo "https://dl-cdn.alpinelinux.org/alpine/edge/community" >> /etc/apk/repositories
             apk update
             apk add sudo xe-guest-utilities
             rc-update add xe-guest-utilities default
             /etc/init.d/xe-guest-utilities start
+            ;;
+        arch)
+            sudo pacman -Syu --noconfirm xe-guest-utilities
+            ;;
+        debian|ubuntu)
+            sudo apt update -y
+            sudo apt install -y xe-guest-utilities
+            ;;
+        fedora)
+            sudo dnf update -y
+            sudo dnf install -y epel-release xe-guest-utilities
+            ;;
+        redhat|centos|rocky|almalinux)
+            sudo yum update -y
+            sudo yum install -y epel-release xe-guest-utilities
+            ;;
+        suse)
+            sudo zypper refresh
+            sudo zypper install -y xe-guest-utilities
             ;;
         *)
             echo "Unsupported system. Exiting."
@@ -62,29 +62,29 @@ fi
 detect_os
 
 case "$OS" in
-    ubuntu|debian)
+    alpine)
+        apk update
+        apk add sudo net-tools nano
+        ;;
+    arch)
+        sudo pacman -Syu --noconfirm net-tools btop whois
+        ;;
+    debian|ubuntu)
         sudo apt update -y
         sudo apt upgrade -y
         sudo apt install -y net-tools btop plocate whois
-        ;;
-    redhat|centos|rocky|almalinux)
-        sudo yum update -y
-        sudo yum install -y net-tools btop whois
         ;;
     fedora)
         sudo dnf update -y
         sudo dnf install -y net-tools btop whois
         ;;
-    arch)
-        sudo pacman -Syu --noconfirm net-tools btop whois
+    redhat|centos|rocky|almalinux)
+        sudo yum update -y
+        sudo yum install -y net-tools btop whois
         ;;
     suse)
         sudo zypper refresh
         sudo zypper install -y net-tools btop whois
-        ;;
-    alpine)
-        apk update
-        apk add sudo net-tools nano
         ;;
     *)
         echo "Unsupported system. Exiting."
