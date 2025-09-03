@@ -140,7 +140,7 @@ arch)
 debian | ubuntu)
   sudo apt update -y
   sudo apt upgrade -y
-  sudo apt install -y net-tools btop plocate whois
+  sudo apt install -y net-tools btop plocate whois neofetch
   ;;
 fedora)
   sudo dnf update -y
