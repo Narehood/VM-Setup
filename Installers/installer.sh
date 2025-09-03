@@ -26,6 +26,7 @@ show_menu() {
     echo -e "\033[1;36m2.\033[0m Xen Orchestra"
     echo -e "\033[1;36m3.\033[0m UniFi Controller"
     echo -e "\033[1;36m4.\033[0m Pterodactyl"
+    echo -e "\033[1;36m5.\033[0m CloudFlare Tunnels"
     echo -e "\033[1;36m9.\033[0m Exit"
     echo -e "\033[0;32m=====================================\033[0m"
 }
@@ -57,12 +58,16 @@ while true; do
             echo "You have selected Pterodactyl"
             execute_installerScript "Pterodactyl.sh"
             ;;
+        5)
+            echo "You have selected CloudFlare Tunnels"
+            execute_installerScript "CloudFlare-Tunnels.sh"
+            ;;
         9)
             echo "Exiting..."
             exit 0
             ;;
         *)
-            echo -e "\033[0;31mInvalid option. Please choose a number between 1 and 3.\033[0m"
+            echo -e "\033[0;31mInvalid option. Please choose a number between 1 and 5, or 9 to exit.\033[0m"
             ;;
     esac
     if [ "$choice" -ne 9 ]; then
