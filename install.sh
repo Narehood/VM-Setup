@@ -4,11 +4,27 @@
 show_menu() {
     clear
     echo -e "\033[0;32m=====================================\033[0m"
-    echo -e "          \033[1;34mVM Setup Menu 2.3.0\033[0m"
+    echo -e "          \033[1;34mVM Setup Menu 2.3.1\033[0m"
     echo -e "\033[0;32m=====================================\033[0m"
     echo -e "\033[1;32mResource Information\033[0m"
     echo -e "-------------------------------------"
-    echo -e "Linux Distribution: \033[1;33m$(lsb_release -d | cut -f2)\033[0m"
+
+    # Adapt for Alpine: lsb_release is not available by default
+    DISTRO=""
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        if [ "$ID" = "alpine" ]; then
+            DISTRO="Alpine Linux $VERSION_ID"
+        elif command -v lsb_release &> /dev/null; then
+            DISTRO="$(lsb_release -d | cut -f2)"
+        else
+            DISTRO="$PRETTY_NAME" # Fallback to PRETTY_NAME from os-release
+        fi
+    else
+        DISTRO="Unknown Linux Distribution"
+    fi
+    echo -e "Linux Distribution: \033[1;33m$DISTRO\033[0m"
+
     echo -e "Kernel Version: \033[1;33m$(uname -r)\033[0m"
     echo -e "CPU Usage: \033[1;33m$(top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\([0-9.]*\)%* id.*/\1/' | awk '{print 100 - $1"%"}')\033[0m"
     echo -e "Memory Usage: \033[1;33m$(free -m | awk 'NR==2{printf "Memory Usage: %s/%sMB (%.2f%%)\n", $3,$2,$3*100/$2 }')\033[0m"
@@ -17,7 +33,17 @@ show_menu() {
     echo -e "\033[1;32mSystem Information\033[0m"
     echo -e "-------------------------------------"
     echo -e "Machine Name: \033[1;33m$(hostname)\033[0m"
-    echo -e "IP Address: \033[1;33m$(hostname -I | awk '{print $1}')\033[0m"
+
+    # Adapt for Alpine: hostname -I is not available
+    # Use ip addr show or ifconfig for IP Address
+    IP_ADDRESS=""
+    if command -v ip &> /dev/null; then
+        IP_ADDRESS=$(ip -4 addr show scope global | grep inet | awk '{print $2}' | cut -d/ -f1 | head -n 1)
+    elif command -v ifconfig &> /dev/null; then
+        IP_ADDRESS=$(ifconfig | grep -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | head -n 1)
+    fi
+    echo -e "IP Address: \033[1;33m${IP_ADDRESS:-(Not Found)}\033[0m"
+
     echo -e "Default Gateway: \033[1;33m$(ip route | grep default | awk '{print $3}')\033[0m"
     echo -e "-------------------------------------"
     echo -e "\033[1;32mOptions\033[0m"
@@ -46,6 +72,8 @@ check_for_updates() {
         if [ "$pull_choice" = "y" ]; then
             git pull
             echo "Repository updated successfully."
+            # Assuming install.sh is meant to restart/re-run the script or re-evaluate environment
+            # If the current script is this one, you might want to `exec bash "$0"` instead
             bash install.sh
         else
             echo "Update aborted."
@@ -56,8 +84,19 @@ check_for_updates() {
 # Function to navigate to installers and execute a script
 execute_installerScript() {
     local script_name=$1
-    cd Installers/
-    bash "$script_name"
+    if [ -d "Installers" ]; then
+        if [ -f "Installers/$script_name" ]; then
+            echo "Executing $script_name..."
+            # Using bash explicitly for script execution
+            bash "Installers/$script_name"
+        else
+            echo "Error: Installer script 'Installers/$script_name' not found."
+            read -p "Press [Enter] to continue..."
+        fi
+    else
+        echo "Error: 'Installers' directory not found."
+        read -p "Press [Enter] to continue..."
+    fi
 }
 
 # Main loop
@@ -70,7 +109,7 @@ while true; do
             execute_installerScript "serverSetup.sh"
             ;;
         2)
-            echo "You have selected Other Installers"
+            echo "You have selected Installer Scripts"
             execute_installerScript "installer.sh"
             ;;
         3)
@@ -86,7 +125,8 @@ while true; do
             execute_installerScript "systemUpdate.sh"
             ;;
         6)
-            echo "Checking for updates..."
+            echo "Checking for menu updates..."
+            # Assuming this script itself is part of a git repository to check for its own updates
             check_for_updates
             ;;
         9)
@@ -94,7 +134,7 @@ while true; do
             exit 0
             ;;
         *)
-            echo -e "\033[0;31mInvalid option. Please choose a number between 1 and 8.\033[0m"
+            echo -e "\033[0;31mInvalid option. Please choose a number between 1 and 6, or 9 to exit.\033[0m"
             ;;
     esac
     if [ "$choice" -ne 9 ]; then
