@@ -53,7 +53,7 @@ show_menu() {
     echo -e "\033[1;36m3.\033[0m UniFi Controller"
     echo -e "\033[1;36m4.\033[0m Pterodactyl"
     echo -e "\033[1;36m5.\033[0m CloudFlare Tunnels"
-    echo -e "\033[1;36m9.\033[0m Exit"
+    echo -e "\033[1;36m9.\033[0m Return to Main Menu/Exit"
     echo -e "\033[0;32m=====================================\033[0m"
 }
 
