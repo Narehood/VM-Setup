@@ -54,6 +54,7 @@ show_menu() {
     echo -e "\033[1;36m4.\033[0m Enable Automated Security Patches"
     echo -e "\033[1;36m5.\033[0m Check for System Updates"
     echo -e "\033[1;36m6.\033[0m Check for Menu Updates"
+    echo -e "\033[1;36m7.\033[0m Launch Linux Utility"
     echo -e "\033[1;36m9.\033[0m Exit"
     echo -e "\033[0;32m=====================================\033[0m"
 }
@@ -102,7 +103,7 @@ execute_installerScript() {
 # Main loop
 while true; do
     show_menu
-    read -p "Enter your choice [1-6]: " choice
+    read -p "Enter your choice [1-7]: " choice
     case $choice in
         1)
             echo "You have selected XCP-NG / Virtual Machine Initial Configuration"
@@ -128,6 +129,11 @@ while true; do
             echo "Checking for menu updates..."
             # Assuming this script itself is part of a git repository to check for its own updates
             check_for_updates
+            ;;
+        7)
+            echo "Launching LinUtil..."
+            # Assuming this script itself is part of a git repository to check for its own updates
+            execute_installerScript "linutil.sh"
             ;;
         9)
             echo "Exiting..."
