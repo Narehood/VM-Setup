@@ -75,13 +75,12 @@ bash install.sh
 ## Menu Options
 
 1. **XCP-NG / Virtual Machine Initial Configuration**
-2. **Xen Orchestra**
-3. **UniFi Controller**
-4. **Docker Host Prep**
-5. **Enable Automated Security Patches**
-6. **Check for System Updates**
-7. **Check for Menu Updates**
-8. **Exit**
+2. **Installer Scripts**
+3. **Docker Host Prep**
+4. **Enable Automated Security Patches**
+5. **Check for System Updates**
+6. **Check for Menu Updates**
+9. **Exit**
 
 ---
 
@@ -94,3 +93,4 @@ bash install.sh
 ---
 
 > _You are free to use and modify this script as you wish. Bug reports are welcome, but fixes are not guaranteed._
+
