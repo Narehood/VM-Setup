@@ -39,13 +39,21 @@
 
 ## Features
 
-- 🚀 **Install XCP-NG Tools**
-- 🎨 **Install dotfiles** for a custom console look
-- 🐳 **Configure as Docker Host**
-- 🌐 **Set up UniFi Controller**
-- 🖥️ **Set up Xen Orchestra**
-- 🔄 **Self-update capability**
-- 🛡️ **Enable automated security updates**
+- 🚀 Install XCP-NG Tools
+
+- 🎨 Install dotfiles for a custom console look
+
+- 🐳 Configure as Docker Host
+
+- 🌐 Set up UniFi Controller
+
+- 🖥️ Set up Xen Orchestra
+
+- 🔄 Self-update capability
+
+- 🛡️ Enable automated security updates
+
+- 🐧 Launch Chris Titus's Linux Utility
 
 ---
 
@@ -93,4 +101,5 @@ bash install.sh
 ---
 
 > _You are free to use and modify this script as you wish. Bug reports are welcome, but fixes are not guaranteed._
+
 
