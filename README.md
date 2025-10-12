@@ -1,50 +1,105 @@
-# XCP-NG Tools and Server Setup Script
+<p align="center">
+  <a href="https://github.com/Narehood/VM-Setup" title="Go to GitHub repo">
+    <img src="https://img.shields.io/static/v1?label=Narehood&message=VM-Setup&color=blue&logo=github" alt="Narehood - VM-Setup" />
+  </a>
+  <a href="https://github.com/Narehood/VM-Setup">
+    <img src="https://img.shields.io/github/stars/Narehood/VM-Setup?style=social" alt="stars - VM-Setup" />
+  </a>
+  <a href="https://github.com/Narehood/VM-Setup">
+    <img src="https://img.shields.io/github/forks/Narehood/VM-Setup?style=social" alt="forks - VM-Setup" />
+  </a>
+  <a href="https://github.com/Narehood/VM-Setup/blob/main/LICENSE">
+    <img src="https://img.shields.io/badge/License-MIT-blue" alt="License" />
+  </a>
+  <a href="https://github.com/Narehood/VM-Setup/issues">
+    <img src="https://img.shields.io/github/issues/Narehood/VM-Setup" alt="issues - VM-Setup" />
+  </a>
+  <img src="https://img.shields.io/badge/bash_script-%23121011.svg?style=for-the-badge&logo=gnu-bash&logoColor=white" alt="Bash Script" />
+</p>
 
-This script automates the installation of XCP-NG Tools and standard server tools on various Linux distributions. It also provides an option to change the hostname and clone a dotfiles repository.
+---
+
+# XCP-NG VM-Setup
+
+**VM-Setup** is a simple, versatile Bash script for configuring virtual machines on XCP-NG. Effortlessly set up your VM as a Docker Host, UniFi Controller, Xen Orchestra, or just install XCP-NG Tools. The script also supports automated security updates and self-updating, keeping your VMs secure and current.
+
+> **Tested on:** Alma, Alpine, Arch, Debian, SUSE, and Ubuntu (should work on most Linux systems)
+
+---
+
+## Table of Contents
+
+- [Features](#features)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Menu Options](#menu-options)
+- [Credits](#credits)
+
+---
 
 ## Features
 
-- Installs XCP-NG Tools on Debian, Ubuntu, Red Hat, Arch, and SUSE based systems.
-- Installs standard server tools (`net-tools`, `cockpit`, `htop`) on Debian, Ubuntu, Red Hat, Arch, and SUSE based systems.
-- Option to change the hostname.
-- Installs Dotfiles to make your shell look like the example below.</br>
-   ![-Dotfiles-Example](Dotfiles-Example.png)</br>
+- 🚀 Install XCP-NG Tools
+
+- 🎨 Install dotfiles for a custom console look
+
+- 🐳 Configure as Docker Host
+
+- 🌐 Set up UniFi Controller
+
+- 🖥️ Set up Xen Orchestra
+
+- 🔄 Self-update capability
+
+- 🛡️ Enable automated security updates
+
+- 🐧 Launch Chris Titus's Linux Utility
+
+---
+
+## Installation
+
+Clone the repository and navigate to the project directory:
+
+```sh
+git clone https://github.com/Narehood/VM-Setup
+cd VM-Setup
+```
+
+---
 
 ## Usage
 
-1. **Clone the Repository:**
+Run the installer script:
 
-   ```bash
-   git clone https://github.com/Narehood/VM-Setup
-   cd VM-Setup
+```sh
+bash install.sh
+```
 
-2. **Run The Script:**
+**Follow the on-screen instructions** to select your desired configuration.
 
-   ```bash
-   bash install.sh
+---
 
-# Script Details
-## XCP-NG Tools Installation
-The script first asks if you want to install XCP-NG Tools. If you choose 'Y' “yes”, it will detect your Linux distribution and install the appropriate packages. If you are not using XCP-NG as your hypervisor select 'N'
+## Menu Options
 
-## Standard Server Tools Installation
-The script then installs standard server tools (net-tools, cockpit, htop) based on your Linux distribution.
+1. **XCP-NG / Virtual Machine Initial Configuration**
+2. **Installer Scripts**
+3. **Docker Host Prep**
+4. **Enable Automated Security Patches**
+5. **Check for System Updates**
+6. **Check for Menu Updates**
+9. **Exit**
 
-## Change Hostname
-The script provides an option to change the hostname of your system. If you choose “yes”, you will be prompted to enter the new hostname.
+---
 
-## Clone Dotfiles Repository
-Finally, the script installs a dotfiles config and runs its installation script to customize your shell.
+## Credits
 
-<br /><br /><br />
-## Credit/License
+- [UniFi Controller Script](https://glennr.nl/s/unifi-network-controller)
+- [Xen Orchestra Script](https://github.com/ronivay/XenOrchestraInstallerUpdater)
+- [Pterodactyl Script](https://github.com/pterodactyl-installer/pterodactyl-installer)
 
-### License
-This project is licensed under the MIT License - see the LICENSE file for details.
-### Contributing
-Feel free to submit issues or pull requests if you have any improvements or suggestions.
-### Acknowledgments
-Thanks to the open-source community for providing the tools and resources used in this script.
-=======
+---
 
-More detailed documentation coming soon. 
+> _You are free to use and modify this script as you wish. Bug reports are welcome, but fixes are not guaranteed._
+
+

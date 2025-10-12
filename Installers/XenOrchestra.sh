@@ -1,8 +1,20 @@
 #!/bin/bash
 
-# Clone the XenOrchestraInstallerUpdater repository
-git clone https://github.com/Narehood/XenOrchestraInstallerUpdater
-cd XenOrchestraInstallerUpdater
+# Define the directory and repository URL
+repo_dir="XenOrchestraInstallerUpdater"
+repo_url="https://github.com/Narehood/XenOrchestraInstallerUpdater"
+
+# Check if the directory exists
+cd
+if [ -d "$repo_dir" ]; then
+    # Remove the directory and its contents
+    rm -rf "$repo_dir"
+fi
+
+# Clone the XenOrchestraInstallerUpdater repository to the home directory of the current user
+cd
+git clone "$repo_url"
+cd "$repo_dir"
 
 # Run the installation script
 bash xo-install.sh
