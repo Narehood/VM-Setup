@@ -198,4 +198,30 @@ if [ "$change_hostname" == "y" ]; then
   fi
 fi
 
+# Debian specific: Ask to add users to sudo
+if [ "$OS" == "debian" ]; then
+  read -p "Would you like to add any users to the sudo group? (y/N): " add_sudo_user
+  add_sudo_user=${add_sudo_user:-n}
+
+  if [ "$add_sudo_user" == "y" ]; then
+    read -p "Enter the username to add to the sudo group (e.g., 'youruser'): " user_to_add
+    if [ -n "$user_to_add" ]; then
+      if id "$user_to_add" >/dev/null 2>&1; then
+        echo "Adding user '$user_to_add' to the 'sudo' group..."
+        sudo usermod -aG sudo "$user_to_add"
+        if [ $? -eq 0 ]; then
+          echo "User '$user_to_add' added to the sudo group successfully."
+          echo "Please log out and log back in for changes to take effect."
+        else
+          echo "Error: Failed to add user '$user_to_add' to the sudo group."
+        fi
+      else
+        echo "Error: User '$user_to_add' does not exist. Skipping addition to sudo group."
+      fi
+    else
+      echo "No username entered. Skipping addition to sudo group."
+    fi
+  fi
+fi
+
 echo "Script finished."
