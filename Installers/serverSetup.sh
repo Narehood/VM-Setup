@@ -18,12 +18,29 @@ detect_os() {
   fi
 }
 
+# Function to ensure sudo is installed on Debian
+ensure_sudo_debian() {
+  if [ "$OS" == "debian" ] && ! command -v sudo >/dev/null 2>&1; then
+    echo "Sudo not found. Installing sudo..."
+    apt update -y
+    apt install -y sudo
+    if [ $? -eq 0 ]; then
+      echo "Sudo installed successfully."
+    else
+      echo "Error: Failed to install sudo. Please install it manually."
+      exit 1
+    fi
+  fi
+}
+
 # Ask the user if they want to install XCP-NG Tools
 read -p "Would You Like To Install XCP-NG Tools? (XCP-NG Server Client) (Y/n): " install_xen_tools
 install_xen_tools=${install_xen_tools:-y}
 
 if [ "$install_xen_tools" == "y" ]; then
   detect_os
+  ensure_sudo_debian # Ensure sudo is installed before any sudo commands
+
   case "$OS" in
   alpine)
     echo "https://dl-cdn.alpinelinux.org/alpine/edge/community" >>/etc/apk/repositories
@@ -128,6 +145,7 @@ fi
 
 # Install Standard Server Tools
 detect_os # OS might have been detected already, but this is harmless
+ensure_sudo_debian # Ensure sudo is installed before any sudo commands
 
 case "$OS" in
 alpine)
@@ -140,7 +158,13 @@ arch)
 debian | ubuntu)
   sudo apt update -y
   sudo apt upgrade -y
-  sudo apt install -y net-tools btop plocate whois fastfetch
+  # Check for fastfetch, if not found, use neofetch
+  if command -v fastfetch >/dev/null 2>&1; then
+    sudo apt install -y net-tools btop plocate whois fastfetch
+  else
+    echo "Fastfetch not found. Attempting to install neofetch as a fallback."
+    sudo apt install -y net-tools btop plocate whois neofetch
+  fi
   ;;
 fedora)
   sudo dnf update -y
@@ -171,28 +195,6 @@ if [ "$change_hostname" == "y" ]; then
     echo "Hostname changed to $new_hostname."
   else
     echo "No hostname entered. Skipping hostname change."
-  fi
-fi
-
-# Clone the dotfiles repository (Skip for Alpine)
-if [ "$OS" != "alpine" ]; then
-  if command -v git >/dev/null 2>&1; then
-    echo "Cloning dotfiles repository..."
-    git clone https://github.com/Narehood/dotfiles.git
-    if [ -d "dotfiles" ]; then
-      cd dotfiles
-      if [ -f "install.sh" ]; then
-        echo "Running dotfiles install.sh..."
-        bash install.sh
-      else
-        echo "dotfiles install.sh not found."
-      fi
-      cd # Go back to the previous directory (likely home)
-    else
-      echo "Failed to clone dotfiles repository."
-    fi
-  else
-    echo "Git is not installed. Skipping dotfiles clone."
   fi
 fi
 
