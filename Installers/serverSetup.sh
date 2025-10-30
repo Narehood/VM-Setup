@@ -132,7 +132,7 @@ if [ "$install_xen_tools" == "y" ]; then
   redhat | centos | rocky | almalinux)
     sudo dnf update -y
     sudo dnf install epel-release -y
-    sudo dnf install xe-guest-utilities -y
+    sudo dnf install xe-guest-utilities-latest -y
     systemctl enable xe-linux-distribution.service
     systemctl start xe-linux-distribution.service
     ;;
