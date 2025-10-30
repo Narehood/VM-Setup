@@ -124,11 +124,12 @@ if [ "$install_xen_tools" == "y" ]; then
     ;;
   fedora)
     sudo dnf update -y
-    sudo dnf install -y epel-release xe-guest-utilities
+    sudo dnf install epel-release -y
+    sudo dnf indtsll xe-guest-utilities -y
     ;;
   redhat | centos | rocky | almalinux)
     sudo yum update -y
-    sudo yum install -y epel-release xe-guest-utilities
+    sudo yum install -y epel-release xe-guest-utilities-latest
     ;;
   suse)
     sudo zypper refresh
