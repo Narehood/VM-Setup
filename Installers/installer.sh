@@ -1,6 +1,5 @@
 #!/bin/bash
 
-# 1. DIRECTORY ANCHOR
 # This is critical. It forces the script to operate from inside the 'Installers' folder
 # regardless of where you launched it from.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
