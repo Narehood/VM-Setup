@@ -28,8 +28,7 @@ show_menu() {
     fi
     echo -e "Linux Distribution: \033[1;33m$DISTRO\033[0m"
     echo -e "Kernel Version: \033[1;33m$(uname -r)\033[0m"
-
-    # 2. CPU FIX: Use /proc/stat for a more accurate instant reading than 'top -bn1'
+    
     CPU_USAGE=$(grep 'cpu ' /proc/stat | awk '{usage=($2+$4)*100/($2+$4+$5)} END {printf "%.2f%%", usage}')
     echo -e "CPU Usage: \033[1;33m$CPU_USAGE\033[0m"
     
@@ -71,7 +70,7 @@ check_for_updates() {
     git fetch
     
     LOCAL=$(git rev-parse @)
-    # 3. GIT FIX: Gracefully handle cases where upstream isn't configured
+    # Gracefully handle cases where upstream isn't configured
     if ! REMOTE=$(git rev-parse @{u} 2>/dev/null); then
         echo -e "\033[0;31mError: No upstream branch configured. Cannot check for updates.\033[0m"
         read -p "Press [Enter] to continue..."
@@ -100,7 +99,6 @@ check_for_updates() {
 # Function to navigate to installers and execute a script
 execute_installerScript() {
     local script_name=$1
-    # Since we set SCRIPT_DIR at the top, we can trust relative paths now
     if [ -d "Installers" ]; then
         if [ -f "Installers/$script_name" ]; then
             echo "Executing $script_name..."
@@ -153,7 +151,6 @@ while true; do
             exit 0
             ;;
         *)
-            # 5. TYPO FIX: Updated to reflect 1-7
             echo -e "\033[0;31mInvalid option. Please choose a number between 1 and 7, or 9 to exit.\033[0m"
             sleep 2
             ;;
