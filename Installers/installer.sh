@@ -1,119 +1,113 @@
 #!/bin/bash
 
-# 1. DIRECTORY ANCHOR
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# --- 1. DIRECTORY ANCHOR ---
+SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 cd "$SCRIPT_DIR" || { echo "Failed to change directory to $SCRIPT_DIR"; exit 1; }
 
-# Function to display the menu
-show_menu() {
-    clear
-    echo -e "\033[0;32m=====================================\033[0m"
-    echo -e "          \033[1;34mLinux Quick Installer Menu\033[0m"
-    echo -e "\033[0;32m=====================================\033[0m"
-    echo -e "\033[1;32mResource Information\033[0m"
-    echo -e "-------------------------------------"
+# --- 2. VISUAL STYLING ---
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+YELLOW='\033[1;33m'
+WHITE='\033[1;37m'
+NC='\033[0m' # No Color
 
-    # Distro Check
-    DISTRO=""
+# Standard Width for the UI
+UI_WIDTH=66
+
+# Function to print a centered line
+print_centered() {
+    local text="$1"
+    local color="${2:-$NC}"
+    local width=$UI_WIDTH
+    local padding=$(( (width - ${#text}) / 2 ))
+    printf "${color}%${padding}s%s${NC}\n" "" "$text"
+}
+
+# Function to print a separator line
+print_line() {
+    local char="${1:-=}"
+    local color="${2:-$BLUE}"
+    local line=""
+    for ((i=0; i<UI_WIDTH; i++)); do line="${line}${char}"; done
+    echo -e "${color}${line}${NC}"
+}
+
+pause() {
+    echo ""
+    read -p "Press [Enter] to return to the menu..."
+}
+
+show_header() {
+    clear
+    echo -e "${BLUE}██╗   ██╗███╗   ███╗    ███████╗███████╗████████╗██╗   ██╗██████╗ ${NC}"
+    echo -e "${BLUE}██║   ██║████╗ ████║    ██╔════╝██╔════╝╚══██╔══╝██║   ██║██╔══██╗${NC}"
+    echo -e "${BLUE}██║   ██║██╔████╔██║    ███████╗█████╗     ██║   ██║   ██║██████╔╝${NC}"
+    echo -e "${BLUE}╚██╗ ██╔╝██║╚██╔╝██║    ╚════██║██╔══╝     ██║   ██║   ██║██╔═══╝ ${NC}"
+    echo -e "${BLUE} ╚████╔╝ ██║ ╚═╝ ██║    ███████║███████╗   ██║   ╚██████╔╝██║     ${NC}"
+    echo -e "${BLUE}  ╚═══╝  ╚═╝     ╚═╝    ╚══════╝╚══════╝   ╚═╝    ╚═════╝ ╚═╝     ${NC}"
+    print_centered "QUICK APP INSTALLER  |  LIBRARY" "$CYAN"
+    print_line "=" "$BLUE"
+}
+
+show_stats() {
+    # --- DATA COLLECTION ---
+    
+    # OS Detection
     if [ -f /etc/os-release ]; then
         . /etc/os-release
-        if [ "$ID" = "alpine" ]; then
-            DISTRO="Alpine Linux $VERSION_ID"
-        elif command -v lsb_release &> /dev/null; then
-            DISTRO="$(lsb_release -d | cut -f2)"
-        else
-            DISTRO="$PRETTY_NAME"
-        fi
+        if [ "$ID" = "alpine" ]; then DISTRO="Alpine $VERSION_ID"; else DISTRO="${PRETTY_NAME:-$ID}"; fi
     else
-        DISTRO="Unknown Linux Distribution"
+        DISTRO="Unknown"
     fi
-    echo -e "Linux Distribution: \033[1;33m$DISTRO\033[0m"
-    echo -e "Kernel Version: \033[1;33m$(uname -r)\033[0m"
-    
-    # Efficient CPU Check
-    CPU_USAGE=$(grep 'cpu ' /proc/stat | awk '{usage=($2+$4)*100/($2+$4+$5)} END {printf "%.2f%%", usage}')
-    echo -e "CPU Usage: \033[1;33m$CPU_USAGE\033[0m"
-    
-    echo -e "Memory Usage: \033[1;33m$(free -m | awk 'NR==2{printf "Memory Usage: %s/%sMB (%.2f%%)\n", $3,$2,$3*100/$2 }')\033[0m"
-    echo -e "Disk Usage: \033[1;33m$(df -h | awk '$NF=="/"{printf "Disk Usage: %d/%dGB (%s)\n", $3,$2,$5}')\033[0m"
-    echo -e "\033[0;32m=====================================\033[0m"
-    echo -e "\033[1;32mSystem Information\033[0m"
-    echo -e "-------------------------------------"
-    echo -e "Machine Name: \033[1;33m$(hostname)\033[0m"
+    if [ ${#DISTRO} -gt 22 ]; then DISTRO="${DISTRO:0:20}.."; fi
 
-    IP_ADDRESS=""
+    # Kernel
+    KERNEL=$(uname -r)
+    if [ ${#KERNEL} -gt 22 ]; then KERNEL="${KERNEL:0:20}.."; fi
+
+    # Resources
+    CPU_LOAD=$(grep 'cpu ' /proc/stat | awk '{usage=($2+$4)*100/($2+$4+$5)} END {printf "%.1f%%", usage}')
+    MEM_USAGE=$(free -m | awk 'NR==2{printf "%s/%sMB (%.0f%%)", $3,$2,$3*100/$2 }')
+    DISK_USAGE=$(df -h / | awk '$NF=="/"{printf "%s/%s (%s)", $3,$2,$5}')
+    
+    # Network
+    HOSTNAME=$(hostname)
+    if [ ${#HOSTNAME} -gt 20 ]; then HOSTNAME="${HOSTNAME:0:18}.."; fi
+
+    IP_ADDR="Unknown"
+    SUBNET="Unknown"
+    
     if command -v ip &> /dev/null; then
-        IP_ADDRESS=$(ip -4 addr show scope global | grep inet | awk '{print $2}' | cut -d/ -f1 | head -n 1)
-    elif command -v ifconfig &> /dev/null; then
-        IP_ADDRESS=$(ifconfig | grep -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | head -n 1)
+        FULL_IP=$(ip -4 addr show scope global | grep inet | awk '{print $2}' | head -n 1)
+        if [ -n "$FULL_IP" ]; then
+            IP_ADDR=$(echo "$FULL_IP" | cut -d/ -f1)
+            CIDR=$(echo "$FULL_IP" | cut -d/ -f2)
+            SUBNET="/$CIDR"
+        fi
     fi
-    echo -e "IP Address: \033[1;33m${IP_ADDRESS:-(Not Found)}\033[0m"
+    
+    GATEWAY=$(ip route | grep default | awk '{print $3}' | head -n 1)
+    if [ ${#GATEWAY} -gt 15 ]; then GATEWAY="${GATEWAY:0:13}.."; fi
 
-    echo -e "Default Gateway: \033[1;33m$(ip route | grep default | awk '{print $3}')\033[0m"
-    echo -e "-------------------------------------"
-    echo -e "\033[1;32mOptions\033[0m"
-    echo -e "-------------------------------------"
-    echo -e "\033[1;36m1.\033[0m WordPress"
-    echo -e "\033[1;36m2.\033[0m Xen Orchestra"
-    echo -e "\033[1;36m3.\033[0m UniFi Controller"
-    echo -e "\033[1;36m4.\033[0m CloudFlare Tunnels"
-    echo -e "\033[1;36m9.\033[0m Return to Main Menu/Exit"
-    echo -e "\033[0;32m=====================================\033[0m"
+    # --- DISPLAY GRID ---
+    echo -e "${WHITE}SYSTEM INFORMATION${NC}"
+    
+    printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "OS" "$DISTRO" "IP Address" "${IP_ADDR:-N/A}"
+    printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "Kernel" "$KERNEL" "Subnet" "${SUBNET:-N/A}"
+    printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "Hostname" "$HOSTNAME" "Gateway" "${GATEWAY:-N/A}"
+    print_line "-" "$BLUE"
+    printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "CPU Usage" "$CPU_LOAD" "Memory" "$MEM_USAGE"
+    printf "  ${YELLOW}%-11s${NC} : %-20s\n" "Disk Usage" "$DISK_USAGE" 
+    print_line "=" "$BLUE"
 }
 
 # Function to execute sibling scripts
 execute_installerScript() {
     local script_name=$1
     
+    # Check strictly locally since we are inside the 'Installers' folder
     if [ -f "$script_name" ]; then
-        echo "Executing $script_name..."
-        bash "$script_name"
-        
-        # BUG FIX: Moved the pause logic INSIDE the function.
-        # It only asks you to return AFTER you have run a script.
-        # This prevents the loop from getting stuck when you try to exit.
-        echo ""
-        read -p "Press [Enter] to return to menu or type 'exit' to exit: " next_action
-        if [ "$next_action" = "exit" ]; then
-            exit 0
-        fi
-    else
-        echo -e "\033[0;31mError: Script '$script_name' not found in $SCRIPT_DIR\033[0m"
-        read -p "Press [Enter] to continue..."
-    fi
-}
-
-# Main loop
-while true; do
-    show_menu
-    read -p "Enter your choice [1-4]: " choice
-    case $choice in
-        1)
-            echo "You have selected WordPress"
-            execute_installerScript "WordPress.sh"
-            ;;
-        2)
-            echo "You have selected Xen Orchestra"
-            execute_installerScript "XenOrchestra.sh"
-            ;;
-        3)
-            echo "You have selected UniFi Controller"
-            execute_installerScript "UniFi-Controller.sh"
-            ;;
-        4)
-            echo "You have selected CloudFlare Tunnels"
-            execute_installerScript "CloudFlare-Tunnels.sh"
-            ;;
-        9)
-            echo "Exiting..."
-            exit 0
-            ;;
-        *)
-            echo -e "\033[0;31mInvalid option. Please choose a number between 1 and 4, or 9 to exit.\033[0m"
-            sleep 2
-            ;;
-    esac
-    
-    # BUG FIX: Removed the logic block that used to be here.
-    # The loop now cycles cleanly.
-done
+        echo -e "\n${GREEN}>>> Launching: $script_name ${NC}"
