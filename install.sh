@@ -1,165 +1,160 @@
 #!/bin/bash
-# This prevents "file not found" errors if you run the script from a different folder.
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# --- 1. CRITICAL SETUP & RESTART FIX ---
+# Resolve the absolute path of this script immediately.
+# This fixes the "install.sh not found" error after git pull.
+SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
+SCRIPT_NAME="$(basename "$SCRIPT_PATH")"
+
 cd "$SCRIPT_DIR" || { echo "Failed to change directory to $SCRIPT_DIR"; exit 1; }
 
-# Function to display the menu
-show_menu() {
-    clear
-    echo -e "\033[0;32m=====================================\033[0m"
-    echo -e "          \033[1;34mVM Setup Menu 2.6.0\033[0m"
-    echo -e "\033[0;32m=====================================\033[0m"
-    echo -e "\033[1;32mResource Information\033[0m"
-    echo -e "-------------------------------------"
+# --- 2. VISUAL STYLING ---
+# Define color palette
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+YELLOW='\033[1;33m'
+WHITE='\033[1;37m'
+NC='\033[0m' # No Color
 
-    # Adapt for Alpine: lsb_release is not available by default
-    DISTRO=""
+# Function to pause and wait for user input
+pause() {
+    echo ""
+    read -p "Press [Enter] to return to the menu..."
+}
+
+# Function to display the dashboard header
+show_header() {
+    clear
+    # Simple ASCII Header
+    echo -e "${BLUE}██╗   ██╗███╗   ███╗    ███████╗███████╗████████╗██╗   ██╗██████╗ ${NC}"
+    echo -e "${BLUE}██║   ██║████╗ ████║    ██╔════╝██╔════╝╚══██╔══╝██║   ██║██╔══██╗${NC}"
+    echo -e "${BLUE}██║   ██║██╔████╔██║    ███████╗█████╗     ██║   ██║   ██║██████╔╝${NC}"
+    echo -e "${BLUE}╚██╗ ██╔╝██║╚██╔╝██║    ╚════██║██╔══╝     ██║   ██║   ██║██╔═══╝ ${NC}"
+    echo -e "${BLUE} ╚████╔╝ ██║ ╚═╝ ██║    ███████║███████╗   ██║   ╚██████╔╝██║     ${NC}"
+    echo -e "${BLUE}  ╚═══╝  ╚═╝     ╚═╝    ╚══════╝╚══════╝   ╚═╝    ╚═════╝ ╚═╝     ${NC}"
+    echo -e "${CYAN}                  VERSION 3.0.0  |  ADMIN CONSOLE                  ${NC}"
+    echo -e "${BLUE}===================================================================${NC}"
+}
+
+# Function to gather and display system stats
+show_stats() {
+    # OS Detection
     if [ -f /etc/os-release ]; then
         . /etc/os-release
         if [ "$ID" = "alpine" ]; then
-            DISTRO="Alpine Linux $VERSION_ID"
-        elif command -v lsb_release &> /dev/null; then
-            DISTRO="$(lsb_release -d | cut -f2)"
+            DISTRO="Alpine $VERSION_ID"
         else
-            DISTRO="$PRETTY_NAME"
+            DISTRO="${PRETTY_NAME:-$ID}"
         fi
     else
-        DISTRO="Unknown Linux Distribution"
+        DISTRO="Unknown Linux"
     fi
-    echo -e "Linux Distribution: \033[1;33m$DISTRO\033[0m"
-    echo -e "Kernel Version: \033[1;33m$(uname -r)\033[0m"
-    
-    CPU_USAGE=$(grep 'cpu ' /proc/stat | awk '{usage=($2+$4)*100/($2+$4+$5)} END {printf "%.2f%%", usage}')
-    echo -e "CPU Usage: \033[1;33m$CPU_USAGE\033[0m"
-    
-    echo -e "Memory Usage: \033[1;33m$(free -m | awk 'NR==2{printf "Memory Usage: %s/%sMB (%.2f%%)\n", $3,$2,$3*100/$2 }')\033[0m"
-    echo -e "Disk Usage: \033[1;33m$(df -h | awk '$NF=="/"{printf "Disk Usage: %d/%dGB (%s)\n", $3,$2,$5}')\033[0m"
-    echo -e "\033[0;32m=====================================\033[0m"
-    echo -e "\033[1;32mSystem Information\033[0m"
-    echo -e "-------------------------------------"
-    echo -e "Machine Name: \033[1;33m$(hostname)\033[0m"
 
-    IP_ADDRESS=""
+    # Resources
+    KERNEL=$(uname -r)
+    # Use a safer CPU check that doesn't rely on delay
+    CPU_LOAD=$(grep 'cpu ' /proc/stat | awk '{usage=($2+$4)*100/($2+$4+$5)} END {printf "%.1f%%", usage}')
+    MEM_USAGE=$(free -m | awk 'NR==2{printf "%s/%sMB (%.1f%%)", $3,$2,$3*100/$2 }')
+    DISK_USAGE=$(df -h / | awk '$NF=="/"{printf "%s/%s (%s)", $3,$2,$5}')
+    
+    # Network
+    HOSTNAME=$(hostname)
     if command -v ip &> /dev/null; then
-        IP_ADDRESS=$(ip -4 addr show scope global | grep inet | awk '{print $2}' | cut -d/ -f1 | head -n 1)
-    elif command -v ifconfig &> /dev/null; then
-        IP_ADDRESS=$(ifconfig | grep -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | head -n 1)
+        IP_ADDR=$(ip -4 addr show scope global | grep inet | awk '{print $2}' | cut -d/ -f1 | head -n 1)
+    else
+        IP_ADDR="Unknown"
     fi
-    echo -e "IP Address: \033[1;33m${IP_ADDRESS:-(Not Found)}\033[0m"
 
-    echo -e "Default Gateway: \033[1;33m$(ip route | grep default | awk '{print $3}')\033[0m"
-    echo -e "-------------------------------------"
-    echo -e "\033[1;32mOptions\033[0m"
-    echo -e "-------------------------------------"
-    echo -e "\033[1;36m1.\033[0m XCP-NG / Virtual Machine Initial Configuration"
-    echo -e "\033[1;36m2.\033[0m Installer Scripts"
-    echo -e "\033[1;36m3.\033[0m Docker Host Prep"
-    echo -e "\033[1;36m4.\033[0m Enable Automated Security Patches"
-    echo -e "\033[1;36m5.\033[0m Check for System Updates"
-    echo -e "\033[1;36m6.\033[0m Check for Menu Updates"
-    echo -e "\033[1;36m7.\033[0m Launch Linux Utility"
-    echo -e "\033[1;36m9.\033[0m Exit"
-    echo -e "\033[0;32m=====================================\033[0m"
+    # Display Grid
+    echo -e "${WHITE}SYSTEM INFORMATION${NC}"
+    printf "  ${YELLOW}%-15s${NC} : %-30s ${YELLOW}%-15s${NC} : %s\n" "OS" "$DISTRO" "Hostname" "$HOSTNAME"
+    printf "  ${YELLOW}%-15s${NC} : %-30s ${YELLOW}%-15s${NC} : %s\n" "Kernel" "$KERNEL" "IP Address" "${IP_ADDR:-N/A}"
+    echo -e "${BLUE}-------------------------------------------------------------------${NC}"
+    printf "  ${YELLOW}%-15s${NC} : %-30s ${YELLOW}%-15s${NC} : %s\n" "CPU Usage" "$CPU_LOAD" "Memory" "$MEM_USAGE"
+    printf "  ${YELLOW}%-15s${NC} : %-30s ${YELLOW}%-15s${NC} : %s\n" "Disk Usage" "$DISK_USAGE" "Gateway" "$(ip route | grep default | awk '{print $3}')"
+    echo -e "${BLUE}===================================================================${NC}"
 }
 
-# Function to check for updates in the repository
+# Function to check for updates
 check_for_updates() {
-    echo "Checking for updates in VM-Setup repository..."
-    
-    # Fetch updates without merging
+    echo -e "\n${CYAN}[INFO]${NC} Checking for updates..."
     git fetch
     
     LOCAL=$(git rev-parse @)
-    # Gracefully handle cases where upstream isn't configured
     if ! REMOTE=$(git rev-parse @{u} 2>/dev/null); then
-        echo -e "\033[0;31mError: No upstream branch configured. Cannot check for updates.\033[0m"
-        read -p "Press [Enter] to continue..."
+        echo -e "${RED}[ERROR]${NC} No upstream branch configured."
+        pause
         return
     fi
 
     if [ "$LOCAL" = "$REMOTE" ]; then
-        echo "VM-Setup is up to date."
-        read -p "Press [Enter] to continue..."
+        echo -e "${GREEN}[OK]${NC} Menu is up to date."
+        sleep 1
     else
-        echo "VM-Setup has updates available."
-        read -p "Do you want to pull the latest changes? (y/n): " pull_choice
+        echo -e "${YELLOW}[UPDATE]${NC} New version available."
+        read -p "Download and apply updates? (y/n): " pull_choice
         if [ "$pull_choice" = "y" ]; then
             git pull
-            echo "Repository updated successfully."
+            echo -e "${GREEN}[SUCCESS]${NC} Updated successfully."
             echo "Restarting menu..."
             sleep 1
-            # 4. RESTART FIX: Replace the current process with the updated script
-            exec "$0" "$@"
+            # FIX: Explicitly call bash with the resolved path
+            exec bash "$SCRIPT_PATH" "$@"
         else
-            echo "Update aborted."
+            echo "Update skipped."
         fi
     fi
 }
 
-# Function to navigate to installers and execute a script
+# Function to execute installer scripts
 execute_installerScript() {
     local script_name=$1
-    if [ -d "Installers" ]; then
-        if [ -f "Installers/$script_name" ]; then
-            echo "Executing $script_name..."
-            bash "Installers/$script_name"
-        else
-            echo "Error: Installer script 'Installers/$script_name' not found."
-            read -p "Press [Enter] to continue..."
-        fi
+    local full_path="$SCRIPT_DIR/Installers/$script_name"
+
+    if [ -f "$full_path" ]; then
+        echo -e "\n${GREEN}>>> Executing: $script_name ${NC}"
+        # Give a moment to read the message
+        sleep 0.5
+        bash "$full_path"
     else
-        echo "Error: 'Installers' directory not found."
-        read -p "Press [Enter] to continue..."
+        echo -e "\n${RED}[ERROR]${NC} Script not found at:"
+        echo "       $full_path"
     fi
+    pause
 }
 
-# Main loop
+# --- MAIN LOOP ---
 while true; do
-    show_menu
-    read -p "Enter your choice [1-7]: " choice
+    show_header
+    show_stats
+    
+    echo -e "${WHITE}MENU OPTIONS${NC}"
+    echo -e "  ${CYAN}1.${NC} Server Initial Config        ${CYAN}5.${NC} Run System Updates"
+    echo -e "  ${CYAN}2.${NC} Application Installers       ${CYAN}6.${NC} Update This Menu"
+    echo -e "  ${CYAN}3.${NC} Docker Host Preparation      ${CYAN}7.${NC} Launch LinUtil"
+    echo -e "  ${CYAN}4.${NC} Auto Security Patches        ${CYAN}9.${NC} ${RED}Exit${NC}"
+    echo ""
+    echo -e "${BLUE}-------------------------------------------------------------------${NC}"
+    read -p "  Enter selection [1-9]: " choice
+
     case $choice in
-        1)
-            echo "You have selected XCP-NG / Virtual Machine Initial Configuration"
-            execute_installerScript "serverSetup.sh"
+        1) execute_installerScript "serverSetup.sh" ;;
+        2) execute_installerScript "installer.sh" ;;
+        3) execute_installerScript "Docker-Prep.sh" ;;
+        4) execute_installerScript "Automated-Security-Patches.sh" ;;
+        5) execute_installerScript "systemUpdate.sh" ;;
+        6) check_for_updates ;;
+        7) execute_installerScript "linutil.sh" ;;
+        9) 
+            echo -e "\n${GREEN}Goodbye!${NC}"
+            exit 0 
             ;;
-        2)
-            echo "You have selected Installer Scripts"
-            execute_installerScript "installer.sh"
-            ;;
-        3)
-            echo "You have selected Docker Host Prep"
-            execute_installerScript "Docker-Prep.sh"
-            ;;
-        4)
-            echo "You have selected Enable Automated Security Patches"
-            execute_installerScript "Automated-Security-Patches.sh"
-            ;;
-        5)
-            echo "You have selected System Update"
-            execute_installerScript "systemUpdate.sh"
-            ;;
-        6)
-            echo "Checking for menu updates..."
-            check_for_updates
-            ;;
-        7)
-            echo "Launching LinUtil..."
-            execute_installerScript "linutil.sh"
-            ;;
-        9)
-            echo "Exiting..."
-            exit 0
-            ;;
-        *)
-            echo -e "\033[0;31mInvalid option. Please choose a number between 1 and 7, or 9 to exit.\033[0m"
-            sleep 2
+        *) 
+            echo -e "\n${RED}Invalid option selected.${NC}"
+            sleep 1
             ;;
     esac
-    
-    if [ "$choice" -ne 9 ] && [ "$choice" -ne 6 ]; then
-        read -p "Press [Enter] key to return to menu or type 'exit' to exit: " next_action
-        if [ "$next_action" = "exit" ]; then
-            exit 0
-        fi
-    fi
 done
