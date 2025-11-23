@@ -62,12 +62,10 @@ show_stats() {
     else
         DISTRO="Unknown"
     fi
-    # Force max length 22 chars
     if [ ${#DISTRO} -gt 22 ]; then DISTRO="${DISTRO:0:20}.."; fi
 
     # Kernel
     KERNEL=$(uname -r)
-    # Force max length 15 chars (common issue)
     if [ ${#KERNEL} -gt 15 ]; then KERNEL="${KERNEL:0:13}.."; fi
 
     # Resources
@@ -77,16 +75,22 @@ show_stats() {
     
     # Network
     HOSTNAME=$(hostname)
-    if [ ${#HOSTNAME} -gt 15 ]; then HOSTNAME="${HOSTNAME:0:13}.."; fi
+    if [ ${#HOSTNAME} -gt 20 ]; then HOSTNAME="${HOSTNAME:0:18}.."; fi
 
+    IP_ADDR="Unknown"
+    SUBNET="Unknown"
+    
     if command -v ip &> /dev/null; then
-        IP_ADDR=$(ip -4 addr show scope global | grep inet | awk '{print $2}' | cut -d/ -f1 | head -n 1)
-    else
-        IP_ADDR="Unknown"
+        # Get IP with subnet CIDR (e.g., 192.168.1.50/24)
+        FULL_IP=$(ip -4 addr show scope global | grep inet | awk '{print $2}' | head -n 1)
+        if [ -n "$FULL_IP" ]; then
+            IP_ADDR=$(echo "$FULL_IP" | cut -d/ -f1)
+            CIDR=$(echo "$FULL_IP" | cut -d/ -f2)
+            SUBNET="/$CIDR"
+        fi
     fi
     
     GATEWAY=$(ip route | grep default | awk '{print $3}' | head -n 1)
-    # Truncate Gateway if huge
     if [ ${#GATEWAY} -gt 15 ]; then GATEWAY="${GATEWAY:0:13}.."; fi
 
     # --- DISPLAY GRID ---
@@ -94,18 +98,19 @@ show_stats() {
     
     # NEW LAYOUT:
     # Row 1: OS        | IP Address
-    # Row 2: Hostname  | Gateway
+    # Row 2: Kernel    | Subnet Mask
+    # Row 3: Hostname  | Gateway
     # --- Separator ---
-    # Row 3: CPU Usage | Memory
-    # Row 4: Disk      | Kernel
-    
-    # Define Column Widths: Label(11) : Value(20) || Label(11) : Value(Rest)
+    # Row 4: CPU Usage | Memory
+    # Row 5: Disk      | (Empty/Reserved)
     
     printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "OS" "$DISTRO" "IP Address" "${IP_ADDR:-N/A}"
+    printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "Kernel" "$KERNEL" "Subnet" "${SUBNET:-N/A}"
     printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "Hostname" "$HOSTNAME" "Gateway" "${GATEWAY:-N/A}"
     print_line "-" "$BLUE"
     printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "CPU Usage" "$CPU_LOAD" "Memory" "$MEM_USAGE"
-    printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "Disk Usage" "$DISK_USAGE" "Kernel" "$KERNEL"
+    # Left Disk Usage alone on the bottom row or could duplicate Memory visual if wanted
+    printf "  ${YELLOW}%-11s${NC} : %-20s\n" "Disk Usage" "$DISK_USAGE" 
     print_line "=" "$BLUE"
 }
 
@@ -157,7 +162,6 @@ while true; do
     
     echo -e "${WHITE}MENU OPTIONS${NC}"
     
-    # Increased column 1 width slightly to 33 to prevent gap overflow
     printf "  ${CYAN}1.${NC} %-33s ${CYAN}5.${NC} %s\n" "Server Initial Config" "Run System Updates"
     printf "  ${CYAN}2.${NC} %-33s ${CYAN}6.${NC} %s\n" "Application Installers" "Update This Menu"
     printf "  ${CYAN}3.${NC} %-33s ${CYAN}7.${NC} %s\n" "Docker Host Preparation" "Launch LinUtil"
