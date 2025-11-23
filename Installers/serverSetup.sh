@@ -1,10 +1,52 @@
 #!/bin/bash
 
+# --- UI & FORMATTING FUNCTIONS ---
+
+# Define Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[1;34m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+
+# Function to display the header
+show_header() {
+    clear
+    echo -e "${BLUE}==================================================${NC}"
+    echo -e "${CYAN}           VM INITIAL CONFIGURATION TOOL          ${NC}"
+    echo -e "${BLUE}==================================================${NC}"
+    echo ""
+}
+
+print_step() {
+    echo -e "\n${BLUE}[STEP]${NC} $1"
+}
+
+print_success() {
+    echo -e "${GREEN}[OK]${NC} $1"
+}
+
+print_warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
+}
+
+print_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+print_info() {
+    echo -e "${CYAN}[INFO]${NC} $1"
+}
+
+# --- CORE LOGIC ---
+
 # Track if we have already updated repositories to prevent redundancy
 PKG_MANAGER_UPDATED="false"
 
 # Function to detect the OS
 detect_os() {
+    print_info "Detecting Operating System..."
     if [ -f /etc/os-release ]; then
         . /etc/os-release
         OS=$ID
@@ -19,6 +61,7 @@ detect_os() {
         OS=$(uname -s)
         VERSION=$(uname -r)
     fi
+    print_success "Detected: $OS ($VERSION)"
 }
 
 # Function to handle package manager updates efficiently
@@ -27,182 +70,194 @@ update_repos() {
         return
     fi
 
-    echo "Updating package repositories..."
+    print_info "Updating package repositories (this may take a moment)..."
     case "$OS" in
-        alpine) apk update ;;
-        debian|ubuntu) sudo apt update -y ;;
-        fedora) sudo dnf update -y ;;
-        redhat|centos|rocky|almalinux) sudo dnf update -y ;;
-        arch) sudo pacman -Sy ;;
+        alpine) apk update >/dev/null ;;
+        debian|ubuntu) sudo apt update -y -q ;;
+        fedora) sudo dnf update -y -q ;;
+        redhat|centos|rocky|almalinux) sudo dnf update -y -q ;;
+        arch) sudo pacman -Sy --noconfirm ;;
         suse) sudo zypper refresh ;;
     esac
     PKG_MANAGER_UPDATED="true"
+    print_success "Repositories updated."
 }
 
 # Function to ensure sudo is installed on Debian
 ensure_sudo_debian() {
     if [ "$OS" == "debian" ] && ! command -v sudo >/dev/null 2>&1; then
-        echo "Sudo not found. Installing sudo..."
-        apt update -y
-        apt install -y sudo
+        print_warn "Sudo not found. Installing sudo..."
+        apt update -y -q && apt install -y sudo -q
         if [ $? -eq 0 ]; then
-            PKG_MANAGER_UPDATED="true" # We just updated apt
-            echo "Sudo installed successfully."
+            PKG_MANAGER_UPDATED="true"
+            print_success "Sudo installed successfully."
         else
-            echo "Error: Failed to install sudo. Please install it manually."
+            print_error "Failed to install sudo. Please install it manually."
             exit 1
         fi
     fi
 }
 
-# --- MAIN LOGIC START ---
+# --- MAIN EXECUTION ---
 
+show_header
 detect_os
 ensure_sudo_debian
 
 # 1. XCP-NG Tools Installation
-read -p "Would You Like To Install XCP-NG Tools? (XCP-NG Server Client) (Y/n): " install_xen_tools
+print_step "XCP-NG Guest Tools Configuration"
+echo -e "Would You Like To Install XCP-NG Tools? (Recommended for VM performance)"
+read -p "Install? (Y/n): " install_xen_tools
 install_xen_tools=${install_xen_tools:-y}
 
-if [ "$install_xen_tools" == "y" ]; then
+if [[ "$install_xen_tools" =~ ^[Yy]$ ]]; then
     update_repos
 
     case "$OS" in
         alpine)
             echo "https://dl-cdn.alpinelinux.org/alpine/edge/community" >>/etc/apk/repositories
-            apk update
-            apk add xe-guest-utilities
-            rc-update add xe-guest-utilities default
-            /etc/init.d/xe-guest-utilities start
+            apk update >/dev/null
+            apk add xe-guest-utilities >/dev/null
+            rc-update add xe-guest-utilities default >/dev/null
+            /etc/init.d/xe-guest-utilities start >/dev/null
+            print_success "XCP-NG tools installed."
             ;;
         arch)
             sudo pacman -S --noconfirm xe-guest-utilities
+            print_success "XCP-NG tools installed."
             ;;
         ubuntu)
-            sudo apt install -y xe-guest-utilities
+            sudo apt install -y xe-guest-utilities -q
+            print_success "XCP-NG tools installed."
             ;;
         debian)
-            echo "For Debian, XCP-NG tools are installed from the guest tools ISO."
+            print_info "For Debian, tools are installed via Guest Tools ISO."
             
             # SMART ISO CHECK LOOP
             while true; do
-                echo "Please ensure the 'guest-tools.iso' is attached in Xen Orchestra."
+                echo -e "${YELLOW}action required:${NC} Ensure 'guest-tools.iso' is attached in Xen Orchestra."
                 read -p "Ready to proceed? (y/n): " confirm_debian
                 confirm_debian=${confirm_debian:-y}
 
                 if [[ "$confirm_debian" =~ ^[Nn]$ ]]; then
-                    echo "Skipping XCP-NG Tools installation."
+                    print_warn "Skipping XCP-NG Tools installation."
                     break
                 fi
 
-                # Check if the device actually has media inserted
-                # blkid returns exit code 0 if a filesystem is found (ISO inserted)
-                # We check /dev/cdrom first, fallback to /dev/sr0
                 DEVICE="/dev/cdrom"
                 if [ ! -b "$DEVICE" ]; then DEVICE="/dev/sr0"; fi
 
                 if sudo blkid "$DEVICE" >/dev/null 2>&1; then
-                    # ISO DETECTED - PROCEED
-                    
-                    # Cleanup previous mounts if they exist
                     if mountpoint -q /mnt; then sudo umount /mnt; fi
-
-                    echo "Mounting $DEVICE..."
+                    print_info "Mounting $DEVICE..."
+                    
                     if sudo mount "$DEVICE" /mnt; then
                         INSTALL_SCRIPT="/mnt/Linux/install.sh"
                         
                         if [ -f "$INSTALL_SCRIPT" ]; then
-                            echo "Running installer..."
+                            print_info "Running installer..."
                             (cd "/mnt/Linux" && sudo bash install.sh)
                         elif [ -f "/mnt/install.sh" ]; then
                             (cd "/mnt" && sudo bash install.sh)
                         else
-                            echo "Error: install.sh not found on mounted ISO."
+                            print_error "install.sh not found on ISO."
                         fi
                         
                         sudo umount /mnt
-                        break # Exit the loop after successful run
+                        break 
                     else
-                        echo "Error: Detected ISO but failed to mount."
+                        print_error "Detected ISO but failed to mount."
                     fi
                 else
-                    # NO ISO DETECTED
-                    echo -e "\033[0;31mNo ISO detected in $DEVICE.\033[0m"
-                    echo "Please go to Xen Orchestra -> VM -> Console -> Insert Guest Tools ISO."
-                    echo "Pressing 'y' above will retry the detection."
+                    print_error "No ISO detected in $DEVICE."
+                    echo "Please attach the ISO in Xen Orchestra -> VM -> Console"
                 fi
             done
             ;;
         fedora|redhat|centos|rocky|almalinux)
-            sudo dnf install -y epel-release
-            if ! sudo dnf install -y xe-guest-utilities; then
-                sudo dnf install -y xe-guest-utilities-latest
+            sudo dnf install -y epel-release -q
+            if ! sudo dnf install -y xe-guest-utilities -q; then
+                sudo dnf install -y xe-guest-utilities-latest -q
             fi
             systemctl enable --now xe-linux-distribution.service
+            print_success "XCP-NG tools installed."
             ;;
         suse)
             sudo zypper install -y xe-guest-utilities
+            print_success "XCP-NG tools installed."
             ;;
         *)
-            echo "Skipping XCP-NG Tools: Unsupported OS ($OS)."
+            print_warn "Skipping XCP-NG Tools: Unsupported OS ($OS)."
             ;;
     esac
+else
+    print_info "Skipping XCP-NG Tools."
 fi
 
 # 2. Install Standard Server Tools
+print_step "Standard System Utilities"
+print_info "Installing: net-tools, btop, curl, wget, nano..."
 update_repos
 
 case "$OS" in
     alpine)
-        apk add sudo net-tools nano curl wget
+        apk add sudo net-tools nano curl wget >/dev/null
         ;;
     arch)
         sudo pacman -S --noconfirm net-tools btop whois curl wget nano
         ;;
     debian|ubuntu)
-        sudo apt install -y net-tools btop plocate whois curl wget nano
+        sudo apt install -y net-tools btop plocate whois curl wget nano -q
         ;;
     fedora|redhat|centos|rocky|almalinux)
-        sudo dnf install -y net-tools btop whois curl wget nano
+        sudo dnf install -y net-tools btop whois curl wget nano -q
         ;;
     suse)
         sudo zypper install -y net-tools btop whois curl wget nano
         ;;
     *)
-        echo "Unsupported system for Standard Server Tools."
+        print_warn "Unsupported system for Standard Tools."
         ;;
 esac
+print_success "Utilities installed."
 
 # 3. Hostname Configuration
-read -p "Do you want to change the hostname? (y/N): " change_hostname
+print_step "Hostname Configuration"
+echo -e "Current Hostname: ${CYAN}$(hostname)${NC}"
+read -p "Change hostname? (y/N): " change_hostname
 change_hostname=${change_hostname:-n}
 
-if [ "$change_hostname" == "y" ]; then
-    read -p "Enter the new hostname: " new_hostname
+if [[ "$change_hostname" =~ ^[Yy]$ ]]; then
+    read -p "Enter new hostname: " new_hostname
     if [ -n "$new_hostname" ]; then
         sudo hostnamectl set-hostname "$new_hostname"
-        echo "Hostname changed to $new_hostname."
+        print_success "Hostname changed to: $new_hostname"
     else
-        echo "Skipped."
+        print_warn "Skipped (empty input)."
     fi
 fi
 
 # 4. Debian Sudo User Config
 if [ "$OS" == "debian" ]; then
-    read -p "Add a user to the sudo group? (y/N): " add_sudo_user
+    print_step "User Management"
+    read -p "Add a user to 'sudo' group? (y/N): " add_sudo_user
     add_sudo_user=${add_sudo_user:-n}
 
-    if [ "$add_sudo_user" == "y" ]; then
+    if [[ "$add_sudo_user" =~ ^[Yy]$ ]]; then
         read -p "Enter username: " user_to_add
         if [ -n "$user_to_add" ]; then
             if id "$user_to_add" >/dev/null 2>&1; then
                 sudo usermod -aG sudo "$user_to_add"
-                echo "User '$user_to_add' added to sudo group. Relogin required."
+                print_success "User '$user_to_add' added to sudo group. (Log out to apply)"
             else
-                echo "Error: User '$user_to_add' does not exist."
+                print_error "User '$user_to_add' does not exist."
             fi
         fi
     fi
 fi
 
-echo "Setup complete."
+echo ""
+echo -e "${BLUE}==================================================${NC}"
+echo -e "${GREEN}             SETUP COMPLETE                       ${NC}"
+echo -e "${BLUE}==================================================${NC}"
+echo ""
