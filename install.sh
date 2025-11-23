@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# SETUP & RESTART FIX ---
+# SETUP & RESTART
 SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 cd "$SCRIPT_DIR" || { echo "Failed to change directory to $SCRIPT_DIR"; exit 1; }
 
-# VISUAL STYLING ---
+# VISUAL STYLING
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -15,7 +15,7 @@ WHITE='\033[1;37m'
 NC='\033[0m' # No Color
 
 # Standard Width for the UI
-UI_WIDTH=64
+UI_WIDTH=66
 
 # Function to print a centered line
 print_centered() {
@@ -42,7 +42,6 @@ pause() {
 
 show_header() {
     clear
-    # Fixed ASCII Art to align better
     echo -e "${BLUE}██╗   ██╗███╗   ███╗    ███████╗███████╗████████╗██╗   ██╗██████╗ ${NC}"
     echo -e "${BLUE}██║   ██║████╗ ████║    ██╔════╝██╔════╝╚══██╔══╝██║   ██║██╔══██╗${NC}"
     echo -e "${BLUE}██║   ██║██╔████╔██║    ███████╗█████╗     ██║   ██║   ██║██████╔╝${NC}"
@@ -54,24 +53,29 @@ show_header() {
 }
 
 show_stats() {
-    # OS Detection
+    # DATA COLLECTION
+    # OS Detection & Truncation
     if [ -f /etc/os-release ]; then
         . /etc/os-release
         if [ "$ID" = "alpine" ]; then DISTRO="Alpine $VERSION_ID"; else DISTRO="${PRETTY_NAME:-$ID}"; fi
     else
         DISTRO="Unknown"
     fi
-    
-    # Truncate DISTRO if too long
+    # Force max length 22 chars
     if [ ${#DISTRO} -gt 22 ]; then DISTRO="${DISTRO:0:20}.."; fi
 
+    # Kernel
     KERNEL=$(uname -r)
+    # Force max length 15 chars (common issue)
+    if [ ${#KERNEL} -gt 15 ]; then KERNEL="${KERNEL:0:13}.."; fi
+
+    # Resources
     CPU_LOAD=$(grep 'cpu ' /proc/stat | awk '{usage=($2+$4)*100/($2+$4+$5)} END {printf "%.1f%%", usage}')
     MEM_USAGE=$(free -m | awk 'NR==2{printf "%s/%sMB (%.0f%%)", $3,$2,$3*100/$2 }')
     DISK_USAGE=$(df -h / | awk '$NF=="/"{printf "%s/%s (%s)", $3,$2,$5}')
     
+    # Network
     HOSTNAME=$(hostname)
-    # Truncate Hostname if too long
     if [ ${#HOSTNAME} -gt 15 ]; then HOSTNAME="${HOSTNAME:0:13}.."; fi
 
     if command -v ip &> /dev/null; then
@@ -79,19 +83,28 @@ show_stats() {
     else
         IP_ADDR="Unknown"
     fi
+    
     GATEWAY=$(ip route | grep default | awk '{print $3}' | head -n 1)
+    # Truncate Gateway if huge
+    if [ ${#GATEWAY} -gt 15 ]; then GATEWAY="${GATEWAY:0:13}.."; fi
 
-    # Display Grid with FIXED widths to ensure vertical alignment
+    # --- DISPLAY GRID ---
     echo -e "${WHITE}SYSTEM INFORMATION${NC}"
     
-    # Layout:  Label(11) : Value(20) | Label(11) : Value(Remaining)
-    # We use printf to strictly enforce the column width
+    # NEW LAYOUT:
+    # Row 1: OS        | IP Address
+    # Row 2: Hostname  | Gateway
+    # --- Separator ---
+    # Row 3: CPU Usage | Memory
+    # Row 4: Disk      | Kernel
     
-    printf "  ${YELLOW}%-11s${NC} : %-21s ${YELLOW}%-11s${NC} : %s\n" "OS" "$DISTRO" "Hostname" "$HOSTNAME"
-    printf "  ${YELLOW}%-11s${NC} : %-21s ${YELLOW}%-11s${NC} : %s\n" "Kernel" "$KERNEL" "IP Address" "${IP_ADDR:-N/A}"
+    # Define Column Widths: Label(11) : Value(20) || Label(11) : Value(Rest)
+    
+    printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "OS" "$DISTRO" "IP Address" "${IP_ADDR:-N/A}"
+    printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "Hostname" "$HOSTNAME" "Gateway" "${GATEWAY:-N/A}"
     print_line "-" "$BLUE"
-    printf "  ${YELLOW}%-11s${NC} : %-21s ${YELLOW}%-11s${NC} : %s\n" "CPU Usage" "$CPU_LOAD" "Memory" "$MEM_USAGE"
-    printf "  ${YELLOW}%-11s${NC} : %-21s ${YELLOW}%-11s${NC} : %s\n" "Disk Usage" "$DISK_USAGE" "Gateway" "${GATEWAY:-N/A}"
+    printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "CPU Usage" "$CPU_LOAD" "Memory" "$MEM_USAGE"
+    printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "Disk Usage" "$DISK_USAGE" "Kernel" "$KERNEL"
     print_line "=" "$BLUE"
 }
 
@@ -143,12 +156,11 @@ while true; do
     
     echo -e "${WHITE}MENU OPTIONS${NC}"
     
-    # Use printf for menu options to keep columns aligned perfectly
-    # Col 1 width = 32 chars
-    printf "  ${CYAN}1.${NC} %-32s ${CYAN}5.${NC} %s\n" "Server Initial Config" "Run System Updates"
-    printf "  ${CYAN}2.${NC} %-32s ${CYAN}6.${NC} %s\n" "Application Installers" "Update This Menu"
-    printf "  ${CYAN}3.${NC} %-32s ${CYAN}7.${NC} %s\n" "Docker Host Preparation" "Launch LinUtil"
-    printf "  ${CYAN}4.${NC} %-32s ${CYAN}9.${NC} ${RED}%s${NC}\n" "Auto Security Patches" "Exit"
+    # Increased column 1 width slightly to 33 to prevent gap overflow
+    printf "  ${CYAN}1.${NC} %-33s ${CYAN}5.${NC} %s\n" "Server Initial Config" "Run System Updates"
+    printf "  ${CYAN}2.${NC} %-33s ${CYAN}6.${NC} %s\n" "Application Installers" "Update This Menu"
+    printf "  ${CYAN}3.${NC} %-33s ${CYAN}7.${NC} %s\n" "Docker Host Preparation" "Launch LinUtil"
+    printf "  ${CYAN}4.${NC} %-33s ${CYAN}9.${NC} ${RED}%s${NC}\n" "Auto Security Patches" "Exit"
     
     echo ""
     print_line "-" "$BLUE"
