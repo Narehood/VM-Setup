@@ -111,3 +111,52 @@ execute_installerScript() {
     # Check strictly locally since we are inside the 'Installers' folder
     if [ -f "$script_name" ]; then
         echo -e "\n${GREEN}>>> Launching: $script_name ${NC}"
+        sleep 0.5
+        bash "$script_name"
+        
+        # Return logic
+        echo ""
+        print_line "-" "$BLUE"
+        read -p "Press [Enter] to return to menu or type 'exit': " next_action
+        if [ "$next_action" = "exit" ]; then
+            echo -e "\n${GREEN}Goodbye!${NC}"
+            exit 0
+        fi
+    else
+        echo -e "\n${RED}[ERROR]${NC} Script '$script_name' not found in current directory."
+        pause
+    fi
+}
+
+# --- MAIN LOOP ---
+while true; do
+    show_header
+    show_stats
+    
+    echo -e "${WHITE}AVAILABLE INSTALLERS${NC}"
+    
+    # Using printf for consistent 2-column layout
+    # Column width 33 to split the 66 width UI
+    printf "  ${CYAN}1.${NC} %-33s ${CYAN}3.${NC} %s\n" "WordPress" "UniFi Controller"
+    printf "  ${CYAN}2.${NC} %-33s ${CYAN}4.${NC} %s\n" "Xen Orchestra" "CloudFlare Tunnels"
+    printf "  ${CYAN}9.${NC} ${RED}%s${NC}\n" "Return to Main Menu"
+    
+    echo ""
+    print_line "-" "$BLUE"
+    read -p "  Enter selection [1-4, 9]: " choice
+
+    case $choice in
+        1) execute_installerScript "WordPress.sh" ;;
+        2) execute_installerScript "XenOrchestra.sh" ;;
+        3) execute_installerScript "UniFi-Controller.sh" ;;
+        4) execute_installerScript "CloudFlare-Tunnels.sh" ;;
+        9) 
+            echo -e "\n${GREEN}Returning to Main Menu...${NC}"
+            exit 0 
+            ;;
+        *) 
+            echo -e "\n${RED}Invalid option.${NC}"
+            sleep 1
+            ;;
+    esac
+done
