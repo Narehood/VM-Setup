@@ -87,4 +87,89 @@ show_stats() {
     if [ ${#GATEWAY} -gt 15 ]; then GATEWAY="${GATEWAY:0:13}.."; fi
 
     # --- DISPLAY GRID ---
-    echo -e "${WHITE}SYSTEM
+    echo -e "${WHITE}SYSTEM INFORMATION${NC}"
+    
+    # NEW LAYOUT:
+    # Row 1: OS        | Kernel     <-- Swapped
+    # Row 2: Hostname  | IP Address <-- Swapped
+    # --- Separator ---
+    # Row 3: CPU Usage | Memory
+    # Row 4: Disk      | Gateway
+    
+    printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "OS" "$DISTRO" "Kernel" "$KERNEL"
+    printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "Hostname" "$HOSTNAME" "IP Address" "${IP_ADDR:-N/A}"
+    print_line "-" "$BLUE"
+    printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "CPU Usage" "$CPU_LOAD" "Memory" "$MEM_USAGE"
+    printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "Disk Usage" "$DISK_USAGE" "Gateway" "${GATEWAY:-N/A}"
+    print_line "=" "$BLUE"
+}
+
+check_for_updates() {
+    echo -e "\n${CYAN}[INFO]${NC} Checking for updates..."
+    git fetch
+    LOCAL=$(git rev-parse @)
+    if ! REMOTE=$(git rev-parse @{u} 2>/dev/null); then
+        echo -e "${RED}[ERROR]${NC} No upstream branch configured."
+        pause
+        return
+    fi
+
+    if [ "$LOCAL" = "$REMOTE" ]; then
+        echo -e "${GREEN}[OK]${NC} Menu is up to date."
+        sleep 1
+    else
+        echo -e "${YELLOW}[UPDATE]${NC} New version available."
+        read -p "Download and apply updates? (y/n): " pull_choice
+        if [ "$pull_choice" = "y" ]; then
+            git pull
+            echo -e "${GREEN}[SUCCESS]${NC} Updated successfully. Restarting..."
+            sleep 1
+            exec bash "$SCRIPT_PATH" "$@"
+        else
+            echo "Update skipped."
+        fi
+    fi
+}
+
+execute_installerScript() {
+    local script_name=$1
+    local full_path="$SCRIPT_DIR/Installers/$script_name"
+
+    if [ -f "$full_path" ]; then
+        echo -e "\n${GREEN}>>> Executing: $script_name ${NC}"
+        sleep 0.5
+        bash "$full_path"
+    else
+        echo -e "\n${RED}[ERROR]${NC} Script not found at: $full_path"
+    fi
+    pause
+}
+
+# --- MAIN LOOP ---
+while true; do
+    show_header
+    show_stats
+    
+    echo -e "${WHITE}MENU OPTIONS${NC}"
+    
+    printf "  ${CYAN}1.${NC} %-33s ${CYAN}5.${NC} %s\n" "Server Initial Config" "Run System Updates"
+    printf "  ${CYAN}2.${NC} %-33s ${CYAN}6.${NC} %s\n" "Application Installers" "Update This Menu"
+    printf "  ${CYAN}3.${NC} %-33s ${CYAN}7.${NC} %s\n" "Docker Host Preparation" "Launch LinUtil"
+    printf "  ${CYAN}4.${NC} %-33s ${CYAN}9.${NC} ${RED}%s${NC}\n" "Auto Security Patches" "Exit"
+    
+    echo ""
+    print_line "-" "$BLUE"
+    read -p "  Enter selection [1-9]: " choice
+
+    case $choice in
+        1) execute_installerScript "serverSetup.sh" ;;
+        2) execute_installerScript "installer.sh" ;;
+        3) execute_installerScript "Docker-Prep.sh" ;;
+        4) execute_installerScript "Automated-Security-Patches.sh" ;;
+        5) execute_installerScript "systemUpdate.sh" ;;
+        6) check_for_updates ;;
+        7) execute_installerScript "linutil.sh" ;;
+        9) echo -e "\n${GREEN}Goodbye!${NC}"; exit 0 ;;
+        *) echo -e "\n${RED}Invalid option.${NC}"; sleep 1 ;;
+    esac
+done
