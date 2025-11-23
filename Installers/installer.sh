@@ -1,7 +1,6 @@
 #!/bin/bash
 
-# This is critical. It forces the script to operate from inside the 'Installers' folder
-# regardless of where you launched it from.
+# 1. DIRECTORY ANCHOR
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR" || { echo "Failed to change directory to $SCRIPT_DIR"; exit 1; }
 
@@ -9,7 +8,7 @@ cd "$SCRIPT_DIR" || { echo "Failed to change directory to $SCRIPT_DIR"; exit 1; 
 show_menu() {
     clear
     echo -e "\033[0;32m=====================================\033[0m"
-    echo -e "          \033[1;34mVM Setup Installer Menu\033[0m"
+    echo -e "          \033[1;34mLinux Quick Installer Menu\033[0m"
     echo -e "\033[0;32m=====================================\033[0m"
     echo -e "\033[1;32mResource Information\033[0m"
     echo -e "-------------------------------------"
@@ -57,8 +56,7 @@ show_menu() {
     echo -e "\033[1;36m1.\033[0m WordPress"
     echo -e "\033[1;36m2.\033[0m Xen Orchestra"
     echo -e "\033[1;36m3.\033[0m UniFi Controller"
-    echo -e "\033[1;36m4.\033[0m Pterodactyl"
-    echo -e "\033[1;36m5.\033[0m CloudFlare Tunnels"
+    echo -e "\033[1;36m4.\033[0m CloudFlare Tunnels"
     echo -e "\033[1;36m9.\033[0m Return to Main Menu/Exit"
     echo -e "\033[0;32m=====================================\033[0m"
 }
@@ -67,10 +65,18 @@ show_menu() {
 execute_installerScript() {
     local script_name=$1
     
-    # Since we anchored to SCRIPT_DIR at the start, we check strictly locally
     if [ -f "$script_name" ]; then
         echo "Executing $script_name..."
         bash "$script_name"
+        
+        # BUG FIX: Moved the pause logic INSIDE the function.
+        # It only asks you to return AFTER you have run a script.
+        # This prevents the loop from getting stuck when you try to exit.
+        echo ""
+        read -p "Press [Enter] to return to menu or type 'exit' to exit: " next_action
+        if [ "$next_action" = "exit" ]; then
+            exit 0
+        fi
     else
         echo -e "\033[0;31mError: Script '$script_name' not found in $SCRIPT_DIR\033[0m"
         read -p "Press [Enter] to continue..."
@@ -80,7 +86,7 @@ execute_installerScript() {
 # Main loop
 while true; do
     show_menu
-    read -p "Enter your choice [1-5]: " choice
+    read -p "Enter your choice [1-4]: " choice
     case $choice in
         1)
             echo "You have selected WordPress"
@@ -95,10 +101,6 @@ while true; do
             execute_installerScript "UniFi-Controller.sh"
             ;;
         4)
-            echo "You have selected Pterodactyl"
-            execute_installerScript "Pterodactyl.sh"
-            ;;
-        5)
             echo "You have selected CloudFlare Tunnels"
             execute_installerScript "CloudFlare-Tunnels.sh"
             ;;
@@ -107,15 +109,11 @@ while true; do
             exit 0
             ;;
         *)
-            echo -e "\033[0;31mInvalid option. Please choose a number between 1 and 5, or 9 to exit.\033[0m"
+            echo -e "\033[0;31mInvalid option. Please choose a number between 1 and 4, or 9 to exit.\033[0m"
             sleep 2
             ;;
     esac
     
-    if [ "$choice" -ne 9 ]; then
-        read -p "Press [Enter] key to return to menu or type 'exit' to exit: " next_action
-        if [ "$next_action" = "exit" ]; then
-            exit 0
-        fi
-    fi
+    # BUG FIX: Removed the logic block that used to be here.
+    # The loop now cycles cleanly.
 done
