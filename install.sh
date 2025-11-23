@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# SETUP & RESTART
+# --- 1. CRITICAL SETUP & RESTART FIX ---
 SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 cd "$SCRIPT_DIR" || { echo "Failed to change directory to $SCRIPT_DIR"; exit 1; }
 
-# VISUAL STYLING
+# --- 2. VISUAL STYLING ---
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -53,7 +53,8 @@ show_header() {
 }
 
 show_stats() {
-    # DATA COLLECTION
+    # --- DATA COLLECTION ---
+    
     # OS Detection & Truncation
     if [ -f /etc/os-release ]; then
         . /etc/os-release
@@ -61,12 +62,10 @@ show_stats() {
     else
         DISTRO="Unknown"
     fi
-    # Force max length 22 chars
     if [ ${#DISTRO} -gt 22 ]; then DISTRO="${DISTRO:0:20}.."; fi
 
     # Kernel
     KERNEL=$(uname -r)
-    # Force max length 15 chars (common issue)
     if [ ${#KERNEL} -gt 15 ]; then KERNEL="${KERNEL:0:13}.."; fi
 
     # Resources
@@ -76,7 +75,7 @@ show_stats() {
     
     # Network
     HOSTNAME=$(hostname)
-    if [ ${#HOSTNAME} -gt 15 ]; then HOSTNAME="${HOSTNAME:0:13}.."; fi
+    if [ ${#HOSTNAME} -gt 20 ]; then HOSTNAME="${HOSTNAME:0:18}.."; fi
 
     if command -v ip &> /dev/null; then
         IP_ADDR=$(ip -4 addr show scope global | grep inet | awk '{print $2}' | cut -d/ -f1 | head -n 1)
@@ -85,26 +84,23 @@ show_stats() {
     fi
     
     GATEWAY=$(ip route | grep default | awk '{print $3}' | head -n 1)
-    # Truncate Gateway if huge
     if [ ${#GATEWAY} -gt 15 ]; then GATEWAY="${GATEWAY:0:13}.."; fi
 
     # --- DISPLAY GRID ---
     echo -e "${WHITE}SYSTEM INFORMATION${NC}"
     
     # NEW LAYOUT:
-    # Row 1: OS        | IP Address
-    # Row 2: Hostname  | Gateway
+    # Row 1: OS        | Kernel     <-- Swapped
+    # Row 2: Hostname  | IP Address <-- Swapped
     # --- Separator ---
     # Row 3: CPU Usage | Memory
-    # Row 4: Disk      | Kernel
+    # Row 4: Disk      | Gateway
     
-    # Define Column Widths: Label(11) : Value(20) || Label(11) : Value(Rest)
-    
-    printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "OS" "$DISTRO" "IP Address" "${IP_ADDR:-N/A}"
-    printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "Hostname" "$HOSTNAME" "Gateway" "${GATEWAY:-N/A}"
+    printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "OS" "$DISTRO" "Kernel" "$KERNEL"
+    printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "Hostname" "$HOSTNAME" "IP Address" "${IP_ADDR:-N/A}"
     print_line "-" "$BLUE"
     printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "CPU Usage" "$CPU_LOAD" "Memory" "$MEM_USAGE"
-    printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "Disk Usage" "$DISK_USAGE" "Kernel" "$KERNEL"
+    printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "Disk Usage" "$DISK_USAGE" "Gateway" "${GATEWAY:-N/A}"
     print_line "=" "$BLUE"
 }
 
@@ -156,7 +152,6 @@ while true; do
     
     echo -e "${WHITE}MENU OPTIONS${NC}"
     
-    # Increased column 1 width slightly to 33 to prevent gap overflow
     printf "  ${CYAN}1.${NC} %-33s ${CYAN}5.${NC} %s\n" "Server Initial Config" "Run System Updates"
     printf "  ${CYAN}2.${NC} %-33s ${CYAN}6.${NC} %s\n" "Application Installers" "Update This Menu"
     printf "  ${CYAN}3.${NC} %-33s ${CYAN}7.${NC} %s\n" "Docker Host Preparation" "Launch LinUtil"
