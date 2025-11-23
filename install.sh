@@ -66,7 +66,7 @@ show_stats() {
 
     # Kernel
     KERNEL=$(uname -r)
-    if [ ${#KERNEL} -gt 15 ]; then KERNEL="${KERNEL:0:20}.."; fi
+    if [ ${#KERNEL} -gt 22 ]; then KERNEL="${KERNEL:0:20}.."; fi
 
     # Resources
     CPU_LOAD=$(grep 'cpu ' /proc/stat | awk '{usage=($2+$4)*100/($2+$4+$5)} END {printf "%.1f%%", usage}')
