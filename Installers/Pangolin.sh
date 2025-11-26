@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# --- 1. VISUAL STYLING ---
+# VISUAL STYLING
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -9,14 +9,14 @@ YELLOW='\033[1;33m'
 WHITE='\033[1;37m'
 NC='\033[0m' # No Color
 
-# --- 2. HEADER ---
+# HEADER
 clear
 echo -e "${BLUE}===================================================================${NC}"
 echo -e "${CYAN}                PANGOLIN TUNNEL INSTALLER                  ${NC}"
 echo -e "${BLUE}===================================================================${NC}"
 echo ""
 
-# --- 3. DEPENDENCY CHECK (AUTO-INSTALL CURL) ---
+# DEPENDENCY CHECK (AUTO-INSTALL CURL)
 echo -e "${CYAN}[INFO]${NC} Checking for required dependencies..."
 
 if ! command -v curl &> /dev/null; then
@@ -56,7 +56,7 @@ else
     echo -e "${GREEN}[OK]${NC} Dependencies met."
 fi
 
-# --- 4. EXECUTION ---
+# EXECUTION
 echo -e "\n${CYAN}[INFO]${NC} Downloading installer manifest..."
 
 # Download and execute the fetch script
