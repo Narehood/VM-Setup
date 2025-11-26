@@ -1,68 +1,147 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/bash
 
-# Pre-flight: require root/sudo
-if [[ $EUID -ne 0 ]]; then
-  echo "Please run as root or with sudo."
-  exit 1
+# --- 1. VISUAL STYLING ---
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+YELLOW='\033[1;33m'
+WHITE='\033[1;37m'
+NC='\033[0m' # No Color
+
+# --- 2. HEADER ---
+clear
+echo -e "${BLUE}===================================================================${NC}"
+echo -e "${CYAN}             CLOUDFLARE TUNNEL (CLOUDFLARED) SETUP         ${NC}"
+echo -e "${BLUE}===================================================================${NC}"
+echo ""
+
+# --- 3. ROOT CHECK ---
+if [ "$EUID" -ne 0 ]; then
+    echo -e "${RED}[ERROR]${NC} Please run as root (use sudo)."
+    exit 1
 fi
 
-echo "Detecting OS family..."
+# --- 4. OS DETECTION ---
+echo -e "${CYAN}[INFO]${NC} Detecting Operating System..."
 OS_FAMILY=""
-if command -v apt-get >/dev/null 2>&1; then
-  OS_FAMILY="debian"
-elif command -v dnf >/dev/null 2>&1; then
-  OS_FAMILY="dnf"
-elif command -v yum >/dev/null 2>&1; then
-  OS_FAMILY="yum"
+if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    case "$ID" in
+        debian|ubuntu|kali|linuxmint|pop)
+            OS_FAMILY="debian" ;;
+        fedora|rhel|centos|rocky|almalinux)
+            OS_FAMILY="rhel" ;;
+        arch|manjaro)
+            OS_FAMILY="arch" ;;
+        alpine)
+            OS_FAMILY="alpine" ;;
+        *)
+            echo -e "${RED}[ERROR]${NC} Unsupported OS: $ID"
+            exit 1 ;;
+    esac
+    echo -e "${GREEN}[OK]${NC} Detected: $ID ($OS_FAMILY)"
 else
-  echo "Unsupported system: need apt, dnf, or yum."
-  exit 2
+    echo -e "${RED}[ERROR]${NC} Could not detect OS."
+    exit 1
 fi
+
+# --- 5. INSTALLATION FUNCTIONS ---
 
 install_debian() {
-  echo "Installing cloudflared on Debian/Ubuntu..."
-  mkdir -p --mode=0755 /usr/share/keyrings
-  curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg \
-    | tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
+    echo -e "${CYAN}[INFO]${NC} Setting up Cloudflare repository..."
+    mkdir -p --mode=0755 /usr/share/keyrings
+    curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
 
-  echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main" \
-    | tee /etc/apt/sources.list.d/cloudflared.list
+    echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main" | tee /etc/apt/sources.list.d/cloudflared.list >/dev/null
 
-  apt-get update
-  DEBIAN_FRONTEND=noninteractive apt-get install -y cloudflared
+    echo -e "${CYAN}[INFO]${NC} Installing cloudflared..."
+    apt-get update -q
+    apt-get install -y cloudflared -q
 }
 
-install_yum_like() {
-  # Works for RHEL/CentOS/Alma/Rocky/Fedora (dnf or yum)
-  echo "Installing cloudflared on RHEL/CentOS/Alma/Rocky/Fedora..."
-  curl -fsSL https://pkg.cloudflare.com/cloudflared-ascii.repo \
-    | tee /etc/yum.repos.d/cloudflared.repo >/dev/null
+install_rhel() {
+    echo -e "${CYAN}[INFO]${NC} Setting up Cloudflare repository..."
+    curl -fsSL https://pkg.cloudflare.com/cloudflared-ascii.repo | tee /etc/yum.repos.d/cloudflared.repo >/dev/null
 
-  if [[ "$OS_FAMILY" == "dnf" ]]; then
-    dnf -y makecache
-    dnf -y install cloudflared
-  else
-    yum -y makecache
-    yum -y install cloudflared
-  fi
+    echo -e "${CYAN}[INFO]${NC} Installing cloudflared..."
+    if command -v dnf >/dev/null; then
+        dnf install -y cloudflared -q
+    else
+        yum install -y cloudflared -q
+    fi
 }
 
-case "$OS_FAMILY" in
-  debian) install_debian ;;
-  dnf|yum) install_yum_like ;;
-esac
+install_arch() {
+    echo -e "${CYAN}[INFO]${NC} Installing cloudflared via Pacman..."
+    pacman -S --noconfirm cloudflared
+}
 
-echo
-echo "cloudflared installed."
-echo
-echo "NEXT STEP:"
-echo "1) In Cloudflare Zero Trust, go to: Networks > Tunnels, select your tunnel, click Edit."
-echo "2) Copy the token."
-echo "3) Run the following command on this host (replace {token}):"
-echo "   sudo cloudflared service install {token}"
-echo
-echo "Optional checks:"
-echo "- Version: cloudflared --version"
-echo "- Status (after install): systemctl status cloudflared"
-echo "- Logs: journalctl -u cloudflared -f"
+install_alpine() {
+    echo -e "${CYAN}[INFO]${NC} Installing cloudflared via APK..."
+    # Cloudflared is in the community repo
+    apk update
+    apk add cloudflared
+}
+
+# --- 6. EXECUTE INSTALL ---
+
+# Check if already installed
+if command -v cloudflared &> /dev/null; then
+    echo -e "${YELLOW}[WARN]${NC} 'cloudflared' is already installed."
+    read -p "Re-install/Update? (y/N): " reinstall
+    if [[ "$reinstall" =~ ^[Yy]$ ]]; then
+        case "$OS_FAMILY" in
+            debian) install_debian ;;
+            rhel)   install_rhel ;;
+            arch)   install_arch ;;
+            alpine) install_alpine ;;
+        esac
+    fi
+else
+    # Install
+    case "$OS_FAMILY" in
+        debian) install_debian ;;
+        rhel)   install_rhel ;;
+        arch)   install_arch ;;
+        alpine) install_alpine ;;
+    esac
+fi
+
+# Verify Installation
+if ! command -v cloudflared &> /dev/null; then
+    echo -e "${RED}[ERROR]${NC} Installation failed. 'cloudflared' binary not found."
+    exit 1
+fi
+echo -e "${GREEN}[SUCCESS]${NC} Cloudflared installed successfully."
+
+# --- 7. TOKEN CONFIGURATION ---
+echo ""
+echo -e "${WHITE}--- TUNNEL CONFIGURATION ---${NC}"
+echo "1. Go to Cloudflare Zero Trust Dashboard > Networks > Tunnels"
+echo "2. Create a new tunnel (or select existing) and click 'Configure'"
+echo "3. Copy the token (it looks like a long base64 string)"
+echo ""
+
+read -p "Paste your Tunnel Token (or press Enter to skip): " CF_TOKEN
+
+if [ -n "$CF_TOKEN" ]; then
+    echo -e "\n${CYAN}[INFO]${NC} Installing system service..."
+    
+    # Run the service install command
+    cloudflared service install "$CF_TOKEN"
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}[SUCCESS]${NC} Service installed and started."
+        echo -e "Check status with: ${YELLOW}systemctl status cloudflared${NC}"
+    else
+        echo -e "${RED}[ERROR]${NC} Failed to install service. Check the token and try again."
+    fi
+else
+    echo -e "${YELLOW}[SKIP]${NC} No token provided."
+    echo "You can configure it later using:"
+    echo "sudo cloudflared service install <token>"
+fi
+
+echo ""
+read -p "Press [Enter] to finish..."
