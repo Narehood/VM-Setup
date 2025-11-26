@@ -48,7 +48,7 @@ show_header() {
     echo -e "${BLUE}╚██╗ ██╔╝██║╚██╔╝██║    ╚════██║██╔══╝     ██║   ██║   ██║██╔═══╝ ${NC}"
     echo -e "${BLUE} ╚████╔╝ ██║ ╚═╝ ██║    ███████║███████╗   ██║   ╚██████╔╝██║     ${NC}"
     echo -e "${BLUE}  ╚═══╝  ╚═╝     ╚═╝    ╚══════╝╚══════╝   ╚═╝    ╚═════╝ ╚═╝     ${NC}"
-    print_centered "VERSION 3.0.1  |  BY: MICHAEL NAREHOOD" "$CYAN"
+    print_centered "VERSION 3.1.0  |  BY: MICHAEL NAREHOOD" "$CYAN"
     print_line "=" "$BLUE"
 }
 
@@ -109,18 +109,20 @@ show_stats() {
     printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "Hostname" "$HOSTNAME" "Gateway" "${GATEWAY:-N/A}"
     print_line "-" "$BLUE"
     printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "CPU Usage" "$CPU_LOAD" "Memory" "$MEM_USAGE"
-    # Left Disk Usage alone on the bottom row or could duplicate Memory visual if wanted
     printf "  ${YELLOW}%-11s${NC} : %-20s\n" "Disk Usage" "$DISK_USAGE" 
     print_line "=" "$BLUE"
 }
 
 check_for_updates() {
+    # Clear screen if running at startup
     echo -e "\n${CYAN}[INFO]${NC} Checking for updates..."
     git fetch
+    
     LOCAL=$(git rev-parse @)
+    # Gracefully handle detached head or no upstream
     if ! REMOTE=$(git rev-parse @{u} 2>/dev/null); then
-        echo -e "${RED}[ERROR]${NC} No upstream branch configured."
-        pause
+        echo -e "${RED}[ERROR]${NC} No upstream branch configured. Skipping update check."
+        sleep 2
         return
     fi
 
@@ -154,6 +156,11 @@ execute_installerScript() {
     fi
     pause
 }
+
+# --- INITIAL UPDATE CHECK ---
+# Clear screen to make the update check look intentional on startup
+clear
+check_for_updates
 
 # --- MAIN LOOP ---
 while true; do
