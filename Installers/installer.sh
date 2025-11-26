@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# --- 1. DIRECTORY ANCHOR ---
+# DIRECTORY ANCHOR
 SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 cd "$SCRIPT_DIR" || { echo "Failed to change directory to $SCRIPT_DIR"; exit 1; }
 
-# --- 2. VISUAL STYLING ---
+# VISUAL STYLING
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -53,7 +53,7 @@ show_header() {
 }
 
 show_stats() {
-    # --- DATA COLLECTION ---
+    # DATA COLLECTION
     
     # OS Detection
     if [ -f /etc/os-release ]; then
@@ -92,7 +92,7 @@ show_stats() {
     GATEWAY=$(ip route | grep default | awk '{print $3}' | head -n 1)
     if [ ${#GATEWAY} -gt 15 ]; then GATEWAY="${GATEWAY:0:13}.."; fi
 
-    # --- DISPLAY GRID ---
+    # DISPLAY GRID
     echo -e "${WHITE}SYSTEM INFORMATION${NC}"
     
     printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "OS" "$DISTRO" "IP Address" "${IP_ADDR:-N/A}"
@@ -128,7 +128,7 @@ execute_installerScript() {
     fi
 }
 
-# --- MAIN LOOP ---
+# MAIN LOOP
 while true; do
     show_header
     show_stats
