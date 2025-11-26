@@ -135,21 +135,23 @@ while true; do
     
     echo -e "${WHITE}AVAILABLE INSTALLERS${NC}"
     
-    # Using printf for consistent 2-column layout
     # Column width 33 to split the 66 width UI
-    printf "  ${CYAN}1.${NC} %-33s ${CYAN}3.${NC} %s\n" "WordPress" "UniFi Controller"
-    printf "  ${CYAN}2.${NC} %-33s ${CYAN}4.${NC} %s\n" "Xen Orchestra" "CloudFlare Tunnels"
+    printf "  ${CYAN}1.${NC} %-33s ${CYAN}4.${NC} %s\n" "WordPress" "CloudFlare Tunnels"
+    printf "  ${CYAN}2.${NC} %-33s ${CYAN}5.${NC} %s\n" "Xen Orchestra" "Pangolin Tunnel"
+    printf "  ${CYAN}3.${NC} %-33s ${CYAN}6.${NC} %s\n" "UniFi Controller" "Newt VPN Node"
     printf "  ${CYAN}9.${NC} ${RED}%s${NC}\n" "Return to Main Menu"
     
     echo ""
     print_line "-" "$BLUE"
-    read -p "  Enter selection [1-4, 9]: " choice
+    read -p "  Enter selection [1-6, 9]: " choice
 
     case $choice in
         1) execute_installerScript "WordPress.sh" ;;
         2) execute_installerScript "XenOrchestra.sh" ;;
         3) execute_installerScript "UniFi-Controller.sh" ;;
         4) execute_installerScript "CloudFlare-Tunnels.sh" ;;
+        5) execute_installerScript "Pangolin.sh" ;;
+        6) execute_installerScript "newt.sh" ;;
         9) 
             echo -e "\n${GREEN}Returning to Main Menu...${NC}"
             exit 0 
