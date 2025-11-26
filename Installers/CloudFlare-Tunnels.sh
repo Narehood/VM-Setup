@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# --- 1. VISUAL STYLING ---
+# VISUAL STYLING
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -9,20 +9,20 @@ YELLOW='\033[1;33m'
 WHITE='\033[1;37m'
 NC='\033[0m' # No Color
 
-# --- 2. HEADER ---
+# HEADER
 clear
 echo -e "${BLUE}===================================================================${NC}"
 echo -e "${CYAN}             CLOUDFLARE TUNNEL (CLOUDFLARED) SETUP         ${NC}"
 echo -e "${BLUE}===================================================================${NC}"
 echo ""
 
-# --- 3. ROOT CHECK ---
+# ROOT CHECK
 if [ "$EUID" -ne 0 ]; then
     echo -e "${RED}[ERROR]${NC} Please run as root (use sudo)."
     exit 1
 fi
 
-# --- 4. OS DETECTION ---
+# OS DETECTION
 echo -e "${CYAN}[INFO]${NC} Detecting Operating System..."
 OS_FAMILY=""
 if [ -f /etc/os-release ]; then
@@ -46,7 +46,7 @@ else
     exit 1
 fi
 
-# --- 5. INSTALLATION FUNCTIONS ---
+# INSTALLATION FUNCTIONS
 
 install_debian() {
     echo -e "${CYAN}[INFO]${NC} Setting up Cloudflare repository..."
@@ -84,7 +84,7 @@ install_alpine() {
     apk add cloudflared
 }
 
-# --- 6. EXECUTE INSTALL ---
+# EXECUTE INSTALL
 
 # Check if already installed
 if command -v cloudflared &> /dev/null; then
@@ -115,7 +115,7 @@ if ! command -v cloudflared &> /dev/null; then
 fi
 echo -e "${GREEN}[SUCCESS]${NC} Cloudflared installed successfully."
 
-# --- 7. TOKEN CONFIGURATION ---
+# TOKEN CONFIGURATION
 echo ""
 echo -e "${WHITE}--- TUNNEL CONFIGURATION ---${NC}"
 echo "1. Go to Cloudflare Zero Trust Dashboard > Networks > Tunnels"
