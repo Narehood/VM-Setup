@@ -48,7 +48,7 @@ show_header() {
     echo -e "${BLUE}╚██╗ ██╔╝██║╚██╔╝██║    ╚════██║██╔══╝     ██║   ██║   ██║██╔═══╝ ${NC}"
     echo -e "${BLUE} ╚████╔╝ ██║ ╚═╝ ██║    ███████║███████╗   ██║   ╚██████╔╝██║     ${NC}"
     echo -e "${BLUE}  ╚═══╝  ╚═╝     ╚═╝    ╚══════╝╚══════╝   ╚═╝    ╚═════╝ ╚═╝     ${NC}"
-    print_centered "VERSION 3.0.0  |  BY: MICHAEL NAREHOOD" "$CYAN"
+    print_centered "VERSION 3.0.1  |  BY: MICHAEL NAREHOOD" "$CYAN"
     print_line "=" "$BLUE"
 }
 
