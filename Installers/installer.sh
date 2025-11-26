@@ -151,7 +151,7 @@ while true; do
         3) execute_installerScript "UniFi-Controller.sh" ;;
         4) execute_installerScript "CloudFlare-Tunnels.sh" ;;
         5) execute_installerScript "Pangolin.sh" ;;
-        6) execute_installerScript "newt.sh" ;;
+        6) execute_installerScript "Newt.sh" ;;
         9) 
             echo -e "\n${GREEN}Returning to Main Menu...${NC}"
             exit 0 
