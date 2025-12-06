@@ -93,7 +93,6 @@ This project utilizes and wraps several excellent community scripts:
 
 *   **UniFi Controller**: [GlennR](https://glennr.nl/s/unifi-network-controller)
 *   **Xen Orchestra**: [Ronivay](https://github.com/ronivay/XenOrchestraInstallerUpdater)
-*   **Pterodactyl**: [Pterodactyl-Installer](https://github.com/pterodactyl-installer/pterodactyl-installer)
 *   **LinUtil**: [Chris Titus Tech](https://github.com/ChrisTitusTech/linutil)
 
 ---
@@ -101,3 +100,4 @@ This project utilizes and wraps several excellent community scripts:
 <div align="center">
   <p><i>You are free to use and modify this script as you wish. <br>Bug reports are welcome, but fixes are not guaranteed.</i></p>
 </div>
+
