@@ -58,7 +58,7 @@ confirm_prompt() {
     local prompt="$1"
     local default="${2:-n}"
     local response
-    
+
     read -rp "$prompt" response
     response="${response:-$default}"
     [[ "$response" =~ ^[Yy]$ ]]
@@ -84,6 +84,10 @@ truncate_string() {
     else
         echo "$str"
     fi
+}
+
+get_current_branch() {
+    git branch --show-current 2>/dev/null || echo "unknown"
 }
 
 show_stats() {
@@ -120,7 +124,7 @@ show_stats() {
         fi
     fi
 
-    # Load average (more accurate than instantaneous CPU calc)
+    # Load average
     local cpu_load="Unknown"
     if [ -f /proc/loadavg ]; then
         cpu_load=$(awk '{printf "%.2f (1m avg)", $1}' /proc/loadavg)
@@ -157,6 +161,10 @@ show_stats() {
         gateway=$(truncate_string "${gateway:-N/A}" 15)
     fi
 
+    # Current branch
+    local current_branch
+    current_branch=$(truncate_string "$(get_current_branch)" 20)
+
     # Display
     echo -e "${WHITE}SYSTEM INFORMATION${NC}"
     printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "OS" "$distro" "IP Address" "${ip_addr:-N/A}"
@@ -165,6 +173,8 @@ show_stats() {
     print_line "-" "$BLUE"
     printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "Load Avg" "$cpu_load" "Memory" "$mem_usage"
     printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "Disk Usage" "$disk_usage" "Uptime" "$uptime_str"
+    print_line "-" "$BLUE"
+    printf "  ${YELLOW}%-11s${NC} : %-20s\n" "Branch" "$current_branch"
     print_line "=" "$BLUE"
 }
 
@@ -220,6 +230,146 @@ check_for_updates() {
     fi
 }
 
+switch_branch() {
+    clear
+    print_line "=" "$BLUE"
+    print_centered "SWITCH BRANCH" "$WHITE"
+    print_line "=" "$BLUE"
+    echo ""
+
+    if ! command -v git >/dev/null 2>&1; then
+        print_error "Git is not installed."
+        pause
+        return 1
+    fi
+
+    if [ ! -d "$SCRIPT_DIR/.git" ]; then
+        print_error "Not a git repository."
+        pause
+        return 1
+    fi
+
+    # Fetch latest branch info
+    print_status "Fetching branch information..."
+    if ! git fetch --all --quiet 2>/dev/null; then
+        print_warn "Could not fetch from remote. Showing local branches only."
+    fi
+
+    # Get current branch
+    local current_branch
+    current_branch=$(get_current_branch)
+    echo -e "  Current branch: ${GREEN}$current_branch${NC}"
+    echo ""
+
+    # Get all branches (local and remote)
+    local branches=()
+    local branch_display=()
+
+    # Local branches
+    while IFS= read -r branch; do
+        branch="${branch#\* }"  # Remove asterisk from current branch
+        branch="${branch// /}"  # Trim whitespace
+        if [ -n "$branch" ]; then
+            branches+=("$branch")
+            if [ "$branch" = "$current_branch" ]; then
+                branch_display+=("$branch (current)")
+            else
+                branch_display+=("$branch")
+            fi
+        fi
+    done < <(git branch 2>/dev/null)
+
+    # Remote branches (exclude HEAD and already-local branches)
+    while IFS= read -r branch; do
+        branch="${branch// /}"
+        branch="${branch#origin/}"
+        # Skip HEAD and branches we already have locally
+        if [ -n "$branch" ] && [ "$branch" != "HEAD" ]; then
+            local is_local="false"
+            for local_branch in "${branches[@]}"; do
+                if [ "$local_branch" = "$branch" ]; then
+                    is_local="true"
+                    break
+                fi
+            done
+            if [ "$is_local" = "false" ]; then
+                branches+=("$branch")
+                branch_display+=("$branch (remote)")
+            fi
+        fi
+    done < <(git branch -r 2>/dev/null | grep -v '\->')
+
+    if [ ${#branches[@]} -eq 0 ]; then
+        print_error "No branches found."
+        pause
+        return 1
+    fi
+
+    # Display branches
+    echo -e "  ${WHITE}Available Branches:${NC}"
+    echo ""
+    local i=1
+    for display in "${branch_display[@]}"; do
+        printf "    ${CYAN}%2d.${NC} %s\n" "$i" "$display"
+        ((i++))
+    done
+    echo ""
+    printf "    ${CYAN} 0.${NC} Cancel\n"
+    echo ""
+    print_line "-" "$BLUE"
+
+    read -rp "  Select branch [0-$((${#branches[@]}))] : " selection
+
+    # Validate input
+    if [ "$selection" = "0" ] || [ -z "$selection" ]; then
+        print_status "Cancelled."
+        sleep 1
+        return 0
+    fi
+
+    if ! [[ "$selection" =~ ^[0-9]+$ ]] || [ "$selection" -lt 1 ] || [ "$selection" -gt ${#branches[@]} ]; then
+        print_error "Invalid selection."
+        sleep 1
+        return 1
+    fi
+
+    local selected_branch="${branches[$((selection - 1))]}"
+
+    if [ "$selected_branch" = "$current_branch" ]; then
+        print_status "Already on branch '$selected_branch'."
+        sleep 1
+        return 0
+    fi
+
+    # Check for uncommitted changes
+    if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
+        print_warn "You have uncommitted changes."
+        if ! confirm_prompt "  Discard changes and switch? (y/N): " "n"; then
+            print_status "Cancelled."
+            sleep 1
+            return 0
+        fi
+        git reset --hard HEAD >/dev/null 2>&1
+    fi
+
+    echo ""
+    print_status "Switching to branch '$selected_branch'..."
+
+    if git checkout "$selected_branch" 2>/dev/null; then
+        # Pull latest changes for this branch
+        print_status "Pulling latest changes..."
+        git pull --quiet 2>/dev/null || true
+
+        print_success "Switched to '$selected_branch'. Restarting menu..."
+        sleep 1
+        exec bash "$SCRIPT_PATH"
+    else
+        print_error "Failed to switch branch."
+        pause
+        return 1
+    fi
+}
+
 execute_script() {
     local script_name="$1"
     local full_path="$SCRIPT_DIR/Installers/$script_name"
@@ -266,10 +416,12 @@ show_help() {
     echo -e "    ${CYAN}5${NC} - Run full system update"
     echo -e "    ${CYAN}6${NC} - Check for and apply menu updates"
     echo -e "    ${CYAN}7${NC} - Launch LinUtil utility"
-    echo -e "    ${CYAN}8${NC} - Display this help screen"
+    echo -e "    ${CYAN}8${NC} - Switch to a different branch (dev/testing)"
+    echo -e "    ${CYAN}9${NC} - Display this help screen"
     echo -e "    ${CYAN}0${NC} - Exit the menu"
     echo ""
     echo -e "  ${YELLOW}Location:${NC} $SCRIPT_DIR"
+    echo -e "  ${YELLOW}Branch:${NC}   $(get_current_branch)"
     echo ""
     print_line "=" "$BLUE"
     pause
@@ -288,12 +440,12 @@ while true; do
     printf "  ${CYAN}1.${NC} %-33s ${CYAN}5.${NC} %s\n" "Server Initial Config" "Run System Updates"
     printf "  ${CYAN}2.${NC} %-33s ${CYAN}6.${NC} %s\n" "Application Installers" "Update This Menu"
     printf "  ${CYAN}3.${NC} %-33s ${CYAN}7.${NC} %s\n" "Docker Host Preparation" "Launch LinUtil"
-    printf "  ${CYAN}4.${NC} %-33s ${CYAN}8.${NC} %s\n" "Auto Security Patches" "Help / About"
+    printf "  ${CYAN}4.${NC} %-33s ${CYAN}8.${NC} %s\n" "Auto Security Patches" "Switch Branch"
     echo ""
-    printf "  ${CYAN}0.${NC} ${RED}%s${NC}\n" "Exit"
+    printf "  ${CYAN}9.${NC} %-33s ${CYAN}0.${NC} ${RED}%s${NC}\n" "Help / About" "Exit"
     echo ""
     print_line "-" "$BLUE"
-    read -rp "  Enter selection [0-8]: " choice
+    read -rp "  Enter selection [0-9]: " choice
 
     case "$choice" in
         1) execute_script "serverSetup.sh" ;;
@@ -303,9 +455,10 @@ while true; do
         5) execute_script "systemUpdate.sh" ;;
         6) check_for_updates ;;
         7) execute_script "linutil.sh" ;;
-        8|h|help) show_help ;;
+        8) switch_branch ;;
+        9|h|help) show_help ;;
         0|q|exit) echo -e "\n${GREEN}Goodbye!${NC}"; exit 0 ;;
-        "") ;; # Ignore empty input, just refresh
+        "") ;;
         *) print_error "Invalid option: $choice"; sleep 1 ;;
     esac
 done
