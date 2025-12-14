@@ -139,8 +139,6 @@ update_system() {
 }
 
 prompt_reboot() {
-    check_reboot_required
-    
     if [ "$NEEDS_REBOOT" == "true" ]; then
         echo ""
         print_warn "A system reboot is recommended to apply all updates."
@@ -160,4 +158,5 @@ prompt_reboot() {
 
 check_root
 update_system
+check_reboot_required
 prompt_reboot
