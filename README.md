@@ -94,7 +94,10 @@ This project utilizes and wraps several excellent community scripts:
 
 <div align="center">
 
+
+*Licensed under the [MIT License](https://github.com/Narehood/Docker-Prep/blob/main/LICENSE).*<br>
 *You are free to use and modify this script as you wish.*<br>
 *Bug reports are welcome, but fixes are not guaranteed.*
 
 </div>
+
