@@ -98,6 +98,43 @@ is_root() {
     [ "$EUID" -eq 0 ]
 }
 
+# fix_permissions sets the executable bit on all .sh files in Installers/ and returns the count of files fixed.
+# When called with "silent" as the first argument, it suppresses output.
+fix_permissions() {
+    local silent="${1:-}"
+    local installers_dir="$SCRIPT_DIR/Installers"
+    local fixed=0
+    local total=0
+
+    if [ ! -d "$installers_dir" ]; then
+        [ "$silent" != "silent" ] && print_error "Installers directory not found."
+        return 1
+    fi
+
+    while IFS= read -r -d '' script; do
+        ((total++))
+        if [ ! -x "$script" ]; then
+            if chmod +x "$script" 2>/dev/null; then
+                ((fixed++))
+                [ "$silent" != "silent" ] && print_success "Fixed: $(basename "$script")"
+            else
+                [ "$silent" != "silent" ] && print_error "Failed: $(basename "$script")"
+            fi
+        fi
+    done < <(find "$installers_dir" -maxdepth 1 -name "*.sh" -type f -print0 2>/dev/null)
+
+    if [ "$silent" != "silent" ]; then
+        echo ""
+        if [ $fixed -eq 0 ]; then
+            print_success "All $total scripts already have correct permissions."
+        else
+            print_success "Fixed permissions on $fixed of $total scripts."
+        fi
+    fi
+
+    return 0
+}
+
 # show_header clears the terminal and displays the ASCII banner, a centered version/author line, and a separator line.
 show_header() {
     clear
@@ -484,17 +521,12 @@ switch_branch() {
     exec bash "$SCRIPT_PATH"
 }
 
-# Parse script metadata from header comments
-# Expected format in installer scripts:
-#   # REQUIRES_ROOT: true
 # parse_script_metadata extracts the value for a metadata `KEY` from the first 20 lines of a script's header (lines formatted as `# KEY: value`), matching the key case-insensitively and echoes the value or an empty string if not found.
-# Arguments: 1) path to the script file, 2) metadata key to look up.
 parse_script_metadata() {
     local script_path="$1"
     local key="$2"
     local value=""
 
-    # Read first 20 lines for metadata
     value=$(head -n 20 "$script_path" 2>/dev/null | grep -i "^# *${key}:" | head -n 1 | sed "s/^# *${key}: *//i")
     echo "$value"
 }
@@ -506,7 +538,6 @@ verify_script_checksum() {
     script_name=$(basename "$script_path")
 
     if [ ! -f "$CHECKSUM_FILE" ]; then
-        # No checksum file, skip verification
         return 0
     fi
 
@@ -560,7 +591,6 @@ generate_checksums() {
 
     print_status "Generating checksums for installer scripts..."
 
-    # Create/overwrite checksum file
     : > "$CHECKSUM_FILE"
 
     local count=0
@@ -582,28 +612,25 @@ generate_checksums() {
     return 0
 }
 
-# execute_script executes an installer script from Installers/, verifying existence, readability, file type and checksum, offering to set the executable bit, honoring REQUIRES_ROOT metadata (with an option to run via sudo), showing DESCRIPTION if present, and running the script — it exits with the script's exit code.
+# execute_script executes an installer script from Installers/, verifying existence, readability, file type and checksum, honoring REQUIRES_ROOT metadata (with an option to run via sudo), showing DESCRIPTION if present, and running the script.
 execute_script() {
     local script_name="$1"
     local full_path="$SCRIPT_DIR/Installers/$script_name"
 
     echo ""
 
-    # Check if script exists
     if [ ! -f "$full_path" ]; then
         print_error "Script not found: $full_path"
         pause
         return 1
     fi
 
-    # Check if script is readable
     if [ ! -r "$full_path" ]; then
         print_error "Script not readable: $full_path"
         pause
         return 1
     fi
 
-    # Verify it's actually a shell script
     local file_type
     file_type=$(file -b "$full_path" 2>/dev/null || echo "unknown")
     if [[ ! "$file_type" =~ (shell|bash|sh|text|ASCII) ]]; then
@@ -612,41 +639,25 @@ execute_script() {
         return 1
     fi
 
-    # Verify checksum if available
     if ! verify_script_checksum "$full_path"; then
         print_error "Script verification failed. Aborting."
         pause
         return 1
     fi
 
-    # Check if script is executable, offer to fix if not
-    if [ ! -x "$full_path" ]; then
-        print_warn "Script is not executable: $script_name"
-        if confirm_prompt "  Make it executable? (Y/n): " "y"; then
-            if chmod +x "$full_path"; then
-                print_success "Made script executable."
-            else
-                print_error "Failed to make script executable."
-                pause
-                return 1
-            fi
-        else
-            print_status "Running with bash directly..."
-        fi
-    fi
+    # Silently fix permissions if needed (already handled at startup, but just in case)
+    [ ! -x "$full_path" ] && chmod +x "$full_path" 2>/dev/null || true
 
     # Parse script metadata for root requirement
     local requires_root
     requires_root=$(parse_script_metadata "$full_path" "REQUIRES_ROOT")
 
-    # If no metadata, check for common root indicators
     if [ -z "$requires_root" ]; then
         if grep -qE '^\s*(sudo|apt|dnf|yum|pacman|zypper|systemctl|hostnamectl|usermod|chmod|chown)\s' "$full_path" 2>/dev/null; then
             requires_root="true"
         fi
     fi
 
-    # Handle root requirement
     if [ "$requires_root" = "true" ]; then
         if ! is_root; then
             print_warn "This script requires root privileges."
@@ -688,7 +699,6 @@ execute_script() {
         fi
     fi
 
-    # Show script description if available
     local description
     description=$(parse_script_metadata "$full_path" "DESCRIPTION")
     if [ -n "$description" ]; then
@@ -736,8 +746,9 @@ show_help() {
     echo -e "    ${CYAN}# REQUIRES_ROOT: true${NC} - Script needs root privileges"
     echo -e "    ${CYAN}# DESCRIPTION: text${NC}  - Brief script description"
     echo ""
-    echo -e "  ${YELLOW}Security:${NC}"
-    echo -e "    Run '${CYAN}generate-checksums${NC}' to create integrity hashes"
+    echo -e "  ${YELLOW}Hidden Commands:${NC}"
+    echo -e "    ${CYAN}generate-checksums${NC}  - Create integrity hashes for scripts"
+    echo -e "    ${CYAN}fix-permissions${NC}     - Fix executable bit on all scripts"
     echo ""
     echo -e "  ${YELLOW}Location:${NC} $SCRIPT_DIR"
     echo -e "  ${YELLOW}Branch:${NC}   $(get_current_branch)"
@@ -746,8 +757,13 @@ show_help() {
     pause
 }
 
-# --- INITIAL UPDATE CHECK ---
+# --- STARTUP TASKS ---
 clear
+
+# Fix permissions silently on startup
+fix_permissions silent
+
+# Check for updates
 check_for_updates
 
 # --- MAIN LOOP ---
@@ -778,6 +794,7 @@ while true; do
         9|h|help) show_help ;;
         0|q|exit) echo -e "\n${GREEN}Goodbye!${NC}"; exit 0 ;;
         generate-checksums) generate_checksums; pause ;;
+        fix-permissions) fix_permissions; pause ;;
         "") ;;
         *) print_error "Invalid option: $choice"; sleep 1 ;;
     esac
