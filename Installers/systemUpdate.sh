@@ -1,33 +1,91 @@
 #!/bin/bash
+set -euo pipefail
 
-# Function to display messages with color
+# --- UI & FORMATTING ---
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[1;34m'
+NC='\033[0m'
+
+# print_status prints an informational message prefixed with a blue [INFO] tag to stdout.
 print_status() {
-    echo -e "\033[1;34m[INFO]\033[0m $1"
+    echo -e "${BLUE}[INFO]${NC} $1"
 }
 
+# print_success prints the given message to stdout prefixed with "[SUCCESS]" in green.
 print_success() {
-    echo -e "\033[0;32m[SUCCESS]\033[0m $1"
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
 }
 
+# print_warn prints a warning message prefixed with "[WARN]" in yellow.
+print_warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
+}
+
+# print_error prints an error message prefixed with `[ERROR]` in red and resets terminal color.
 print_error() {
-    echo -e "\033[0;31m[ERROR]\033[0m $1"
+    echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Function to detect the OS
+# --- CORE LOGIC ---
+
+OS=""
+NEEDS_REBOOT="false"
+
+# check_root verifies the script is running as root; if not, it prints an error and exits with status 1.
+check_root() {
+    if [[ $EUID -ne 0 ]]; then
+        print_error "This script requires root privileges. Run with sudo."
+        exit 1
+    fi
+}
+
+# detect_os determines the current operating system identifier and stores it in the global `OS` variable (preferring `/etc/os-release`'s `ID`, then common distro files, then `uname -s`).
 detect_os() {
     if [ -f /etc/os-release ]; then
         . /etc/os-release
-        OS=$ID
+        OS="$ID"
     elif [ -f /etc/redhat-release ]; then
         OS="redhat"
     elif [ -f /etc/debian_version ]; then
         OS="debian"
     else
-        OS=$(uname -s)
+        OS=$(uname -s | tr '[:upper:]' '[:lower:]')
     fi
 }
 
-# Function to update existing packages and clean up
+# check_reboot_required detects per-distribution reboot indicators and sets NEEDS_REBOOT="true" when a reboot is required; otherwise it leaves NEEDS_REBOOT unchanged.
+check_reboot_required() {
+    case "$OS" in
+        ubuntu|debian|linuxmint|kali)
+            if [ -f /var/run/reboot-required ]; then
+                NEEDS_REBOOT="true"
+            fi
+            ;;
+        fedora|redhat|centos|rocky|almalinux)
+            if command -v needs-restarting >/dev/null 2>&1; then
+                if needs-restarting -r >/dev/null 2>&1; then
+                    NEEDS_REBOOT="false"
+                else
+                    NEEDS_REBOOT="true"
+                fi
+            fi
+            ;;
+        arch|manjaro)
+            # Check if running kernel differs from installed kernel
+            RUNNING=$(uname -r)
+            INSTALLED=$(pacman -Q linux 2>/dev/null | awk '{print $2}' || true)
+            if [ -n "$INSTALLED" ] && [[ ! "$RUNNING" =~ ${INSTALLED%%-*} ]]; then
+                NEEDS_REBOOT="true"
+            fi
+            ;;
+    esac
+}
+
+# update_system detects the current distribution and updates, upgrades, and cleans packages using the distribution's package manager.
+# It prints progress messages and exits with status 1 if the detected OS is unsupported.
 update_system() {
     detect_os
     print_status "Detected OS: $OS"
@@ -35,66 +93,81 @@ update_system() {
 
     case "$OS" in
         ubuntu|debian|linuxmint|kali)
-            # update: syncs repos
-            # upgrade: installs newer versions
-            # autoremove: removes dependencies that are no longer needed
-            sudo apt update -y && \
-            sudo apt upgrade -y && \
-            sudo apt autoremove -y && \
-            sudo apt clean
+            apt update
+            apt upgrade -y
+            apt autoremove -y
+            apt clean
             ;;
-            
+
         fedora|redhat|centos|rocky|almalinux)
-            # --refresh: forces metadata update before the transaction
-            sudo dnf upgrade --refresh -y && \
-            sudo dnf autoremove -y && \
-            sudo dnf clean all
+            dnf upgrade --refresh -y
+            dnf autoremove -y
+            dnf clean all
             ;;
-            
-        arch|manjaro)
-            # Arch Update Logic:
-            # 1. Update Keyring first to prevent signature errors on stale VMs
-            # 2. Perform full system upgrade
-            # 3. Clean pacman cache (keep installed headers, remove uninstalled)
-            print_status "Refreshing Arch Keyring..."
-            sudo pacman -Sy --noconfirm archlinux-keyring
-            
-            print_status "Performing System Upgrade..."
-            sudo pacman -Su --noconfirm
-            
-            # Optional: Clean cache (requires 'pacman-contrib' usually, so we use built-in cleaning)
-            # -Sc removes packages from cache that are not currently installed
-            echo "Cleaning package cache..."
-            echo "y" | sudo pacman -Sc
+
+        arch)
+            print_status "Refreshing Arch keyring..."
+            pacman -Sy --noconfirm archlinux-keyring
+
+            print_status "Performing system upgrade..."
+            pacman -Su --noconfirm
+
+            print_status "Cleaning package cache..."
+            pacman -Sc --noconfirm
             ;;
-            
+
+        manjaro)
+            print_status "Refreshing Manjaro keyring..."
+            pacman -Sy --noconfirm manjaro-keyring archlinux-keyring
+
+            print_status "Performing system upgrade..."
+            pacman -Su --noconfirm
+
+            print_status "Cleaning package cache..."
+            pacman -Sc --noconfirm
+            ;;
+
         suse|opensuse*|sles)
-            sudo zypper refresh && \
-            sudo zypper update -y && \
-            sudo zypper clean -a
+            zypper refresh
+            zypper update -y
+            zypper clean -a
             ;;
-            
+
         alpine)
-            # Alpine uses apk. 
-            # We do not use 'cache clean' as Alpine doesn't cache packages by default 
-            # unless explicitly configured in /etc/apk/repositories local cache.
-            sudo apk update && \
-            sudo apk upgrade
+            apk update
+            apk upgrade
             ;;
-            
+
         *)
             print_error "Unsupported system ($OS). Exiting."
             exit 1
             ;;
     esac
 
-    if [ $? -eq 0 ]; then
-        print_success "System updated and cleaned successfully."
-    else
-        print_error "System update encountered errors."
-        exit 1
+    print_success "System updated and cleaned successfully."
+}
+
+# prompt_reboot prompts the user to reboot the system when the global NEEDS_REBOOT is "true".
+# If the user confirms, it initiates an immediate reboot; otherwise it prints a reminder to reboot later.
+prompt_reboot() {
+    if [ "$NEEDS_REBOOT" == "true" ]; then
+        echo ""
+        print_warn "A system reboot is recommended to apply all updates."
+        read -p "Reboot now? (y/N): " do_reboot
+        do_reboot=${do_reboot:-n}
+        
+        if [[ "$do_reboot" =~ ^[Yy]$ ]]; then
+            print_status "Rebooting system..."
+            reboot
+        else
+            print_status "Please remember to reboot later."
+        fi
     fi
 }
 
-# Run the update
+# --- MAIN ---
+
+check_root
 update_system
+check_reboot_required
+prompt_reboot
