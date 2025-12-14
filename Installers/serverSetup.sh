@@ -100,17 +100,16 @@ update_repos() {
 
 # Generic package installer
 install_pkg() {
-    local pkgs="$*"
-    if [ -z "$pkgs" ]; then
+    if [ $# -eq 0 ]; then
         return 1
     fi
 
     case "$OS" in
-        alpine) apk add $pkgs >/dev/null 2>&1 ;;
-        arch) pacman -S --noconfirm $pkgs >/dev/null 2>&1 ;;
-        debian|ubuntu) apt install -y $pkgs -qq >/dev/null 2>&1 ;;
-        fedora|redhat|centos|rocky|almalinux) dnf install -y $pkgs -q >/dev/null 2>&1 ;;
-        suse|opensuse*) zypper install -y $pkgs >/dev/null 2>&1 ;;
+        alpine) apk add "$@" >/dev/null 2>&1 ;;
+        arch) pacman -S --noconfirm "$@" >/dev/null 2>&1 ;;
+        debian|ubuntu) apt install -y "$@" -qq >/dev/null 2>&1 ;;
+        fedora|redhat|centos|rocky|almalinux) dnf install -y "$@" -q >/dev/null 2>&1 ;;
+        suse|opensuse*) zypper install -y "$@" >/dev/null 2>&1 ;;
         *) print_warn "Unsupported OS for package install"; return 1 ;;
     esac
 }
