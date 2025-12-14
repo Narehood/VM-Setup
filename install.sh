@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 # --- 1. CRITICAL SETUP & RESTART FIX ---
 SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
@@ -24,13 +25,16 @@ print_centered() {
     local text="$1"
     local color="${2:-$NC}"
     local padding=$(( (UI_WIDTH - ${#text}) / 2 ))
+    if [ "$padding" -lt 0 ]; then padding=0; fi
     printf "${color}%${padding}s%s${NC}\n" "" "$text"
 }
 
 print_line() {
     local char="${1:-=}"
     local color="${2:-$BLUE}"
-    printf "${color}%${UI_WIDTH}s${NC}\n" | tr ' ' "$char"
+    local line
+    line=$(printf "%${UI_WIDTH}s" "" | sed "s/ /${char}/g")
+    echo -e "${color}${line}${NC}"
 }
 
 print_status() {
@@ -64,18 +68,6 @@ confirm_prompt() {
     [[ "$response" =~ ^[Yy]$ ]]
 }
 
-show_header() {
-    clear
-    echo -e "${BLUE}██╗   ██╗███╗   ███╗    ███████╗███████╗████████╗██╗   ██╗██████╗ ${NC}"
-    echo -e "${BLUE}██║   ██║████╗ ████║    ██╔════╝██╔════╝╚══██╔══╝██║   ██║██╔══██╗${NC}"
-    echo -e "${BLUE}██║   ██║██╔████╔██║    ███████╗█████╗     ██║   ██║   ██║██████╔╝${NC}"
-    echo -e "${BLUE}╚██╗ ██╔╝██║╚██╔╝██║    ╚════██║██╔══╝     ██║   ██║   ██║██╔═══╝ ${NC}"
-    echo -e "${BLUE} ╚████╔╝ ██║ ╚═╝ ██║    ███████║███████╗   ██║   ╚██████╔╝██║     ${NC}"
-    echo -e "${BLUE}  ╚═══╝  ╚═╝     ╚═╝    ╚══════╝╚══════╝   ╚═╝    ╚═════╝ ╚═╝     ${NC}"
-    print_centered "VERSION $VERSION  |  BY: MICHAEL NAREHOOD" "$CYAN"
-    print_line "=" "$BLUE"
-}
-
 truncate_string() {
     local str="$1"
     local max_len="$2"
@@ -88,6 +80,18 @@ truncate_string() {
 
 get_current_branch() {
     git branch --show-current 2>/dev/null || echo "unknown"
+}
+
+show_header() {
+    clear
+    echo -e "${BLUE}██╗   ██╗███╗   ███╗    ███████╗███████╗████████╗██╗   ██╗██████╗ ${NC}"
+    echo -e "${BLUE}██║   ██║████╗ ████║    ██╔════╝██╔════╝╚══██╔══╝██║   ██║██╔══██╗${NC}"
+    echo -e "${BLUE}██║   ██║██╔████╔██║    ███████╗█████╗     ██║   ██║   ██║██████╔╝${NC}"
+    echo -e "${BLUE}╚██╗ ██╔╝██║╚██╔╝██║    ╚════██║██╔══╝     ██║   ██║   ██║██╔═══╝ ${NC}"
+    echo -e "${BLUE} ╚████╔╝ ██║ ╚═╝ ██║    ███████║███████╗   ██║   ╚██████╔╝██║     ${NC}"
+    echo -e "${BLUE}  ╚═══╝  ╚═╝     ╚═╝    ╚══════╝╚══════╝   ╚═╝    ╚═════╝ ╚═╝     ${NC}"
+    print_centered "VERSION $VERSION  |  BY: MICHAEL NAREHOOD" "$CYAN"
+    print_line "=" "$BLUE"
 }
 
 show_stats() {
@@ -108,56 +112,81 @@ show_stats() {
     kernel=$(truncate_string "$(uname -r)" 22)
 
     # Uptime
-    local uptime_str="Unknown"
+    local uptime_str="N/A"
     if [ -f /proc/uptime ]; then
         local uptime_secs
         uptime_secs=$(cut -d. -f1 /proc/uptime)
         local days=$((uptime_secs / 86400))
         local hours=$(( (uptime_secs % 86400) / 3600 ))
         local mins=$(( (uptime_secs % 3600) / 60 ))
-        if [ $days -gt 0 ]; then
+        if [ "$days" -gt 0 ]; then
             uptime_str="${days}d ${hours}h ${mins}m"
-        elif [ $hours -gt 0 ]; then
+        elif [ "$hours" -gt 0 ]; then
             uptime_str="${hours}h ${mins}m"
         else
             uptime_str="${mins}m"
         fi
     fi
 
-    # Load average
-    local cpu_load="Unknown"
+    # Load average (more reliable than instantaneous CPU calc)
+    local cpu_load="N/A"
     if [ -f /proc/loadavg ]; then
-        cpu_load=$(awk '{printf "%.2f (1m avg)", $1}' /proc/loadavg)
+        cpu_load=$(LC_ALL=C awk '{printf "%.2f (1m)", $1}' /proc/loadavg)
     fi
 
-    # Memory
-    local mem_usage="Unknown"
-    if command -v free >/dev/null 2>&1; then
-        mem_usage=$(free -m | awk 'NR==2{printf "%s/%sMB (%.0f%%)", $3,$2,$3*100/$2}')
+    # Memory from /proc/meminfo (locale-independent)
+    local mem_usage="N/A"
+    if [ -f /proc/meminfo ]; then
+        local mem_total mem_avail mem_used mem_pct
+        mem_total=$(LC_ALL=C awk '/^MemTotal:/ {print int($2/1024)}' /proc/meminfo)
+        mem_avail=$(LC_ALL=C awk '/^MemAvailable:/ {print int($2/1024)}' /proc/meminfo)
+        if [ -n "$mem_total" ] && [ -n "$mem_avail" ] && [ "$mem_total" -gt 0 ]; then
+            mem_used=$((mem_total - mem_avail))
+            mem_pct=$((mem_used * 100 / mem_total))
+            mem_usage="${mem_used}/${mem_total}MB (${mem_pct}%)"
+        fi
     fi
 
-    # Disk
-    local disk_usage="Unknown"
+    # Disk usage (POSIX mode for stable output)
+    local disk_usage="N/A"
     if command -v df >/dev/null 2>&1; then
-        disk_usage=$(df -h / 2>/dev/null | awk 'NR==2{printf "%s/%s (%s)", $3,$2,$5}')
+        local disk_info
+        disk_info=$(LC_ALL=C df -P / 2>/dev/null | awk 'NR==2 {print $3, $2, $5}')
+        if [ -n "$disk_info" ]; then
+            local used total pct
+            read -r used total pct <<< "$disk_info"
+            if [ -n "$used" ] && [ -n "$total" ] && [ -n "$pct" ]; then
+                # Convert to human-readable
+                local used_h total_h
+                if [ "$total" -ge 1048576 ]; then
+                    used_h="$((used / 1048576))G"
+                    total_h="$((total / 1048576))G"
+                else
+                    used_h="$((used / 1024))M"
+                    total_h="$((total / 1024))M"
+                fi
+                disk_usage="${used_h}/${total_h} (${pct})"
+            fi
+        fi
     fi
 
-    # Network
+    # Hostname
     local hostname_str
     hostname_str=$(truncate_string "$(hostname)" 20)
 
-    local ip_addr="Unknown"
-    local subnet="Unknown"
-    local gateway="Unknown"
+    # Network info
+    local ip_addr="N/A"
+    local subnet="N/A"
+    local gateway="N/A"
 
     if command -v ip >/dev/null 2>&1; then
         local full_ip
-        full_ip=$(ip -4 addr show scope global 2>/dev/null | awk '/inet / {print $2; exit}')
+        full_ip=$(LC_ALL=C ip -4 addr show scope global 2>/dev/null | awk '/inet / {print $2; exit}')
         if [ -n "$full_ip" ]; then
             ip_addr="${full_ip%%/*}"
             subnet="/${full_ip##*/}"
         fi
-        gateway=$(ip route 2>/dev/null | awk '/default/ {print $3; exit}')
+        gateway=$(LC_ALL=C ip route 2>/dev/null | awk '/default/ {print $3; exit}')
         gateway=$(truncate_string "${gateway:-N/A}" 15)
     fi
 
@@ -167,9 +196,9 @@ show_stats() {
 
     # Display
     echo -e "${WHITE}SYSTEM INFORMATION${NC}"
-    printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "OS" "$distro" "IP Address" "${ip_addr:-N/A}"
-    printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "Kernel" "$kernel" "Subnet" "${subnet:-N/A}"
-    printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "Hostname" "$hostname_str" "Gateway" "${gateway:-N/A}"
+    printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "OS" "$distro" "IP Address" "$ip_addr"
+    printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "Kernel" "$kernel" "Subnet" "$subnet"
+    printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "Hostname" "$hostname_str" "Gateway" "$gateway"
     print_line "-" "$BLUE"
     printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "Load Avg" "$cpu_load" "Memory" "$mem_usage"
     printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "Disk Usage" "$disk_usage" "Uptime" "$uptime_str"
@@ -249,26 +278,24 @@ switch_branch() {
         return 1
     fi
 
-    # Fetch latest branch info
     print_status "Fetching branch information..."
     if ! git fetch --all --quiet 2>/dev/null; then
         print_warn "Could not fetch from remote. Showing local branches only."
     fi
 
-    # Get current branch
     local current_branch
     current_branch=$(get_current_branch)
     echo -e "  Current branch: ${GREEN}$current_branch${NC}"
     echo ""
 
-    # Get all branches (local and remote)
+    # Collect branches
     local branches=()
     local branch_display=()
 
     # Local branches
     while IFS= read -r branch; do
-        branch="${branch#\* }"  # Remove asterisk from current branch
-        branch="${branch// /}"  # Trim whitespace
+        branch="${branch#\* }"
+        branch="${branch// /}"
         if [ -n "$branch" ]; then
             branches+=("$branch")
             if [ "$branch" = "$current_branch" ]; then
@@ -279,11 +306,10 @@ switch_branch() {
         fi
     done < <(git branch 2>/dev/null)
 
-    # Remote branches (exclude HEAD and already-local branches)
+    # Remote branches (exclude HEAD and local duplicates)
     while IFS= read -r branch; do
         branch="${branch// /}"
         branch="${branch#origin/}"
-        # Skip HEAD and branches we already have locally
         if [ -n "$branch" ] && [ "$branch" != "HEAD" ]; then
             local is_local="false"
             for local_branch in "${branches[@]}"; do
@@ -305,7 +331,6 @@ switch_branch() {
         return 1
     fi
 
-    # Display branches
     echo -e "  ${WHITE}Available Branches:${NC}"
     echo ""
     local i=1
@@ -320,7 +345,6 @@ switch_branch() {
 
     read -rp "  Select branch [0-$((${#branches[@]}))] : " selection
 
-    # Validate input
     if [ "$selection" = "0" ] || [ -z "$selection" ]; then
         print_status "Cancelled."
         sleep 1
@@ -356,7 +380,6 @@ switch_branch() {
     print_status "Switching to branch '$selected_branch'..."
 
     if git checkout "$selected_branch" 2>/dev/null; then
-        # Pull latest changes for this branch
         print_status "Pulling latest changes..."
         git pull --quiet 2>/dev/null || true
 
