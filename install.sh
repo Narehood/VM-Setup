@@ -128,13 +128,13 @@ show_stats() {
         fi
     fi
 
-    # Load average (more reliable than instantaneous CPU calc)
+    # Load average
     local cpu_load="N/A"
     if [ -f /proc/loadavg ]; then
         cpu_load=$(LC_ALL=C awk '{printf "%.2f (1m)", $1}' /proc/loadavg)
     fi
 
-    # Memory from /proc/meminfo (locale-independent)
+    # Memory from /proc/meminfo
     local mem_usage="N/A"
     if [ -f /proc/meminfo ]; then
         local mem_total mem_avail mem_used mem_pct
@@ -147,7 +147,7 @@ show_stats() {
         fi
     fi
 
-    # Disk usage (POSIX mode for stable output)
+    # Disk usage
     local disk_usage="N/A"
     if command -v df >/dev/null 2>&1; then
         local disk_info
@@ -156,7 +156,6 @@ show_stats() {
             local used total pct
             read -r used total pct <<< "$disk_info"
             if [ -n "$used" ] && [ -n "$total" ] && [ -n "$pct" ]; then
-                # Convert to human-readable
                 local used_h total_h
                 if [ "$total" -ge 1048576 ]; then
                     used_h="$((used / 1048576))G"
@@ -285,6 +284,12 @@ switch_branch() {
 
     local current_branch
     current_branch=$(get_current_branch)
+
+    if [ -z "$current_branch" ] || [ "$current_branch" = "unknown" ]; then
+        print_warn "Currently in detached HEAD state."
+        current_branch="(detached)"
+    fi
+
     echo -e "  Current branch: ${GREEN}$current_branch${NC}"
     echo ""
 
@@ -366,31 +371,97 @@ switch_branch() {
     fi
 
     # Check for uncommitted changes
+    local has_changes="false"
     if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
+        has_changes="true"
+    fi
+
+    if [ "$has_changes" = "true" ]; then
         print_warn "You have uncommitted changes."
-        if ! confirm_prompt "  Discard changes and switch? (y/N): " "n"; then
-            print_status "Cancelled."
-            sleep 1
-            return 0
-        fi
-        git reset --hard HEAD >/dev/null 2>&1
+        echo ""
+        echo -e "  ${WHITE}Options:${NC}"
+        echo -e "    ${CYAN}1.${NC} Stash changes (save for later)"
+        echo -e "    ${CYAN}2.${NC} Discard changes (permanent)"
+        echo -e "    ${CYAN}0.${NC} Cancel"
+        echo ""
+        read -rp "  Select option [0-2]: " change_option
+
+        case "$change_option" in
+            1)
+                print_status "Stashing changes..."
+                local stash_msg="Auto-stash before switching to $selected_branch"
+                if ! git stash push -m "$stash_msg" 2>/dev/null; then
+                    print_error "Failed to stash changes."
+                    pause
+                    return 1
+                fi
+                print_success "Changes stashed. Use 'git stash pop' to restore."
+                ;;
+            2)
+                if ! confirm_prompt "  Are you sure? This cannot be undone. (y/N): " "n"; then
+                    print_status "Cancelled."
+                    sleep 1
+                    return 0
+                fi
+                print_status "Discarding changes..."
+                if ! git reset --hard HEAD >/dev/null 2>&1; then
+                    print_error "Failed to reset working directory."
+                    pause
+                    return 1
+                fi
+                git clean -fd >/dev/null 2>&1 || true
+                print_success "Changes discarded."
+                ;;
+            *)
+                print_status "Cancelled."
+                sleep 1
+                return 0
+                ;;
+        esac
     fi
 
     echo ""
     print_status "Switching to branch '$selected_branch'..."
 
-    if git checkout "$selected_branch" 2>/dev/null; then
-        print_status "Pulling latest changes..."
-        git pull --quiet 2>/dev/null || true
-
-        print_success "Switched to '$selected_branch'. Restarting menu..."
-        sleep 1
-        exec bash "$SCRIPT_PATH"
+    # Check if branch exists locally or needs to be checked out from remote
+    local checkout_output
+    if git show-ref --verify --quiet "refs/heads/$selected_branch" 2>/dev/null; then
+        checkout_output=$(git checkout "$selected_branch" 2>&1)
     else
+        checkout_output=$(git checkout -b "$selected_branch" "origin/$selected_branch" 2>&1)
+    fi
+
+    local checkout_status=$?
+    if [ $checkout_status -ne 0 ]; then
         print_error "Failed to switch branch."
+        echo -e "  ${RED}Details:${NC} $checkout_output"
         pause
         return 1
     fi
+
+    # Verify we're on the correct branch
+    local new_branch
+    new_branch=$(get_current_branch)
+    if [ "$new_branch" != "$selected_branch" ]; then
+        print_error "Branch switch verification failed."
+        print_error "Expected: $selected_branch, Got: $new_branch"
+        pause
+        return 1
+    fi
+
+    # Pull latest if tracking remote
+    if git rev-parse --abbrev-ref '@{u}' >/dev/null 2>&1; then
+        print_status "Pulling latest changes..."
+        if ! git pull --quiet 2>/dev/null; then
+            print_warn "Could not pull latest changes. You may need to pull manually."
+        fi
+    else
+        print_warn "No upstream configured for this branch."
+    fi
+
+    print_success "Switched to '$selected_branch'. Restarting menu..."
+    sleep 1
+    exec bash "$SCRIPT_PATH"
 }
 
 execute_script() {
