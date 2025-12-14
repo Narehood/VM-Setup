@@ -62,6 +62,11 @@ truncate_string() {
     fi
 }
 
+# get_current_branch prints the current Git branch name or "unknown" if unavailable.
+get_current_branch() {
+    git branch --show-current 2>/dev/null || echo "unknown"
+}
+
 # show_header clears the terminal and prints the ASCII art banner with the centered "QUICK APP INSTALLER  |  LIBRARY" title and a colored horizontal separator.
 show_header() {
     clear
@@ -75,7 +80,7 @@ show_header() {
     print_line "=" "$BLUE"
 }
 
-# show_stats displays a formatted system information grid including OS, kernel, hostname, load average, memory and disk usage, and network details (IP address, subnet, gateway).
+# show_stats displays a formatted system information grid including OS, kernel, hostname, load average, memory and disk usage, network details, uptime, and current Git branch.
 show_stats() {
     # OS Detection
     local distro="Unknown"
@@ -93,18 +98,35 @@ show_stats() {
     local kernel
     kernel=$(truncate_string "$(uname -r)" 32)
 
-    # Load average (more reliable than CPU snapshot)
-    local cpu_load="N/A"
-    if [ -f /proc/loadavg ]; then
-        cpu_load=$(awk '{printf "%.2f (1m)", $1}' /proc/loadavg)
+    # Uptime
+    local uptime_str="N/A"
+    if [ -f /proc/uptime ]; then
+        local uptime_secs
+        uptime_secs=$(cut -d. -f1 /proc/uptime)
+        local days=$((uptime_secs / 86400))
+        local hours=$(( (uptime_secs % 86400) / 3600 ))
+        local mins=$(( (uptime_secs % 3600) / 60 ))
+        if [ "$days" -gt 0 ]; then
+            uptime_str="${days}d ${hours}h ${mins}m"
+        elif [ "$hours" -gt 0 ]; then
+            uptime_str="${hours}h ${mins}m"
+        else
+            uptime_str="${mins}m"
+        fi
     fi
 
-    # Memory from /proc/meminfo (more accurate)
+    # Load average
+    local cpu_load="N/A"
+    if [ -f /proc/loadavg ]; then
+        cpu_load=$(LC_ALL=C awk '{printf "%.2f (1m)", $1}' /proc/loadavg)
+    fi
+
+    # Memory from /proc/meminfo
     local mem_usage="N/A"
     if [ -f /proc/meminfo ]; then
         local mem_total mem_avail mem_used mem_pct
-        mem_total=$(awk '/^MemTotal:/ {print int($2/1024)}' /proc/meminfo)
-        mem_avail=$(awk '/^MemAvailable:/ {print int($2/1024)}' /proc/meminfo)
+        mem_total=$(LC_ALL=C awk '/^MemTotal:/ {print int($2/1024)}' /proc/meminfo)
+        mem_avail=$(LC_ALL=C awk '/^MemAvailable:/ {print int($2/1024)}' /proc/meminfo)
         if [ -n "$mem_total" ] && [ -n "$mem_avail" ] && [ "$mem_total" -gt 0 ]; then
             mem_used=$((mem_total - mem_avail))
             mem_pct=$((mem_used * 100 / mem_total))
@@ -115,7 +137,23 @@ show_stats() {
     # Disk usage
     local disk_usage="N/A"
     if command -v df >/dev/null 2>&1; then
-        disk_usage=$(df -h / 2>/dev/null | awk 'NR==2{printf "%s/%s (%s)", $3,$2,$5}')
+        local disk_info
+        disk_info=$(LC_ALL=C df -P / 2>/dev/null | awk 'NR==2 {print $3, $2, $5}')
+        if [ -n "$disk_info" ]; then
+            local used total pct
+            read -r used total pct <<< "$disk_info"
+            if [ -n "$used" ] && [ -n "$total" ] && [ -n "$pct" ]; then
+                local used_h total_h
+                if [ "$total" -ge 1048576 ]; then
+                    used_h="$((used / 1048576))G"
+                    total_h="$((total / 1048576))G"
+                else
+                    used_h="$((used / 1024))M"
+                    total_h="$((total / 1024))M"
+                fi
+                disk_usage="${used_h}/${total_h} (${pct})"
+            fi
+        fi
     fi
 
     # Network
@@ -124,14 +162,18 @@ show_stats() {
 
     if command -v ip >/dev/null 2>&1; then
         local full_ip
-        full_ip=$(ip -4 addr show scope global 2>/dev/null | awk '/inet / {print $2; exit}')
+        full_ip=$(LC_ALL=C ip -4 addr show scope global 2>/dev/null | awk '/inet / {print $2; exit}')
         if [ -n "$full_ip" ]; then
             ip_addr="${full_ip%%/*}"
             subnet="/${full_ip##*/}"
         fi
-        gateway=$(ip route 2>/dev/null | awk '/default/ {print $3; exit}')
+        gateway=$(LC_ALL=C ip route 2>/dev/null | awk '/default/ {print $3; exit}')
         gateway=$(truncate_string "${gateway:-N/A}" 20)
     fi
+
+    # Current branch
+    local current_branch
+    current_branch=$(truncate_string "$(get_current_branch)" 30)
 
     # DISPLAY GRID
     echo -e "${WHITE}SYSTEM INFORMATION${NC}"
@@ -140,7 +182,9 @@ show_stats() {
     printf "  ${YELLOW}%-11s${NC} : %-30s ${YELLOW}%-11s${NC} : %s\n" "Hostname" "$hostname_str" "Gateway" "$gateway"
     print_line "-" "$BLUE"
     printf "  ${YELLOW}%-11s${NC} : %-30s ${YELLOW}%-11s${NC} : %s\n" "Load Avg" "$cpu_load" "Memory" "$mem_usage"
-    printf "  ${YELLOW}%-11s${NC} : %-30s\n" "Disk Usage" "$disk_usage"
+    printf "  ${YELLOW}%-11s${NC} : %-30s ${YELLOW}%-11s${NC} : %s\n" "Disk Usage" "$disk_usage" "Uptime" "$uptime_str"
+    print_line "-" "$BLUE"
+    printf "  ${YELLOW}%-11s${NC} : %-30s\n" "Branch" "$current_branch"
     print_line "=" "$BLUE"
 }
 
