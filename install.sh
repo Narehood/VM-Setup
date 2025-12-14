@@ -108,14 +108,14 @@ fix_permissions() {
 
     if [ ! -d "$installers_dir" ]; then
         [ "$silent" != "silent" ] && print_error "Installers directory not found."
-        return 1
+        return 0
     fi
 
     while IFS= read -r -d '' script; do
-        ((total++))
+        total=$((total + 1))
         if [ ! -x "$script" ]; then
             if chmod +x "$script" 2>/dev/null; then
-                ((fixed++))
+                fixed=$((fixed + 1))
                 [ "$silent" != "silent" ] && print_success "Fixed: $(basename "$script")"
             else
                 [ "$silent" != "silent" ] && print_error "Failed: $(basename "$script")"
