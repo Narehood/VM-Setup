@@ -16,7 +16,8 @@ WHITE='\033[1;37m'
 NC='\033[0m'
 
 UI_WIDTH=66
-VERSION="3.2.0"
+VERSION="3.3.0"
+CHECKSUM_FILE="$SCRIPT_DIR/Installers/.checksums.sha256"
 
 # Handle Ctrl+C gracefully
 trap 'echo -e "\n${GREEN}Goodbye!${NC}"; exit 0' SIGINT SIGTERM
@@ -80,6 +81,10 @@ truncate_string() {
 
 get_current_branch() {
     git branch --show-current 2>/dev/null || echo "unknown"
+}
+
+is_root() {
+    [ "$EUID" -eq 0 ]
 }
 
 show_header() {
@@ -464,23 +469,216 @@ switch_branch() {
     exec bash "$SCRIPT_PATH"
 }
 
+# Parse script metadata from header comments
+# Expected format in installer scripts:
+#   # REQUIRES_ROOT: true
+#   # DESCRIPTION: Brief description of script
+parse_script_metadata() {
+    local script_path="$1"
+    local key="$2"
+    local value=""
+
+    # Read first 20 lines for metadata
+    value=$(head -n 20 "$script_path" 2>/dev/null | grep -i "^# *${key}:" | head -n 1 | sed "s/^# *${key}: *//i")
+    echo "$value"
+}
+
+# Verify script checksum if checksum file exists
+verify_script_checksum() {
+    local script_path="$1"
+    local script_name
+    script_name=$(basename "$script_path")
+
+    if [ ! -f "$CHECKSUM_FILE" ]; then
+        # No checksum file, skip verification
+        return 0
+    fi
+
+    if ! command -v sha256sum >/dev/null 2>&1; then
+        print_warn "sha256sum not available, skipping integrity check."
+        return 0
+    fi
+
+    local expected_hash
+    expected_hash=$(grep " ${script_name}$" "$CHECKSUM_FILE" 2>/dev/null | awk '{print $1}')
+
+    if [ -z "$expected_hash" ]; then
+        print_warn "No checksum found for $script_name"
+        if ! confirm_prompt "  Continue without verification? (y/N): " "n"; then
+            return 1
+        fi
+        return 0
+    fi
+
+    local actual_hash
+    actual_hash=$(sha256sum "$script_path" 2>/dev/null | awk '{print $1}')
+
+    if [ "$expected_hash" != "$actual_hash" ]; then
+        print_error "Checksum verification FAILED for $script_name"
+        print_error "Expected: $expected_hash"
+        print_error "Got:      $actual_hash"
+        print_warn "This script may have been modified or corrupted."
+        if ! confirm_prompt "  Execute anyway? (y/N): " "n"; then
+            return 1
+        fi
+    else
+        print_success "Checksum verified for $script_name"
+    fi
+
+    return 0
+}
+
+# Generate checksums for all installer scripts
+generate_checksums() {
+    local installers_dir="$SCRIPT_DIR/Installers"
+
+    if [ ! -d "$installers_dir" ]; then
+        print_error "Installers directory not found."
+        return 1
+    fi
+
+    if ! command -v sha256sum >/dev/null 2>&1; then
+        print_error "sha256sum not available."
+        return 1
+    fi
+
+    print_status "Generating checksums for installer scripts..."
+
+    # Create/overwrite checksum file
+    : > "$CHECKSUM_FILE"
+
+    local count=0
+    while IFS= read -r -d '' script; do
+        local script_name
+        script_name=$(basename "$script")
+        sha256sum "$script" | sed "s|.*/||" >> "$CHECKSUM_FILE"
+        ((count++))
+    done < <(find "$installers_dir" -maxdepth 1 -name "*.sh" -type f -print0)
+
+    if [ $count -eq 0 ]; then
+        print_warn "No scripts found to checksum."
+        rm -f "$CHECKSUM_FILE"
+        return 1
+    fi
+
+    print_success "Generated checksums for $count scripts."
+    print_status "Checksum file: $CHECKSUM_FILE"
+    return 0
+}
+
 execute_script() {
     local script_name="$1"
     local full_path="$SCRIPT_DIR/Installers/$script_name"
 
+    echo ""
+
+    # Check if script exists
     if [ ! -f "$full_path" ]; then
         print_error "Script not found: $full_path"
         pause
         return 1
     fi
 
+    # Check if script is readable
     if [ ! -r "$full_path" ]; then
         print_error "Script not readable: $full_path"
         pause
         return 1
     fi
 
-    echo -e "\n${GREEN}>>> Executing: $script_name${NC}"
+    # Verify it's actually a shell script
+    local file_type
+    file_type=$(file -b "$full_path" 2>/dev/null || echo "unknown")
+    if [[ ! "$file_type" =~ (shell|bash|sh|text|ASCII) ]]; then
+        print_error "File does not appear to be a shell script: $file_type"
+        pause
+        return 1
+    fi
+
+    # Verify checksum if available
+    if ! verify_script_checksum "$full_path"; then
+        print_error "Script verification failed. Aborting."
+        pause
+        return 1
+    fi
+
+    # Check if script is executable, offer to fix if not
+    if [ ! -x "$full_path" ]; then
+        print_warn "Script is not executable: $script_name"
+        if confirm_prompt "  Make it executable? (Y/n): " "y"; then
+            if chmod +x "$full_path"; then
+                print_success "Made script executable."
+            else
+                print_error "Failed to make script executable."
+                pause
+                return 1
+            fi
+        else
+            print_status "Running with bash directly..."
+        fi
+    fi
+
+    # Parse script metadata for root requirement
+    local requires_root
+    requires_root=$(parse_script_metadata "$full_path" "REQUIRES_ROOT")
+
+    # If no metadata, check for common root indicators
+    if [ -z "$requires_root" ]; then
+        if grep -qE '^\s*(sudo|apt|dnf|yum|pacman|zypper|systemctl|hostnamectl|usermod|chmod|chown)\s' "$full_path" 2>/dev/null; then
+            requires_root="true"
+        fi
+    fi
+
+    # Handle root requirement
+    if [ "$requires_root" = "true" ]; then
+        if ! is_root; then
+            print_warn "This script requires root privileges."
+            echo ""
+            echo -e "  ${WHITE}Options:${NC}"
+            echo -e "    ${CYAN}1.${NC} Run with sudo"
+            echo -e "    ${CYAN}2.${NC} Run anyway (may fail)"
+            echo -e "    ${CYAN}0.${NC} Cancel"
+            echo ""
+            read -rp "  Select option [0-2]: " root_option
+
+            case "$root_option" in
+                1)
+                    if ! command -v sudo >/dev/null 2>&1; then
+                        print_error "sudo is not installed."
+                        pause
+                        return 1
+                    fi
+                    print_status "Executing with sudo..."
+                    echo -e "${GREEN}>>> Executing: $script_name (as root)${NC}"
+                    sleep 0.5
+                    sudo bash "$full_path"
+                    local exit_code=$?
+                    if [ $exit_code -ne 0 ]; then
+                        print_warn "Script exited with code: $exit_code"
+                    fi
+                    pause
+                    return $exit_code
+                    ;;
+                2)
+                    print_warn "Running without root - some operations may fail."
+                    ;;
+                *)
+                    print_status "Cancelled."
+                    sleep 1
+                    return 0
+                    ;;
+            esac
+        fi
+    fi
+
+    # Show script description if available
+    local description
+    description=$(parse_script_metadata "$full_path" "DESCRIPTION")
+    if [ -n "$description" ]; then
+        print_status "Description: $description"
+    fi
+
+    echo -e "${GREEN}>>> Executing: $script_name${NC}"
     sleep 0.5
 
     bash "$full_path"
@@ -491,6 +689,7 @@ execute_script() {
     fi
 
     pause
+    return $exit_code
 }
 
 show_help() {
@@ -513,6 +712,14 @@ show_help() {
     echo -e "    ${CYAN}8${NC} - Switch to a different branch (dev/testing)"
     echo -e "    ${CYAN}9${NC} - Display this help screen"
     echo -e "    ${CYAN}0${NC} - Exit the menu"
+    echo ""
+    echo -e "  ${YELLOW}Script Metadata:${NC}"
+    echo -e "    Installer scripts can include metadata headers:"
+    echo -e "    ${CYAN}# REQUIRES_ROOT: true${NC} - Script needs root privileges"
+    echo -e "    ${CYAN}# DESCRIPTION: text${NC}  - Brief script description"
+    echo ""
+    echo -e "  ${YELLOW}Security:${NC}"
+    echo -e "    Run '${CYAN}generate-checksums${NC}' to create integrity hashes"
     echo ""
     echo -e "  ${YELLOW}Location:${NC} $SCRIPT_DIR"
     echo -e "  ${YELLOW}Branch:${NC}   $(get_current_branch)"
@@ -552,6 +759,7 @@ while true; do
         8) switch_branch ;;
         9|h|help) show_help ;;
         0|q|exit) echo -e "\n${GREEN}Goodbye!${NC}"; exit 0 ;;
+        generate-checksums) generate_checksums; pause ;;
         "") ;;
         *) print_error "Invalid option: $choice"; sleep 1 ;;
     esac
