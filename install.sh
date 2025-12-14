@@ -296,21 +296,75 @@ check_for_updates() {
     if [ "$local_rev" = "$remote_rev" ]; then
         print_success "Menu is up to date."
         sleep 1
-    else
-        print_warn "New version available."
-        if confirm_prompt "Download and apply updates? (y/N): " "n"; then
-            if git pull --quiet; then
-                print_success "Updated successfully. Restarting..."
+        return 0
+    fi
+
+    print_warn "New version available."
+    if ! confirm_prompt "Download and apply updates? (y/N): " "n"; then
+        print_status "Update skipped."
+        sleep 1
+        return 0
+    fi
+
+    # Check for uncommitted changes before pulling
+    local has_changes="false"
+    if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
+        has_changes="true"
+    fi
+
+    if [ "$has_changes" = "true" ]; then
+        print_warn "You have uncommitted local changes."
+        echo ""
+        echo -e "  ${WHITE}Options:${NC}"
+        echo -e "    ${CYAN}1.${NC} Stash changes (save for later)"
+        echo -e "    ${CYAN}2.${NC} Discard changes (permanent)"
+        echo -e "    ${CYAN}0.${NC} Cancel update"
+        echo ""
+        read -rp "  Select option [0-2]: " change_option
+
+        case "$change_option" in
+            1)
+                print_status "Stashing changes..."
+                local stash_msg="Auto-stash before update on $(date '+%Y-%m-%d %H:%M')"
+                if ! git stash push -m "$stash_msg" 2>/dev/null; then
+                    print_error "Failed to stash changes."
+                    sleep 2
+                    return 1
+                fi
+                print_success "Changes stashed. Use 'git stash pop' to restore later."
+                ;;
+            2)
+                if ! confirm_prompt "  Are you sure? This cannot be undone. (y/N): " "n"; then
+                    print_status "Update cancelled."
+                    sleep 1
+                    return 0
+                fi
+                print_status "Discarding changes..."
+                if ! git reset --hard HEAD >/dev/null 2>&1; then
+                    print_error "Failed to reset working directory."
+                    sleep 2
+                    return 1
+                fi
+                git clean -fd >/dev/null 2>&1 || true
+                print_success "Changes discarded."
+                ;;
+            *)
+                print_status "Update cancelled."
                 sleep 1
-                exec bash "$SCRIPT_PATH"
-            else
-                print_error "Update failed. Please try manually with 'git pull'."
-                sleep 2
-            fi
-        else
-            print_status "Update skipped."
-            sleep 1
-        fi
+                return 0
+                ;;
+        esac
+    fi
+
+    # Now pull
+    if git pull --quiet; then
+        print_success "Updated successfully. Restarting..."
+        sleep 1
+        exec bash "$SCRIPT_PATH"
+    else
+        print_error "Update failed. Please try manually with 'git pull'."
+        sleep 2
+        return 1
     fi
 }
 
@@ -531,7 +585,7 @@ parse_script_metadata() {
     echo "$value"
 }
 
-# verify_script_checksum verifies a script's SHA‑256 checksum against CHECKSUM_FILE, prompting the user to continue or abort when the checksum is missing, sha256sum is unavailable, or the checksum does not match.
+# verify_script_checksum verifies a script's SHA-256 checksum against CHECKSUM_FILE, prompting the user to continue or abort when the checksum is missing, sha256sum is unavailable, or the checksum does not match.
 verify_script_checksum() {
     local script_path="$1"
     local script_name
