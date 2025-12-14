@@ -15,7 +15,7 @@ YELLOW='\033[1;33m'
 WHITE='\033[1;37m'
 NC='\033[0m'
 
-UI_WIDTH=66
+UI_WIDTH=86
 VERSION="3.3.0"
 CHECKSUM_FILE="$SCRIPT_DIR/Installers/.checksums.sha256"
 
@@ -55,7 +55,7 @@ print_warn() {
     echo -e "${YELLOW}[WARN]${NC} $1"
 }
 
-# print_error prints the given message prefixed with “[ERROR]” in red.
+# print_error prints the given message prefixed with "[ERROR]" in red.
 print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
@@ -101,12 +101,12 @@ is_root() {
 # show_header clears the terminal and displays the ASCII banner, a centered version/author line, and a separator line.
 show_header() {
     clear
-    echo -e "${BLUE}██╗   ██╗███╗   ███╗    ███████╗███████╗████████╗██╗   ██╗██████╗ ${NC}"
-    echo -e "${BLUE}██║   ██║████╗ ████║    ██╔════╝██╔════╝╚══██╔══╝██║   ██║██╔══██╗${NC}"
-    echo -e "${BLUE}██║   ██║██╔████╔██║    ███████╗█████╗     ██║   ██║   ██║██████╔╝${NC}"
-    echo -e "${BLUE}╚██╗ ██╔╝██║╚██╔╝██║    ╚════██║██╔══╝     ██║   ██║   ██║██╔═══╝ ${NC}"
-    echo -e "${BLUE} ╚████╔╝ ██║ ╚═╝ ██║    ███████║███████╗   ██║   ╚██████╔╝██║     ${NC}"
-    echo -e "${BLUE}  ╚═══╝  ╚═╝     ╚═╝    ╚══════╝╚══════╝   ╚═╝    ╚═════╝ ╚═╝     ${NC}"
+    echo -e "${BLUE}███████╗██╗   ██╗███████╗████████╗███████╗███╗   ███╗    ███████╗███████╗████████╗██╗   ██╗██████╗ ${NC}"
+    echo -e "${BLUE}██╔════╝╚██╗ ██╔╝██╔════╝╚══██╔══╝██╔════╝████╗ ████║    ██╔════╝██╔════╝╚══██╔══╝██║   ██║██╔══██╗${NC}"
+    echo -e "${BLUE}███████╗ ╚████╔╝ ███████╗   ██║   █████╗  ██╔████╔██║    ███████╗█████╗     ██║   ██║   ██║██████╔╝${NC}"
+    echo -e "${BLUE}╚════██║  ╚██╔╝  ╚════██║   ██║   ██╔══╝  ██║╚██╔╝██║    ╚════██║██╔══╝     ██║   ██║   ██║██╔═══╝ ${NC}"
+    echo -e "${BLUE}███████║   ██║   ███████║   ██║   ███████╗██║ ╚═╝ ██║    ███████║███████╗   ██║   ╚██████╔╝██║     ${NC}"
+    echo -e "${BLUE}╚══════╝   ╚═╝   ╚══════╝   ╚═╝   ╚══════╝╚═╝     ╚═╝    ╚══════╝╚══════╝   ╚═╝    ╚═════╝ ╚═╝     ${NC}"
     print_centered "VERSION $VERSION  |  BY: MICHAEL NAREHOOD" "$CYAN"
     print_line "=" "$BLUE"
 }
@@ -123,11 +123,11 @@ show_stats() {
             distro="${PRETTY_NAME:-$ID}"
         fi
     fi
-    distro=$(truncate_string "$distro" 22)
+    distro=$(truncate_string "$distro" 32)
 
     # Kernel
     local kernel
-    kernel=$(truncate_string "$(uname -r)" 22)
+    kernel=$(truncate_string "$(uname -r)" 32)
 
     # Uptime
     local uptime_str="N/A"
@@ -189,7 +189,7 @@ show_stats() {
 
     # Hostname
     local hostname_str
-    hostname_str=$(truncate_string "$(hostname)" 20)
+    hostname_str=$(truncate_string "$(hostname)" 30)
 
     # Network info
     local ip_addr="N/A"
@@ -204,23 +204,23 @@ show_stats() {
             subnet="/${full_ip##*/}"
         fi
         gateway=$(LC_ALL=C ip route 2>/dev/null | awk '/default/ {print $3; exit}')
-        gateway=$(truncate_string "${gateway:-N/A}" 15)
+        gateway=$(truncate_string "${gateway:-N/A}" 20)
     fi
 
     # Current branch
     local current_branch
-    current_branch=$(truncate_string "$(get_current_branch)" 20)
+    current_branch=$(truncate_string "$(get_current_branch)" 30)
 
     # Display
     echo -e "${WHITE}SYSTEM INFORMATION${NC}"
-    printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "OS" "$distro" "IP Address" "$ip_addr"
-    printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "Kernel" "$kernel" "Subnet" "$subnet"
-    printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "Hostname" "$hostname_str" "Gateway" "$gateway"
+    printf "  ${YELLOW}%-11s${NC} : %-30s ${YELLOW}%-11s${NC} : %s\n" "OS" "$distro" "IP Address" "$ip_addr"
+    printf "  ${YELLOW}%-11s${NC} : %-30s ${YELLOW}%-11s${NC} : %s\n" "Kernel" "$kernel" "Subnet" "$subnet"
+    printf "  ${YELLOW}%-11s${NC} : %-30s ${YELLOW}%-11s${NC} : %s\n" "Hostname" "$hostname_str" "Gateway" "$gateway"
     print_line "-" "$BLUE"
-    printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "Load Avg" "$cpu_load" "Memory" "$mem_usage"
-    printf "  ${YELLOW}%-11s${NC} : %-20s ${YELLOW}%-11s${NC} : %s\n" "Disk Usage" "$disk_usage" "Uptime" "$uptime_str"
+    printf "  ${YELLOW}%-11s${NC} : %-30s ${YELLOW}%-11s${NC} : %s\n" "Load Avg" "$cpu_load" "Memory" "$mem_usage"
+    printf "  ${YELLOW}%-11s${NC} : %-30s ${YELLOW}%-11s${NC} : %s\n" "Disk Usage" "$disk_usage" "Uptime" "$uptime_str"
     print_line "-" "$BLUE"
-    printf "  ${YELLOW}%-11s${NC} : %-20s\n" "Branch" "$current_branch"
+    printf "  ${YELLOW}%-11s${NC} : %-30s\n" "Branch" "$current_branch"
     print_line "=" "$BLUE"
 }
 
@@ -716,8 +716,8 @@ show_help() {
     print_centered "HELP & INFORMATION" "$WHITE"
     print_line "=" "$BLUE"
     echo ""
-    echo -e "  ${WHITE}VM Setup Menu${NC} - Version $VERSION"
-    echo -e "  A comprehensive tool for initial VM configuration."
+    echo -e "  ${WHITE}System Setup Menu${NC} - Version $VERSION"
+    echo -e "  A comprehensive tool for initial system configuration."
     echo ""
     echo -e "  ${YELLOW}Menu Options:${NC}"
     echo -e "    ${CYAN}1${NC} - Run initial server configuration (hostname, tools, etc.)"
@@ -756,12 +756,12 @@ while true; do
     show_stats
 
     echo -e "${WHITE}MENU OPTIONS${NC}"
-    printf "  ${CYAN}1.${NC} %-33s ${CYAN}5.${NC} %s\n" "Server Initial Config" "Run System Updates"
-    printf "  ${CYAN}2.${NC} %-33s ${CYAN}6.${NC} %s\n" "Application Installers" "Update This Menu"
-    printf "  ${CYAN}3.${NC} %-33s ${CYAN}7.${NC} %s\n" "Docker Host Preparation" "Launch LinUtil"
-    printf "  ${CYAN}4.${NC} %-33s ${CYAN}8.${NC} %s\n" "Auto Security Patches" "Switch Branch"
+    printf "  ${CYAN}1.${NC} %-38s ${CYAN}5.${NC} %s\n" "Server Initial Config" "Run System Updates"
+    printf "  ${CYAN}2.${NC} %-38s ${CYAN}6.${NC} %s\n" "Application Installers" "Update This Menu"
+    printf "  ${CYAN}3.${NC} %-38s ${CYAN}7.${NC} %s\n" "Docker Host Preparation" "Launch LinUtil"
+    printf "  ${CYAN}4.${NC} %-38s ${CYAN}8.${NC} %s\n" "Auto Security Patches" "Switch Branch"
     echo ""
-    printf "  ${CYAN}9.${NC} %-33s ${CYAN}0.${NC} ${RED}%s${NC}\n" "Help / About" "Exit"
+    printf "  ${CYAN}9.${NC} %-38s ${CYAN}0.${NC} ${RED}%s${NC}\n" "Help / About" "Exit"
     echo ""
     print_line "-" "$BLUE"
     read -rp "  Enter selection [0-9]: " choice
