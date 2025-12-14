@@ -16,7 +16,7 @@ WHITE='\033[1;37m'
 NC='\033[0m'
 
 UI_WIDTH=86
-VERSION="3.3.0"
+VERSION="3.3.1"
 CHECKSUM_FILE="$SCRIPT_DIR/Installers/.checksums.sha256"
 
 # Handle Ctrl+C gracefully
