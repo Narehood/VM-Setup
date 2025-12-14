@@ -20,7 +20,7 @@ VERSION="3.3.0"
 CHECKSUM_FILE="$SCRIPT_DIR/Installers/.checksums.sha256"
 
 # Handle Ctrl+C gracefully
-trap 'echo -e "\n${GREEN}Goodbye!${NC}"; exit 0' SIGINT SIGTERM
+trap 'echo -e "\n${GREEN}Goodbye!${NC}"' EXIT
 
 print_centered() {
     local text="$1"
