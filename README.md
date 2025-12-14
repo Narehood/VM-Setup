@@ -43,6 +43,7 @@ Includes automated security patching and self-updating capabilities.
   <img src="https://img.shields.io/badge/Alpine_Linux-0D597F?style=flat-square&logo=alpine-linux&logoColor=white" alt="Alpine" />
   <img src="https://img.shields.io/badge/Arch_Linux-1793D1?style=flat-square&logo=arch-linux&logoColor=white" alt="Arch" />
   <img src="https://img.shields.io/badge/Fedora-294172?style=flat-square&logo=fedora&logoColor=white" alt="Fedora" />
+  <img src="https://img.shields.io/badge/RHEL/CentOS-262525?style=flat-square&logo=redhat&logoColor=white" alt="RHEL" />
   <img src="https://img.shields.io/badge/openSUSE-73BA25?style=flat-square&logo=opensuse&logoColor=white" alt="SUSE" />
 </div>
 
@@ -100,4 +101,5 @@ This project utilizes and wraps several excellent community scripts:
 <div align="center">
   <p><i>You are free to use and modify this script as you wish. <br>Bug reports are welcome, but fixes are not guaranteed.</i></p>
 </div>
+
 
