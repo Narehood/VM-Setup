@@ -10,6 +10,7 @@ BLUE='\033[1;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
+# show_header prints a formatted header banner to the terminal.
 show_header() {
     clear
     echo -e "${BLUE}==================================================${NC}"
@@ -44,7 +45,7 @@ PKG_MANAGER_UPDATED="false"
 OS=""
 VERSION=""
 
-# Cleanup on exit
+# cleanup unmounts /mnt if it is a mountpoint, ignoring errors.
 cleanup() {
     if mountpoint -q /mnt 2>/dev/null; then
         sudo umount /mnt 2>/dev/null || true
@@ -52,7 +53,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Check for root privileges
+# check_root verifies the script is running as root and, if not, prints an error message and exits with status 1.
 check_root() {
     if [[ $EUID -ne 0 ]]; then
         print_error "This script requires root privileges. Run with sudo."
@@ -60,6 +61,7 @@ check_root() {
     fi
 }
 
+# detect_os detects the current operating system and version and sets the global variables OS and VERSION.
 detect_os() {
     print_info "Detecting Operating System..."
     if [ -f /etc/os-release ]; then
@@ -79,6 +81,11 @@ detect_os() {
     print_success "Detected: $OS ($VERSION)"
 }
 
+# update_repos updates package repositories for the detected OS and marks them as updated to avoid repeating the operation.
+# 
+# If repositories have already been updated in this run (PKG_MANAGER_UPDATED == "true"), the function does nothing.
+# It uses the global OS variable to choose the appropriate package manager and sets PKG_MANAGER_UPDATED="true" on success.
+# Outputs informational, warning, and success messages via the script's print_* helpers.
 update_repos() {
     if [ "$PKG_MANAGER_UPDATED" == "true" ]; then
         return
@@ -98,7 +105,7 @@ update_repos() {
     print_success "Repositories updated."
 }
 
-# Generic package installer
+# install_pkg installs the given packages using the system package manager determined by $OS; returns non-zero if no packages are provided or the OS is unsupported.
 install_pkg() {
     local pkgs="$*"
     if [ -z "$pkgs" ]; then
@@ -115,6 +122,9 @@ install_pkg() {
     esac
 }
 
+# ensure_sudo_debian ensures `sudo` is installed when running on Debian.
+# If `OS` is "debian" and `sudo` is missing, it attempts to install `sudo` via apt.
+# On successful installation it sets `PKG_MANAGER_UPDATED="true"`. On failure it prints an error and exits with status 1.
 ensure_sudo_debian() {
     if [ "$OS" == "debian" ] && ! command -v sudo >/dev/null 2>&1; then
         print_warn "Sudo not found. Installing sudo..."
@@ -129,6 +139,8 @@ ensure_sudo_debian() {
     fi
 }
 
+# validate_hostname checks that the argument is a valid DNS hostname: only letters, digits, and hyphens, does not begin or end with a hyphen, and has length between 1 and 63 characters.
+# Exits with status 0 when the hostname is valid, 1 when it is invalid.
 validate_hostname() {
     local hostname="$1"
     if [[ "$hostname" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$ ]]; then

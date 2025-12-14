@@ -9,18 +9,22 @@ YELLOW='\033[1;33m'
 BLUE='\033[1;34m'
 NC='\033[0m'
 
+# print_status prints an informational message prefixed with a blue "[INFO]" tag to stdout.
 print_status() {
     echo -e "${BLUE}[INFO]${NC} $1"
 }
 
+# print_success prints MESSAGE to stdout prefixed by a green "[SUCCESS]" tag and resets the terminal color.
 print_success() {
     echo -e "${GREEN}[SUCCESS]${NC} $1"
 }
 
+# print_warn prints a warning message prefixed with a yellow "[WARN]" tag and echoes the provided text to stdout.
 print_warn() {
     echo -e "${YELLOW}[WARN]${NC} $1"
 }
 
+# print_error prints an error message prefixed with a red [ERROR] tag.
 print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
@@ -30,6 +34,7 @@ print_error() {
 OS=""
 NEEDS_REBOOT="false"
 
+# check_root verifies the script is running with root privileges and exits with status 1 after printing an error if it is not.
 check_root() {
     if [[ $EUID -ne 0 ]]; then
         print_error "This script requires root privileges. Run with sudo."
@@ -37,6 +42,9 @@ check_root() {
     fi
 }
 
+# detect_os determines the current operating system and sets the global `OS` variable to a lowercase identifier.
+# It prefers the `ID` from `/etc/os-release` when present, falls back to `redhat` if `/etc/redhat-release` exists,
+# to `debian` if `/etc/debian_version` exists, and otherwise uses the lowercased output of `uname -s`.
 detect_os() {
     if [ -f /etc/os-release ]; then
         . /etc/os-release
@@ -50,6 +58,7 @@ detect_os() {
     fi
 }
 
+# check_reboot_required determines whether the current system requires a reboot and sets the global NEEDS_REBOOT to "true" when a reboot is required; for Fedora/RHEL-family systems it sets NEEDS_REBOOT to "false" when explicitly determined that no reboot is needed, otherwise the variable is left unchanged.
 check_reboot_required() {
     case "$OS" in
         ubuntu|debian|linuxmint|kali)
@@ -77,6 +86,7 @@ check_reboot_required() {
     esac
 }
 
+# update_system updates and cleans the system using the host distribution's package manager and exits with status 1 for unsupported distributions.
 update_system() {
     detect_os
     print_status "Detected OS: $OS"
@@ -138,6 +148,7 @@ update_system() {
     print_success "System updated and cleaned successfully."
 }
 
+# prompt_reboot prompts the user when a reboot is required and reboots the system if the user confirms.
 prompt_reboot() {
     check_reboot_required
     

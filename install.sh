@@ -21,6 +21,7 @@ VERSION="3.2.0"
 # Handle Ctrl+C gracefully
 trap 'echo -e "\n${GREEN}Goodbye!${NC}"; exit 0' SIGINT SIGTERM
 
+# print_centered centers TEXT within UI_WIDTH, applies optional COLOR (ANSI code) and prints the result.
 print_centered() {
     local text="$1"
     local color="${2:-$NC}"
@@ -29,6 +30,7 @@ print_centered() {
     printf "${color}%${padding}s%s${NC}\n" "" "$text"
 }
 
+# print_line draws a horizontal line across UI_WIDTH using the specified character and optional color.
 print_line() {
     local char="${1:-=}"
     local color="${2:-$BLUE}"
@@ -37,27 +39,33 @@ print_line() {
     echo -e "${color}${line}${NC}"
 }
 
+# print_status prints an informational message prefixed with a cyan "[INFO]" tag followed by the provided text.
 print_status() {
     echo -e "${CYAN}[INFO]${NC} $1"
 }
 
+# print_success prints a success message prefixed with a green "[OK]" tag followed by the provided message.
 print_success() {
     echo -e "${GREEN}[OK]${NC} $1"
 }
 
+# print_warn prints a warning message prefixed with a yellow "[WARN]" tag.
 print_warn() {
     echo -e "${YELLOW}[WARN]${NC} $1"
 }
 
+# print_error prints an error message prefixed with a red [ERROR] tag.
 print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+# pause prompts the user to press Enter to return to the menu.
 pause() {
     echo ""
     read -rp "Press [Enter] to return to the menu..."
 }
 
+# confirm_prompt prompts the user with a message, applies an optional default ('y' or 'n'), and returns success (exit code 0) if the response is `y` or `Y`.
 confirm_prompt() {
     local prompt="$1"
     local default="${2:-n}"
@@ -68,6 +76,7 @@ confirm_prompt() {
     [[ "$response" =~ ^[Yy]$ ]]
 }
 
+# truncate_string truncates a string to the specified maximum length and echoes it; when truncated it appends .. to the result.
 truncate_string() {
     local str="$1"
     local max_len="$2"
@@ -78,10 +87,12 @@ truncate_string() {
     fi
 }
 
+# get_current_branch outputs the current Git branch name or `unknown` if the script is not inside a Git repository.
 get_current_branch() {
     git branch --show-current 2>/dev/null || echo "unknown"
 }
 
+# show_header clears the screen and prints the stylized ASCII header, centered version/author line, and a horizontal divider.
 show_header() {
     clear
     echo -e "${BLUE}██╗   ██╗███╗   ███╗    ███████╗███████╗████████╗██╗   ██╗██████╗ ${NC}"
@@ -94,6 +105,7 @@ show_header() {
     print_line "=" "$BLUE"
 }
 
+# show_stats prints formatted system information: OS, kernel, uptime, load average, memory and disk usage, hostname, network (IP/subnet/gateway) and current git branch.
 show_stats() {
     # OS Detection
     local distro="Unknown"
@@ -207,6 +219,7 @@ show_stats() {
     print_line "=" "$BLUE"
 }
 
+# check_for_updates checks the script's git repository for remote changes, prompts to pull and apply updates if available, and restarts the script on a successful update.
 check_for_updates() {
     echo ""
     print_status "Checking for updates..."
@@ -259,6 +272,11 @@ check_for_updates() {
     fi
 }
 
+# switch_branch presents an interactive list of local and remote git branches for the repository in SCRIPT_DIR and switches the working branch based on the user's selection.
+# 
+# It fetches branch information (falling back to local branches if fetch fails), shows the current branch, and allows the user to pick a branch or cancel.
+# If there are uncommitted changes the user is prompted to confirm discarding them before switching.
+# Returns 0 on successful switch or user-cancel, and 1 on failure (e.g., git missing, not a repo, invalid selection, or switch failure).
 switch_branch() {
     clear
     print_line "=" "$BLUE"
@@ -393,6 +411,12 @@ switch_branch() {
     fi
 }
 
+# execute_script runs an installer script located in the Installers/ directory and pauses for user acknowledgement.
+# It executes the file named by `script_name` (relative to Installers/) with bash.
+# Arguments:
+#   script_name — relative filename under Installers/ to execute.
+# Returns:
+#   1 if the target script is missing or not readable; otherwise returns the exit status of the final pause (it does not propagate the executed script's exit code).
 execute_script() {
     local script_name="$1"
     local full_path="$SCRIPT_DIR/Installers/$script_name"
@@ -422,6 +446,7 @@ execute_script() {
     pause
 }
 
+# show_help displays the help and information screen for the VM Setup Menu, including available menu options, script location, and current git branch.
 show_help() {
     clear
     print_line "=" "$BLUE"
