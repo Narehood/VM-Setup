@@ -10,6 +10,7 @@ BLUE='\033[1;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
+# show_header clears the terminal and prints a colored, branded header for the VM initial configuration tool.
 show_header() {
     clear
     echo -e "${BLUE}==================================================${NC}"
@@ -44,7 +45,7 @@ PKG_MANAGER_UPDATED="false"
 OS=""
 VERSION=""
 
-# Cleanup on exit
+# cleanup unmounts /mnt if it is a mounted filesystem to ensure no stale mounts remain on exit.
 cleanup() {
     if mountpoint -q /mnt 2>/dev/null; then
         sudo umount /mnt 2>/dev/null || true
@@ -52,7 +53,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Check for root privileges
+# check_root verifies the script is running as root; if not, it prints an error and exits with status 1.
 check_root() {
     if [[ $EUID -ne 0 ]]; then
         print_error "This script requires root privileges. Run with sudo."
@@ -60,6 +61,7 @@ check_root() {
     fi
 }
 
+# detect_os detects the operating system and version and sets the global variables `OS` and `VERSION`.
 detect_os() {
     print_info "Detecting Operating System..."
     if [ -f /etc/os-release ]; then
@@ -79,6 +81,7 @@ detect_os() {
     print_success "Detected: $OS ($VERSION)"
 }
 
+# update_repos updates package repositories for the detected OS and marks PKG_MANAGER_UPDATED to avoid running again.
 update_repos() {
     if [ "$PKG_MANAGER_UPDATED" == "true" ]; then
         return
@@ -98,7 +101,7 @@ update_repos() {
     print_success "Repositories updated."
 }
 
-# Generic package installer
+# install_pkg installs one or more packages using the detected OS package manager and returns non-zero if no package names are given or the OS is unsupported.
 install_pkg() {
     if [ $# -eq 0 ]; then
         return 1
@@ -114,6 +117,8 @@ install_pkg() {
     esac
 }
 
+# ensure_sudo_debian ensures the `sudo` package is present on Debian systems; if `sudo` is missing it installs the package.
+# On successful installation it sets `PKG_MANAGER_UPDATED="true"`; on failure it prints an error and exits with status 1.
 ensure_sudo_debian() {
     if [ "$OS" == "debian" ] && ! command -v sudo >/dev/null 2>&1; then
         print_warn "Sudo not found. Installing sudo..."
@@ -128,6 +133,7 @@ ensure_sudo_debian() {
     fi
 }
 
+# validate_hostname validates that a hostname is 1–63 characters long, starts and ends with an alphanumeric character, may contain hyphens in the middle, and returns 0 if valid or 1 if invalid.
 validate_hostname() {
     local hostname="$1"
     if [[ "$hostname" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$ ]]; then

@@ -22,6 +22,7 @@ CHECKSUM_FILE="$SCRIPT_DIR/Installers/.checksums.sha256"
 # Handle Ctrl+C gracefully
 trap 'echo -e "\n${GREEN}Goodbye!${NC}"' EXIT
 
+# print_centered centers the given text within UI_WIDTH, applies an optional ANSI color (defaults to no color), and prints the result.
 print_centered() {
     local text="$1"
     local color="${2:-$NC}"
@@ -30,6 +31,7 @@ print_centered() {
     printf "${color}%${padding}s%s${NC}\n" "" "$text"
 }
 
+# print_line prints a horizontal line across UI_WIDTH using a repeated character (default '=') and an optional color (default $BLUE).
 print_line() {
     local char="${1:-=}"
     local color="${2:-$BLUE}"
@@ -38,27 +40,33 @@ print_line() {
     echo -e "${color}${line}${NC}"
 }
 
+# print_status prints an informational message prefixed with "[INFO]" in cyan color.
 print_status() {
     echo -e "${CYAN}[INFO]${NC} $1"
 }
 
+# print_success prints a success message prefixed with a green "[OK]" tag.
 print_success() {
     echo -e "${GREEN}[OK]${NC} $1"
 }
 
+# print_warn prints a warning message prefixed with "[WARN]" in yellow to stdout.
 print_warn() {
     echo -e "${YELLOW}[WARN]${NC} $1"
 }
 
+# print_error prints the given message prefixed with “[ERROR]” in red.
 print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+# pause prompts the user to press Enter to continue and waits for input.
 pause() {
     echo ""
     read -rp "Press [Enter] to return to the menu..."
 }
 
+# confirm_prompt prompts the user with the provided prompt and returns success if the reply starts with `Y` or `y`; an optional second argument supplies the default answer (`n` if omitted).
 confirm_prompt() {
     local prompt="$1"
     local default="${2:-n}"
@@ -69,6 +77,7 @@ confirm_prompt() {
     [[ "$response" =~ ^[Yy]$ ]]
 }
 
+# truncate_string truncates a string to a maximum length and appends ".." when truncation occurs.
 truncate_string() {
     local str="$1"
     local max_len="$2"
@@ -79,14 +88,17 @@ truncate_string() {
     fi
 }
 
+# get_current_branch prints the current Git branch name or "unknown" if the repository or Git command is not available.
 get_current_branch() {
     git branch --show-current 2>/dev/null || echo "unknown"
 }
 
+# is_root checks whether the script is running as root by testing if the effective UID equals 0.
 is_root() {
     [ "$EUID" -eq 0 ]
 }
 
+# show_header clears the terminal and displays the ASCII banner, a centered version/author line, and a separator line.
 show_header() {
     clear
     echo -e "${BLUE}██╗   ██╗███╗   ███╗    ███████╗███████╗████████╗██╗   ██╗██████╗ ${NC}"
@@ -99,6 +111,7 @@ show_header() {
     print_line "=" "$BLUE"
 }
 
+# show_stats collects and prints formatted system information including OS, kernel, hostname, network (IP/subnet/gateway), load average, memory and disk usage, uptime, and current Git branch.
 show_stats() {
     # OS Detection
     local distro="Unknown"
@@ -211,6 +224,7 @@ show_stats() {
     print_line "=" "$BLUE"
 }
 
+# check_for_updates checks the script's git repository for remote updates, offers to download and apply them, and restarts the script when an update is applied. It returns a non-zero status when Git is not available, the directory is not a Git repository, fetching fails, or no upstream branch is configured.
 check_for_updates() {
     echo ""
     print_status "Checking for updates..."
@@ -263,6 +277,7 @@ check_for_updates() {
     fi
 }
 
+# switch_branch switches the script's Git repository branch: it fetches branches, presents a selectable list of local and remote branches, offers handling for uncommitted changes (stash, discard, or cancel), checks out the chosen branch (creating it from origin if needed), pulls updates when an upstream exists, verifies the switch, and restarts the menu on success.
 switch_branch() {
     clear
     print_line "=" "$BLUE"
@@ -472,7 +487,8 @@ switch_branch() {
 # Parse script metadata from header comments
 # Expected format in installer scripts:
 #   # REQUIRES_ROOT: true
-#   # DESCRIPTION: Brief description of script
+# parse_script_metadata extracts the value for a metadata `KEY` from the first 20 lines of a script's header (lines formatted as `# KEY: value`), matching the key case-insensitively and echoes the value or an empty string if not found.
+# Arguments: 1) path to the script file, 2) metadata key to look up.
 parse_script_metadata() {
     local script_path="$1"
     local key="$2"
@@ -483,7 +499,7 @@ parse_script_metadata() {
     echo "$value"
 }
 
-# Verify script checksum if checksum file exists
+# verify_script_checksum verifies a script's SHA‑256 checksum against CHECKSUM_FILE, prompting the user to continue or abort when the checksum is missing, sha256sum is unavailable, or the checksum does not match.
 verify_script_checksum() {
     local script_path="$1"
     local script_name
@@ -528,7 +544,7 @@ verify_script_checksum() {
     return 0
 }
 
-# Generate checksums for all installer scripts
+# generate_checksums generates SHA-256 checksums for all `*.sh` files in the Installers directory and writes them to the CHECKSUM_FILE, returning non-zero if the directory or `sha256sum` is missing or no scripts were found.
 generate_checksums() {
     local installers_dir="$SCRIPT_DIR/Installers"
 
@@ -566,6 +582,7 @@ generate_checksums() {
     return 0
 }
 
+# execute_script executes an installer script from Installers/, verifying existence, readability, file type and checksum, offering to set the executable bit, honoring REQUIRES_ROOT metadata (with an option to run via sudo), showing DESCRIPTION if present, and running the script — it exits with the script's exit code.
 execute_script() {
     local script_name="$1"
     local full_path="$SCRIPT_DIR/Installers/$script_name"
@@ -692,6 +709,7 @@ execute_script() {
     return $exit_code
 }
 
+# show_help displays a help and information screen describing the menu options, metadata format, security/checksum guidance, current script location and Git branch, then waits for the user to press Enter.
 show_help() {
     clear
     print_line "=" "$BLUE"
