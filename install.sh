@@ -55,7 +55,7 @@ print_warn() {
     echo -e "${YELLOW}[WARN]${NC} $1"
 }
 
-# print_error prints the given message prefixed with "[ERROR]" in red.
+# print_error prints an error message prefixed with "[ERROR]" in red.
 print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
@@ -111,7 +111,7 @@ show_header() {
     print_line "=" "$BLUE"
 }
 
-# show_stats collects and prints formatted system information including OS, kernel, hostname, network (IP/subnet/gateway), load average, memory and disk usage, uptime, and current Git branch.
+# show_stats prints a formatted system information table including OS, kernel, hostname, IP/subnet/gateway, load average, memory and disk usage, uptime, and current Git branch.
 show_stats() {
     # OS Detection
     local distro="Unknown"

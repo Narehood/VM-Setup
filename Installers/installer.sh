@@ -20,6 +20,7 @@ UI_WIDTH=86
 # Handle Ctrl+C gracefully
 trap 'echo -e "\n${GREEN}Goodbye!${NC}"; exit 0' INT
 
+# print_centered centers the given text within UI_WIDTH and prints it, using the optional ANSI color escape sequence provided as the second argument.
 print_centered() {
     local text="$1"
     local color="${2:-$NC}"
@@ -28,22 +29,29 @@ print_centered() {
     printf "${color}%${padding}s%s${NC}\n" "" "$text"
 }
 
+# print_line draws a horizontal line of length UI_WIDTH using the specified character (default '=') and color (default BLUE).
 print_line() {
     local char="${1:-=}"
     local color="${2:-$BLUE}"
     printf "${color}%${UI_WIDTH}s${NC}\n" "" | sed "s/ /${char}/g"
 }
 
+# print_status prints an informational message prefixed with a cyan "[INFO]" tag.
 print_status() { echo -e "${CYAN}[INFO]${NC} $1"; }
+# print_success prints a success message prefixed with [OK] in green and echoes the provided message.
 print_success() { echo -e "${GREEN}[OK]${NC} $1"; }
+# print_warn prints a warning message prefixed with [WARN] in yellow to standard output.
 print_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+# print_error prints MESSAGE prefixed with a red "[ERROR]" tag.
 print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
+# pause prompts the user to press Enter to return to the menu.
 pause() {
     echo ""
     read -rp "Press [Enter] to return to the menu..."
 }
 
+# truncate_string shortens a string to a maximum length, appending ".." when truncation occurs.
 truncate_string() {
     local str="$1"
     local max_len="$2"
@@ -54,6 +62,7 @@ truncate_string() {
     fi
 }
 
+# show_header clears the terminal and prints the ASCII art banner with the centered "QUICK APP INSTALLER  |  LIBRARY" title and a colored horizontal separator.
 show_header() {
     clear
     echo -e "${BLUE}███████╗██╗   ██╗███████╗████████╗███████╗███╗   ███╗    ███████╗███████╗████████╗██╗   ██╗██████╗ ${NC}"
@@ -66,6 +75,7 @@ show_header() {
     print_line "=" "$BLUE"
 }
 
+# show_stats displays a formatted system information grid including OS, kernel, hostname, load average, memory and disk usage, and network details (IP address, subnet, gateway).
 show_stats() {
     # OS Detection
     local distro="Unknown"
@@ -144,6 +154,7 @@ declare -A INSTALLERS=(
     [6]="Newt.sh:Newt VPN Node"
 )
 
+# execute_installer validates a script's existence/readability, offers to fix its executable bit, runs the script, reports a non-zero exit code, and prompts the user to return to the menu or exit.
 execute_installer() {
     local script_name="$1"
     local display_name="$2"
@@ -195,6 +206,7 @@ execute_installer() {
     fi
 }
 
+# show_menu displays the available installers in a two-column, numbered menu and adds a "0. Return to Main Menu" option.
 show_menu() {
     echo -e "${WHITE}AVAILABLE INSTALLERS${NC}"
 
