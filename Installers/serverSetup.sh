@@ -41,6 +41,9 @@ print_info() {
 
 # --- CORE LOGIC ---
 
+# Ensure administrative paths are included for Debian-based systems
+export PATH=$PATH:/usr/local/sbin:/usr/sbin:/sbin
+
 PKG_MANAGER_UPDATED="false"
 OS=""
 VERSION=""
@@ -299,7 +302,8 @@ if [ "$OS" == "debian" ]; then
         read -p "Enter username: " user_to_add
         if [ -n "$user_to_add" ]; then
             if id "$user_to_add" >/dev/null 2>&1; then
-                usermod -aG sudo "$user_to_add"
+                # Explicit path used for usermod to handle Debian pathing issues
+                /usr/sbin/usermod -aG sudo "$user_to_add"
                 print_success "User '$user_to_add' added to sudo group. (Log out to apply)"
             else
                 print_error "User '$user_to_add' does not exist."
