@@ -249,7 +249,7 @@ update_repos
 
 case "$OS" in
     alpine)
-        install_pkg sudo net-tools nano curl wget
+        install_pkg sudo net-tools nano curl wget file
         ;;
     arch)
         install_pkg net-tools btop whois curl wget nano
