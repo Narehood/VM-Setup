@@ -244,7 +244,7 @@ fi
 
 # Install Standard Server Tools
 print_step "Standard System Utilities"
-print_info "Installing: net-tools, btop, curl, wget, nano..."
+print_info "Installing: net-tools, btop, curl, wget, file, nano..."
 update_repos
 
 case "$OS" in
