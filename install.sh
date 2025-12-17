@@ -16,7 +16,7 @@ WHITE='\033[1;37m'
 NC='\033[0m'
 
 UI_WIDTH=86
-VERSION="3.3.1"
+VERSION="3.3.2"
 CHECKSUM_FILE="$SCRIPT_DIR/Installers/.checksums.sha256"
 
 # Handle Ctrl+C gracefully
@@ -685,12 +685,26 @@ execute_script() {
         return 1
     fi
 
+    # File type verification with fallback for systems without 'file' command (e.g., Alpine)
     local file_type
-    file_type=$(file -b "$full_path" 2>/dev/null || echo "unknown")
-    if [[ ! "$file_type" =~ (shell|bash|sh|text|ASCII) ]]; then
-        print_error "File does not appear to be a shell script: $file_type"
-        pause
-        return 1
+    if command -v file >/dev/null 2>&1; then
+        file_type=$(file -b "$full_path" 2>/dev/null || echo "unknown")
+        if [ "$file_type" != "unknown" ] && [[ ! "$file_type" =~ (shell|bash|sh|text|ASCII|script) ]]; then
+            print_error "File does not appear to be a shell script: $file_type"
+            pause
+            return 1
+        fi
+    else
+        # Fallback: check for shebang if 'file' command unavailable
+        local first_line
+        first_line=$(head -n 1 "$full_path" 2>/dev/null)
+        if [[ ! "$first_line" =~ ^#! ]]; then
+            print_warn "Cannot verify file type (file command not available)"
+            if ! confirm_prompt "  Continue anyway? (y/N): " "n"; then
+                pause
+                return 1
+            fi
+        fi
     fi
 
     if ! verify_script_checksum "$full_path"; then
