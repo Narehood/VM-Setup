@@ -16,7 +16,7 @@ WHITE='\033[1;37m'
 NC='\033[0m'
 
 UI_WIDTH=86
-VERSION="3.3.2"
+VERSION="3.3.3"
 CHECKSUM_FILE="$SCRIPT_DIR/Installers/.checksums.sha256"
 
 # Handle Ctrl+C gracefully
@@ -860,7 +860,7 @@ while true; do
         7) execute_script "linutil.sh" ;;
         8) switch_branch ;;
         9|h|help) show_help ;;
-        0|q|exit) echo -e "\n${GREEN}Goodbye!${NC}"; exit 0 ;;
+        0|q|exit) exit 0 ;;
         generate-checksums) generate_checksums; pause ;;
         fix-permissions) fix_permissions; pause ;;
         "") ;;
