@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-VERSION="1.1.0"
+VERSION="1.2.0"
 
 # --- UI & FORMATTING FUNCTIONS ---
 
@@ -14,6 +14,7 @@ NC='\033[0m'
 
 # show_header clears the screen and prints a colored, formatted header showing the tool name and current version.
 show_header() {
+    [[ "$QUIET" == "true" ]] && return
     clear
     echo -e "${BLUE}==================================================${NC}"
     echo -e "${CYAN}           VM INITIAL CONFIGURATION TOOL          ${NC}"
@@ -23,15 +24,28 @@ show_header() {
 }
 
 # print_step prints a formatted step message prefixed with a blue "[STEP]" tag and a leading blank line, using the first argument as the message.
-print_step() { echo -e "\n${BLUE}[STEP]${NC} $1"; }
+print_step() {
+    [[ "$QUIET" == "true" ]] && return
+    echo -e "\n${BLUE}[STEP]${NC} $1"
+}
+
 # print_success prints MESSAGE prefixed with a green [OK] indicator to stdout.
-print_success() { echo -e "${GREEN}[OK]${NC} $1"; }
+print_success() {
+    [[ "$QUIET" == "true" ]] && return
+    echo -e "${GREEN}[OK]${NC} $1"
+}
+
 # print_warn prints a warning message prefixed with `[WARN]` (yellow) and echoes it to stdout.
 print_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+
 # print_error prints an error message prefixed with `[ERROR]` in red and resets terminal color.
 print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
 # print_info prints an informational message prefixed with `[INFO]` in cyan color to stdout.
-print_info() { echo -e "${CYAN}[INFO]${NC} $1"; }
+print_info() {
+    [[ "$QUIET" == "true" ]] && return
+    echo -e "${CYAN}[INFO]${NC} $1"
+}
 
 # show_help prints usage information, supported distributions, and exits the script.
 show_help() {
@@ -43,7 +57,7 @@ Usage: $(basename "$0") [OPTIONS]
 Options:
     -h, --help      Show this help message
     -v, --version   Show version
-    -q, --quiet     Suppress non-essential output
+    -q, --quiet     Suppress non-essential output (warnings/errors still shown)
 
 Supported distributions:
     Alpine, Arch, EndeavourOS, Manjaro, Debian, Ubuntu, Pop!_OS,
@@ -287,7 +301,7 @@ ensure_sudo
 
 # XCP-NG Tools Installation
 print_step "XCP-NG Guest Tools Configuration"
-echo "Install XCP-NG Tools? (Recommended for VM performance)"
+[[ "$QUIET" != "true" ]] && echo "Install XCP-NG Tools? (Recommended for VM performance)"
 
 if prompt_yes_no "Install?" "y"; then
     update_repos
@@ -355,7 +369,7 @@ print_success "Utilities installed."
 
 # Hostname Configuration
 print_step "Hostname Configuration"
-echo -e "Current Hostname: ${CYAN}$(hostname)${NC}"
+[[ "$QUIET" != "true" ]] && echo -e "Current Hostname: ${CYAN}$(hostname)${NC}"
 
 if prompt_yes_no "Change hostname?"; then
     read -p "Enter new hostname: " new_hostname
@@ -386,8 +400,10 @@ if is_debian_based; then
     fi
 fi
 
-echo ""
-echo -e "${BLUE}==================================================${NC}"
-echo -e "${GREEN}               SETUP COMPLETE                     ${NC}"
-echo -e "${BLUE}==================================================${NC}"
-echo ""
+if [[ "$QUIET" != "true" ]]; then
+    echo ""
+    echo -e "${BLUE}==================================================${NC}"
+    echo -e "${GREEN}               SETUP COMPLETE                     ${NC}"
+    echo -e "${BLUE}==================================================${NC}"
+    echo ""
+fi
