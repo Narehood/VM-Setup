@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-VERSION="1.3.0"
+VERSION="1.3.1"
 LOGFILE="/var/log/system-update.log"
 LOCKFILE="/var/run/system-update.lock"
 LOG_ENABLED="true"
@@ -160,11 +160,16 @@ check_reboot_required() {
             fi
             ;;
         arch|manjaro|endeavouros)
-            local running installed
+            local running installed running_prefix installed_prefix
             running=$(uname -r)
             installed=$(pacman -Q linux 2>/dev/null | awk '{print $2}' || true)
-            if [[ -n "$installed" ]] && [[ "$running" != *"${installed%%-*}"* ]]; then
-                NEEDS_REBOOT="true"
+
+            if [[ -n "$installed" ]]; then
+                running_prefix="${running%%-*}"
+                installed_prefix="${installed%%-*}"
+                if [[ "$running_prefix" != "$installed_prefix" ]]; then
+                    NEEDS_REBOOT="true"
+                fi
             fi
             ;;
     esac
@@ -286,7 +291,6 @@ validate_log_path() {
         fi
     fi
 
-    # Verify we can write to the log file
     if ! touch "$LOGFILE" 2>/dev/null; then
         LOG_ENABLED="false"
         echo -e "${YELLOW}[WARN]${NC} Cannot write to log file '$LOGFILE'. File logging disabled." >&2
