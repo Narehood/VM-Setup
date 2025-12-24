@@ -1,83 +1,123 @@
 #!/bin/bash
+set -euo pipefail
 
-# Function to display messages
+VERSION="1.1.0"
+
+# print_status prints an informational message prefixed with `[INFO]` in blue to stdout.
 print_status() { echo -e "\033[1;34m[INFO]\033[0m $1"; }
+# print_success prints a green "[SUCCESS]" label followed by the provided message to stdout.
 print_success() { echo -e "\033[0;32m[SUCCESS]\033[0m $1"; }
+# print_error prints the given message prefixed with "[ERROR]" in red.
 print_error() { echo -e "\033[0;31m[ERROR]\033[0m $1"; }
+# print_warn prints a yellow "[WARN]" label followed by the given message to stdout.
+print_warn() { echo -e "\033[1;33m[WARN]\033[0m $1"; }
 
-# 1. DEBIAN / UBUNTU / KALI
+# check_privileges checks if the script is running as root or has sudo access and exits if neither is available.
+check_privileges() {
+    if [[ $EUID -ne 0 ]]; then
+        if ! sudo -v 2>/dev/null; then
+            print_error "This script requires root privileges."
+            exit 1
+        fi
+    fi
+}
+
+# backup_config creates a timestamped backup of the specified file (appends .bak.YYYYMMDDHHMMSS) if the file exists.
+backup_config() {
+    local file="$1"
+    if [[ -f "$file" ]]; then
+        sudo cp "$file" "${file}.bak.$(date +%Y%m%d%H%M%S)"
+        print_status "Backed up $file"
+    fi
+}
+
+# show_help displays the script usage, supported distributions, available options (-h/--help, -v/--version, -d/--dry-run), and exits.
+show_help() {
+    cat << EOF
+Auto-Update Enabler v${VERSION}
+Usage: $(basename "$0") [OPTIONS]
+
+Options:
+    -h, --help      Show this help message
+    -v, --version   Show version
+    -d, --dry-run   Show what would be done without making changes
+
+Supported distributions:
+    Debian, Ubuntu, Linux Mint, Kali, Fedora, RHEL, Rocky, AlmaLinux,
+    CentOS, Arch, Manjaro, Alpine, openSUSE
+EOF
+    exit 0
+}
+
+# enable_debian_updates configures Unattended Upgrades on Debian/Ubuntu systems by installing required packages and writing APT periodic update and unattended-upgrade settings to /etc/apt/apt.conf.d/20auto-upgrades.
 enable_debian_updates() {
     print_status "Configuring Unattended Upgrades for Debian/Ubuntu..."
     
-    # Update and install package
     sudo apt-get update -q
     sudo apt-get install -y unattended-upgrades apt-listchanges
 
-    # Enable the service via configuration file instead of interactive dialog
-    # This creates the activation file required by apt
-    echo 'APT::Periodic::Update-Package-Lists "1";' | sudo tee /etc/apt/apt.conf.d/20auto-upgrades
-    echo 'APT::Periodic::Unattended-Upgrade "1";' | sudo tee -a /etc/apt/apt.conf.d/20auto-upgrades
+    # Write both lines in one operation
+    sudo tee /etc/apt/apt.conf.d/20auto-upgrades > /dev/null << 'EOF'
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+EOF
 
     print_success "Unattended upgrades enabled."
 }
 
-# 2. RHEL / FEDORA / ROCKY / ALMA
+# enable_redhat_updates configures DNF Automatic on RHEL-based systems, enables automatic application of package updates, and starts the dnf-automatic timer service.
 enable_redhat_updates() {
     print_status "Configuring DNF Automatic for RHEL-based systems..."
     
     sudo dnf install -y dnf-automatic
 
-    # Configure dnf-automatic to apply updates, not just download them
-    # We use sed to change apply_updates = no -> yes
-    sudo sed -i 's/^apply_updates = no/apply_updates = yes/' /etc/dnf/automatic.conf
+    local conf="/etc/dnf/automatic.conf"
+    backup_config "$conf"
+    sudo sed -i 's/^apply_updates = no/apply_updates = yes/' "$conf"
 
     sudo systemctl enable --now dnf-automatic.timer
     print_success "DNF Automatic enabled."
 }
 
-# 3. CENTOS (Legacy 7)
+# enable_centos_updates configures and enables yum-cron for CentOS (legacy 7).
+# It installs the yum-cron package, backs up /etc/sysconfig/yum-cron, sets CHECK_ONLY and DOWNLOAD_ONLY to "no", and enables & starts the yum-cron service.
 enable_centos_updates() {
     print_status "Configuring Yum Cron for CentOS..."
     sudo yum install -y yum-cron
     
-    # Set CHECK_ONLY to no, and DOWNLOAD_ONLY to no (so it installs)
-    sudo sed -i 's/^CHECK_ONLY = yes/CHECK_ONLY = no/' /etc/sysconfig/yum-cron
-    sudo sed -i 's/^DOWNLOAD_ONLY = yes/DOWNLOAD_ONLY = no/' /etc/sysconfig/yum-cron
+    local conf="/etc/sysconfig/yum-cron"
+    backup_config "$conf"
+    sudo sed -i 's/^CHECK_ONLY = yes/CHECK_ONLY = no/' "$conf"
+    sudo sed -i 's/^DOWNLOAD_ONLY = yes/DOWNLOAD_ONLY = no/' "$conf"
     
     sudo systemctl enable --now yum-cron
     print_success "Yum Cron enabled."
 }
 
-# 4. ARCH LINUX
-# WARNING: Arch automatic updates can break systems.
-# This implementation creates a systemd timer to update the pacman database
-# but leaves the actual upgrade to the user to avoid breakage, 
-# OR installs 'informant' to check news before upgrading.
+# enable_arch_updates configures Arch Linux maintenance by updating the system, ensuring pacman-contrib is installed, enabling paccache.timer, and creating a daily pacman-refresh service and timer.
 enable_arch_updates() {
     print_status "Configuring Arch Linux maintenance timers..."
     
     sudo pacman -Syu --noconfirm
-    # Install pacman-contrib for paccache
-    if ! pacman -Q pacman-contrib >/dev/null 2>&1; then
+
+    if ! pacman -Q pacman-contrib &>/dev/null; then
         sudo pacman -S --noconfirm pacman-contrib
     fi
 
-    # Clean cache automatically to save disk space
     sudo systemctl enable --now paccache.timer
     
-    # Note: We do NOT enable auto-installation of packages on Arch
-    # as it violates the rolling release philosophy and can brick the OS.
-    # Instead, we enable a timer to refresh the database so 'checkupdates' works instantly.
-    
     # Create a custom service to refresh databases
-    echo "[Unit]
+    sudo tee /etc/systemd/system/pacman-refresh.service > /dev/null << 'EOF'
+[Unit]
 Description=Refresh Pacman Databases
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/pacman -Sy" | sudo tee /etc/systemd/system/pacman-refresh.service
+ExecStart=/usr/bin/pacman -Syy
+EOF
 
-    echo "[Unit]
+    sudo tee /etc/systemd/system/pacman-refresh.timer > /dev/null << 'EOF'
+[Unit]
 Description=Run Pacman Refresh daily
 
 [Timer]
@@ -85,65 +125,94 @@ OnCalendar=daily
 Persistent=true
 
 [Install]
-WantedBy=timers.target" | sudo tee /etc/systemd/system/pacman-refresh.timer
+WantedBy=timers.target
+EOF
 
     sudo systemctl daemon-reload
     sudo systemctl enable --now pacman-refresh.timer
     
-    print_success "Arch maintenance timers active. (Note: Auto-install disabled for safety)."
+    print_warn "Auto-install disabled for safety on rolling release."
+    print_success "Arch maintenance timers active."
 }
 
-# 5. ALPINE LINUX
+# enable_alpine_updates creates a daily /etc/periodic/daily/apk-upgrade script that runs `apk update` and `apk upgrade` and makes it executable.
 enable_alpine_updates() {
     print_status "Configuring Alpine Autoupgrades..."
-    # Alpine doesn't have a standard "unattended-upgrades" daemon like Debian.
-    # Standard practice is a cron job.
     
-    echo "#!/bin/sh
-apk update && apk upgrade" | sudo tee /etc/periodic/daily/apk-upgrade
+    sudo tee /etc/periodic/daily/apk-upgrade > /dev/null << 'EOF'
+#!/bin/sh
+apk update && apk upgrade
+EOF
     
     sudo chmod +x /etc/periodic/daily/apk-upgrade
     print_success "Daily upgrade cron job created."
 }
 
-# --- MAIN DETECTION LOGIC ---
+# enable_suse_updates creates a daily cron job at /etc/cron.daily/suse-update that refreshes zypper repositories and applies available updates automatically.
+enable_suse_updates() {
+    print_status "Enabling SUSE updates via Cron..."
+    
+    sudo tee /etc/cron.daily/suse-update > /dev/null << 'EOF'
+#!/bin/bash
+zypper refresh
+zypper update -y
+EOF
 
-if [ -f /etc/os-release ]; then
-    . /etc/os-release
-    OS=$ID
-else
-    echo "Cannot identify the Linux distribution."
+    sudo chmod +x /etc/cron.daily/suse-update
+    print_success "SUSE cron job created."
+}
+
+# --- MAIN ---
+
+DRY_RUN=false
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help) show_help ;;
+        -v|--version) echo "v${VERSION}"; exit 0 ;;
+        -d|--dry-run) DRY_RUN=true; shift ;;
+        *) print_error "Unknown option: $1"; exit 1 ;;
+    esac
+done
+
+if [[ ! -f /etc/os-release ]]; then
+    print_error "Cannot identify the Linux distribution."
     exit 1
 fi
 
+source /etc/os-release
+OS="${ID:-unknown}"
+
+if $DRY_RUN; then
+    print_status "Dry run - detected OS: $OS"
+    print_status "Would configure automatic updates for this system."
+    exit 0
+fi
+
+check_privileges
+
 case "$OS" in
-    ubuntu|debian|linuxmint|kali)
+    ubuntu|debian|linuxmint|kali|pop)
         enable_debian_updates
         ;;
     fedora|rhel|rocky|almalinux)
         enable_redhat_updates
         ;;
     centos)
-        # Check version for CentOS 7 (yum) vs Stream 8/9 (dnf)
-        if grep -q "7" /etc/centos-release; then
+        if [[ -f /etc/centos-release ]] && grep -q "7" /etc/centos-release; then
             enable_centos_updates
         else
             enable_redhat_updates
         fi
         ;;
-    arch|manjaro)
+    arch|manjaro|endeavouros)
         enable_arch_updates
         ;;
     alpine)
         enable_alpine_updates
         ;;
-    suse|opensuse*)
-        # SUSE Yast requires interactive config or complex XML inputs.
-        # Fallback to simple zypper cron
-        print_status "Enabling SUSE updates via Cron..."
-        echo -e "#!/bin/bash\nzypper refresh\nzypper update -y" | sudo tee /etc/cron.daily/suse-update
-        sudo chmod +x /etc/cron.daily/suse-update
-        print_success "SUSE cron job created."
+    opensuse*|suse|sles)
+        enable_suse_updates
         ;;
     *)
         print_error "Unsupported Linux distribution: $OS"
