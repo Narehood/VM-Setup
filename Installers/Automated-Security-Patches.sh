@@ -3,13 +3,16 @@ set -euo pipefail
 
 VERSION="1.1.0"
 
-# Function to display messages
+# print_status prints an informational message prefixed with `[INFO]` in blue to stdout.
 print_status() { echo -e "\033[1;34m[INFO]\033[0m $1"; }
+# print_success prints a green "[SUCCESS]" label followed by the provided message to stdout.
 print_success() { echo -e "\033[0;32m[SUCCESS]\033[0m $1"; }
+# print_error prints the given message prefixed with "[ERROR]" in red.
 print_error() { echo -e "\033[0;31m[ERROR]\033[0m $1"; }
+# print_warn prints a yellow "[WARN]" label followed by the given message to stdout.
 print_warn() { echo -e "\033[1;33m[WARN]\033[0m $1"; }
 
-# Check for root or sudo access
+# check_privileges checks if the script is running as root or has sudo access and exits if neither is available.
 check_privileges() {
     if [[ $EUID -ne 0 ]]; then
         if ! sudo -v 2>/dev/null; then
@@ -19,7 +22,7 @@ check_privileges() {
     fi
 }
 
-# Backup a config file before modifying
+# backup_config creates a timestamped backup of the specified file (appends .bak.YYYYMMDDHHMMSS) if the file exists.
 backup_config() {
     local file="$1"
     if [[ -f "$file" ]]; then
@@ -28,6 +31,7 @@ backup_config() {
     fi
 }
 
+# show_help displays the script usage, supported distributions, available options (-h/--help, -v/--version, -d/--dry-run), and exits.
 show_help() {
     cat << EOF
 Auto-Update Enabler v${VERSION}
@@ -45,7 +49,7 @@ EOF
     exit 0
 }
 
-# 1. DEBIAN / UBUNTU / KALI
+# enable_debian_updates configures Unattended Upgrades on Debian/Ubuntu systems by installing required packages and writing APT periodic update and unattended-upgrade settings to /etc/apt/apt.conf.d/20auto-upgrades.
 enable_debian_updates() {
     print_status "Configuring Unattended Upgrades for Debian/Ubuntu..."
     
@@ -61,7 +65,7 @@ EOF
     print_success "Unattended upgrades enabled."
 }
 
-# 2. RHEL / FEDORA / ROCKY / ALMA
+# enable_redhat_updates configures DNF Automatic on RHEL-based systems, enables automatic application of package updates, and starts the dnf-automatic timer service.
 enable_redhat_updates() {
     print_status "Configuring DNF Automatic for RHEL-based systems..."
     
@@ -75,7 +79,8 @@ enable_redhat_updates() {
     print_success "DNF Automatic enabled."
 }
 
-# 3. CENTOS (Legacy 7)
+# enable_centos_updates configures and enables yum-cron for CentOS (legacy 7).
+# It installs the yum-cron package, backs up /etc/sysconfig/yum-cron, sets CHECK_ONLY and DOWNLOAD_ONLY to "no", and enables & starts the yum-cron service.
 enable_centos_updates() {
     print_status "Configuring Yum Cron for CentOS..."
     sudo yum install -y yum-cron
@@ -89,7 +94,7 @@ enable_centos_updates() {
     print_success "Yum Cron enabled."
 }
 
-# 4. ARCH LINUX
+# enable_arch_updates configures Arch Linux maintenance by updating the system, ensuring pacman-contrib is installed, enabling paccache.timer, and creating a daily pacman-refresh service and timer.
 enable_arch_updates() {
     print_status "Configuring Arch Linux maintenance timers..."
     
@@ -130,7 +135,7 @@ EOF
     print_success "Arch maintenance timers active."
 }
 
-# 5. ALPINE LINUX
+# enable_alpine_updates creates a daily /etc/periodic/daily/apk-upgrade script that runs `apk update` and `apk upgrade` and makes it executable.
 enable_alpine_updates() {
     print_status "Configuring Alpine Autoupgrades..."
     
@@ -143,7 +148,7 @@ EOF
     print_success "Daily upgrade cron job created."
 }
 
-# 6. SUSE / OPENSUSE
+# enable_suse_updates creates a daily cron job at /etc/cron.daily/suse-update that refreshes zypper repositories and applies available updates automatically.
 enable_suse_updates() {
     print_status "Enabling SUSE updates via Cron..."
     

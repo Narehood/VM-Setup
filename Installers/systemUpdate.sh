@@ -13,9 +13,13 @@ YELLOW='\033[1;33m'
 BLUE='\033[1;34m'
 NC='\033[0m'
 
+# print_status outputs an informational message prefixed with a blue [INFO] tag to stdout and appends the line to $LOGFILE.
 print_status() { echo -e "${BLUE}[INFO]${NC} $1" | tee -a "$LOGFILE"; }
+# print_success prints a success message prefixed with a green "[SUCCESS]" tag and appends it to the configured log file.
 print_success() { echo -e "${GREEN}[SUCCESS]${NC} $1" | tee -a "$LOGFILE"; }
+# print_warn prints a warning message prefixed with a yellow [WARN] tag to stdout and appends the same line to LOGFILE.
 print_warn() { echo -e "${YELLOW}[WARN]${NC} $1" | tee -a "$LOGFILE"; }
+# print_error prints MESSAGE prefixed with a red "[ERROR]" tag and appends it to LOGFILE.
 print_error() { echo -e "${RED}[ERROR]${NC} $1" | tee -a "$LOGFILE"; }
 
 # --- CORE LOGIC ---
@@ -25,6 +29,7 @@ NEEDS_REBOOT="false"
 DRY_RUN="false"
 SKIP_REBOOT_PROMPT="false"
 
+# show_help prints usage instructions, supported distributions, available command-line options, and exits with status 0.
 show_help() {
     cat << EOF
 System Update Script v${VERSION}
@@ -44,10 +49,12 @@ EOF
     exit 0
 }
 
+# cleanup removes the lockfile specified by LOCKFILE.
 cleanup() {
     rm -f "$LOCKFILE"
 }
 
+# check_root verifies the script is running as root; prints an error message and exits with status 1 if not.
 check_root() {
     if [[ $EUID -ne 0 ]]; then
         print_error "This script requires root privileges. Run with sudo."
@@ -55,6 +62,10 @@ check_root() {
     fi
 }
 
+# acquire_lock creates LOCKFILE containing the current PID to prevent concurrent runs.
+# If an existing lockfile references a running PID the script prints an error and exits;
+# if the lockfile is stale it is removed before writing the current PID and registering
+# the cleanup trap on EXIT.
 acquire_lock() {
     if [[ -f "$LOCKFILE" ]]; then
         local pid
@@ -70,6 +81,7 @@ acquire_lock() {
     trap cleanup EXIT
 }
 
+# detect_os sets the global OS variable to a lowercase identifier from /etc/os-release (ID), or falls back to "redhat" if /etc/redhat-release exists, "debian" if /etc/debian_version exists, or the lowercase kernel name otherwise.
 detect_os() {
     if [[ -f /etc/os-release ]]; then
         source /etc/os-release
@@ -83,6 +95,8 @@ detect_os() {
     fi
 }
 
+# check_reboot_required determines whether the system requires a reboot and sets NEEDS_REBOOT="true" when a reboot is detected.
+# It inspects distribution-specific indicators (supported Debian/Ubuntu family, RedHat-family, and Arch-family checks) to decide.
 check_reboot_required() {
     case "$OS" in
         ubuntu|debian|linuxmint|kali|pop)
@@ -104,6 +118,8 @@ check_reboot_required() {
     esac
 }
 
+# update_system updates installed packages using the detected OS package manager, logs start and completion to LOGFILE, and prints status messages.
+# update_system respects the DRY_RUN flag (no changes when "true") and exits with status 1 for unsupported distributions.
 update_system() {
     detect_os
     print_status "Detected OS: $OS"
@@ -171,6 +187,7 @@ update_system() {
     print_success "System updated and cleaned successfully."
 }
 
+# prompt_reboot prompts the user to reboot when a reboot is required, skips prompting in non-interactive or configured-skip modes, and initiates a reboot if the user confirms.
 prompt_reboot() {
     check_reboot_required
 
