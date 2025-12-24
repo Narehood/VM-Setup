@@ -1,9 +1,10 @@
 #!/bin/bash
 set -euo pipefail
 
-VERSION="1.1.0"
+VERSION="1.2.0"
 LOGFILE="/var/log/system-update.log"
 LOCKFILE="/var/run/system-update.lock"
+LOG_ENABLED="true"
 
 # --- UI & FORMATTING ---
 
@@ -13,14 +14,41 @@ YELLOW='\033[1;33m'
 BLUE='\033[1;34m'
 NC='\033[0m'
 
-# print_status outputs an informational message prefixed with a blue [INFO] tag to stdout and appends the line to $LOGFILE.
-print_status() { echo -e "${BLUE}[INFO]${NC} $1" | tee -a "$LOGFILE"; }
-# print_success prints a success message prefixed with a green "[SUCCESS]" tag and appends it to the configured log file.
-print_success() { echo -e "${GREEN}[SUCCESS]${NC} $1" | tee -a "$LOGFILE"; }
-# print_warn prints a warning message prefixed with a yellow [WARN] tag to stdout and appends the same line to LOGFILE.
-print_warn() { echo -e "${YELLOW}[WARN]${NC} $1" | tee -a "$LOGFILE"; }
-# print_error prints MESSAGE prefixed with a red "[ERROR]" tag and appends it to LOGFILE.
-print_error() { echo -e "${RED}[ERROR]${NC} $1" | tee -a "$LOGFILE"; }
+# print_status outputs an informational message prefixed with a blue [INFO] tag to stdout and appends the line to $LOGFILE if logging is enabled.
+print_status() {
+    if [[ "$LOG_ENABLED" == "true" ]]; then
+        echo -e "${BLUE}[INFO]${NC} $1" | tee -a "$LOGFILE"
+    else
+        echo -e "${BLUE}[INFO]${NC} $1"
+    fi
+}
+
+# print_success prints a success message prefixed with a green "[SUCCESS]" tag and appends it to the configured log file if logging is enabled.
+print_success() {
+    if [[ "$LOG_ENABLED" == "true" ]]; then
+        echo -e "${GREEN}[SUCCESS]${NC} $1" | tee -a "$LOGFILE"
+    else
+        echo -e "${GREEN}[SUCCESS]${NC} $1"
+    fi
+}
+
+# print_warn prints a warning message prefixed with a yellow [WARN] tag to stdout and appends the same line to LOGFILE if logging is enabled.
+print_warn() {
+    if [[ "$LOG_ENABLED" == "true" ]]; then
+        echo -e "${YELLOW}[WARN]${NC} $1" | tee -a "$LOGFILE"
+    else
+        echo -e "${YELLOW}[WARN]${NC} $1"
+    fi
+}
+
+# print_error prints MESSAGE prefixed with a red "[ERROR]" tag and appends it to LOGFILE if logging is enabled.
+print_error() {
+    if [[ "$LOG_ENABLED" == "true" ]]; then
+        echo -e "${RED}[ERROR]${NC} $1" | tee -a "$LOGFILE"
+    else
+        echo -e "${RED}[ERROR]${NC} $1"
+    fi
+}
 
 # --- CORE LOGIC ---
 
@@ -65,7 +93,7 @@ check_root() {
 # acquire_lock creates LOCKFILE containing the current PID to prevent concurrent runs.
 # If an existing lockfile references a running PID the script prints an error and exits;
 # if the lockfile is stale it is removed before writing the current PID and registering
-# the cleanup trap on EXIT.
+# the cleanup trap on EXIT. Verifies the write succeeded before registering the trap.
 acquire_lock() {
     if [[ -f "$LOCKFILE" ]]; then
         local pid
@@ -77,7 +105,19 @@ acquire_lock() {
         print_warn "Stale lock file found, removing."
         rm -f "$LOCKFILE"
     fi
-    echo $$ > "$LOCKFILE"
+
+    if ! echo $$ > "$LOCKFILE" 2>/dev/null; then
+        print_error "Failed to create lock file: $LOCKFILE"
+        exit 1
+    fi
+
+    local written_pid
+    written_pid=$(cat "$LOCKFILE" 2>/dev/null || echo "")
+    if [[ "$written_pid" != "$$" ]]; then
+        print_error "Lock file verification failed."
+        exit 1
+    fi
+
     trap cleanup EXIT
 }
 
@@ -130,7 +170,7 @@ update_system() {
     fi
 
     print_status "Starting system update..."
-    echo "--- Update started: $(date) ---" >> "$LOGFILE"
+    [[ "$LOG_ENABLED" == "true" ]] && echo "--- Update started: $(date) ---" >> "$LOGFILE"
 
     case "$OS" in
         ubuntu|debian|linuxmint|kali|pop)
@@ -183,7 +223,7 @@ update_system() {
             ;;
     esac
 
-    echo "--- Update completed: $(date) ---" >> "$LOGFILE"
+    [[ "$LOG_ENABLED" == "true" ]] && echo "--- Update completed: $(date) ---" >> "$LOGFILE"
     print_success "System updated and cleaned successfully."
 }
 
@@ -220,6 +260,27 @@ prompt_reboot() {
     fi
 }
 
+# validate_log_path ensures the log directory exists, creating it if necessary.
+# If creation fails, disables file logging and emits a warning.
+validate_log_path() {
+    local log_dir
+    log_dir=$(dirname "$LOGFILE")
+
+    if [[ ! -d "$log_dir" ]]; then
+        if ! mkdir -p "$log_dir" 2>/dev/null; then
+            LOG_ENABLED="false"
+            echo -e "${YELLOW}[WARN]${NC} Cannot create log directory '$log_dir'. File logging disabled." >&2
+            return 0
+        fi
+    fi
+
+    # Verify we can write to the log file
+    if ! touch "$LOGFILE" 2>/dev/null; then
+        LOG_ENABLED="false"
+        echo -e "${YELLOW}[WARN]${NC} Cannot write to log file '$LOGFILE'. File logging disabled." >&2
+    fi
+}
+
 # --- MAIN ---
 
 while [[ $# -gt 0 ]]; do
@@ -229,11 +290,11 @@ while [[ $# -gt 0 ]]; do
         -d|--dry-run) DRY_RUN="true"; shift ;;
         -y|--yes) SKIP_REBOOT_PROMPT="true"; shift ;;
         -l|--log)
-            LOGFILE="$2"
             if [[ -z "${2:-}" ]] || [[ "$2" == -* ]]; then
                 echo "Error: -l|--log requires a filename argument" >&2
                 exit 1
             fi
+            LOGFILE="$2"
             shift 2
             ;;
         *)
@@ -243,6 +304,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+validate_log_path
 check_root
 acquire_lock
 update_system
