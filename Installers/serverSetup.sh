@@ -41,6 +41,9 @@ print_info() {
 
 # --- CORE LOGIC ---
 
+# Ensure administrative paths are included for Debian-based systems
+export PATH=$PATH:/usr/local/sbin:/usr/sbin:/sbin
+
 PKG_MANAGER_UPDATED="false"
 OS=""
 VERSION=""
@@ -244,12 +247,12 @@ fi
 
 # Install Standard Server Tools
 print_step "Standard System Utilities"
-print_info "Installing: net-tools, btop, curl, wget, nano..."
+print_info "Installing: net-tools, btop, curl, wget, file, nano..."
 update_repos
 
 case "$OS" in
     alpine)
-        install_pkg sudo net-tools nano curl wget
+        install_pkg sudo net-tools nano curl wget file
         ;;
     arch)
         install_pkg net-tools btop whois curl wget nano
@@ -299,7 +302,8 @@ if [ "$OS" == "debian" ]; then
         read -p "Enter username: " user_to_add
         if [ -n "$user_to_add" ]; then
             if id "$user_to_add" >/dev/null 2>&1; then
-                usermod -aG sudo "$user_to_add"
+                # Explicit path used for usermod to handle Debian pathing issues
+                /usr/sbin/usermod -aG sudo "$user_to_add"
                 print_success "User '$user_to_add' added to sudo group. (Log out to apply)"
             else
                 print_error "User '$user_to_add' does not exist."

@@ -16,7 +16,7 @@ WHITE='\033[1;37m'
 NC='\033[0m'
 
 UI_WIDTH=86
-VERSION="3.3.0"
+VERSION="3.3.3"
 CHECKSUM_FILE="$SCRIPT_DIR/Installers/.checksums.sha256"
 
 # Handle Ctrl+C gracefully
@@ -96,6 +96,43 @@ get_current_branch() {
 # is_root checks whether the script is running as root by testing if the effective UID equals 0.
 is_root() {
     [ "$EUID" -eq 0 ]
+}
+
+# fix_permissions sets the executable bit on all .sh files in Installers/ and returns the count of files fixed.
+# When called with "silent" as the first argument, it suppresses output.
+fix_permissions() {
+    local silent="${1:-}"
+    local installers_dir="$SCRIPT_DIR/Installers"
+    local fixed=0
+    local total=0
+
+    if [ ! -d "$installers_dir" ]; then
+        [ "$silent" != "silent" ] && print_error "Installers directory not found."
+        return 0
+    fi
+
+    while IFS= read -r -d '' script; do
+        total=$((total + 1))
+        if [ ! -x "$script" ]; then
+            if chmod +x "$script" 2>/dev/null; then
+                fixed=$((fixed + 1))
+                [ "$silent" != "silent" ] && print_success "Fixed: $(basename "$script")"
+            else
+                [ "$silent" != "silent" ] && print_error "Failed: $(basename "$script")"
+            fi
+        fi
+    done < <(find "$installers_dir" -maxdepth 1 -name "*.sh" -type f -print0 2>/dev/null)
+
+    if [ "$silent" != "silent" ]; then
+        echo ""
+        if [ $fixed -eq 0 ]; then
+            print_success "All $total scripts already have correct permissions."
+        else
+            print_success "Fixed permissions on $fixed of $total scripts."
+        fi
+    fi
+
+    return 0
 }
 
 # show_header clears the terminal and displays the ASCII banner, a centered version/author line, and a separator line.
@@ -259,21 +296,75 @@ check_for_updates() {
     if [ "$local_rev" = "$remote_rev" ]; then
         print_success "Menu is up to date."
         sleep 1
-    else
-        print_warn "New version available."
-        if confirm_prompt "Download and apply updates? (y/N): " "n"; then
-            if git pull --quiet; then
-                print_success "Updated successfully. Restarting..."
+        return 0
+    fi
+
+    print_warn "New version available."
+    if ! confirm_prompt "Download and apply updates? (y/N): " "n"; then
+        print_status "Update skipped."
+        sleep 1
+        return 0
+    fi
+
+    # Check for uncommitted changes before pulling
+    local has_changes="false"
+    if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
+        has_changes="true"
+    fi
+
+    if [ "$has_changes" = "true" ]; then
+        print_warn "You have uncommitted local changes."
+        echo ""
+        echo -e "  ${WHITE}Options:${NC}"
+        echo -e "    ${CYAN}1.${NC} Stash changes (save for later)"
+        echo -e "    ${CYAN}2.${NC} Discard changes (permanent)"
+        echo -e "    ${CYAN}0.${NC} Cancel update"
+        echo ""
+        read -rp "  Select option [0-2]: " change_option
+
+        case "$change_option" in
+            1)
+                print_status "Stashing changes..."
+                local stash_msg="Auto-stash before update on $(date '+%Y-%m-%d %H:%M')"
+                if ! git stash push -m "$stash_msg" 2>/dev/null; then
+                    print_error "Failed to stash changes."
+                    sleep 2
+                    return 1
+                fi
+                print_success "Changes stashed. Use 'git stash pop' to restore later."
+                ;;
+            2)
+                if ! confirm_prompt "  Are you sure? This cannot be undone. (y/N): " "n"; then
+                    print_status "Update cancelled."
+                    sleep 1
+                    return 0
+                fi
+                print_status "Discarding changes..."
+                if ! git reset --hard HEAD >/dev/null 2>&1; then
+                    print_error "Failed to reset working directory."
+                    sleep 2
+                    return 1
+                fi
+                git clean -fd >/dev/null 2>&1 || true
+                print_success "Changes discarded."
+                ;;
+            *)
+                print_status "Update cancelled."
                 sleep 1
-                exec bash "$SCRIPT_PATH"
-            else
-                print_error "Update failed. Please try manually with 'git pull'."
-                sleep 2
-            fi
-        else
-            print_status "Update skipped."
-            sleep 1
-        fi
+                return 0
+                ;;
+        esac
+    fi
+
+    # Now pull
+    if git pull --quiet; then
+        print_success "Updated successfully. Restarting..."
+        sleep 1
+        exec bash "$SCRIPT_PATH"
+    else
+        print_error "Update failed. Please try manually with 'git pull'."
+        sleep 2
+        return 1
     fi
 }
 
@@ -484,29 +575,23 @@ switch_branch() {
     exec bash "$SCRIPT_PATH"
 }
 
-# Parse script metadata from header comments
-# Expected format in installer scripts:
-#   # REQUIRES_ROOT: true
 # parse_script_metadata extracts the value for a metadata `KEY` from the first 20 lines of a script's header (lines formatted as `# KEY: value`), matching the key case-insensitively and echoes the value or an empty string if not found.
-# Arguments: 1) path to the script file, 2) metadata key to look up.
 parse_script_metadata() {
     local script_path="$1"
     local key="$2"
     local value=""
 
-    # Read first 20 lines for metadata
     value=$(head -n 20 "$script_path" 2>/dev/null | grep -i "^# *${key}:" | head -n 1 | sed "s/^# *${key}: *//i")
     echo "$value"
 }
 
-# verify_script_checksum verifies a script's SHA‑256 checksum against CHECKSUM_FILE, prompting the user to continue or abort when the checksum is missing, sha256sum is unavailable, or the checksum does not match.
+# verify_script_checksum verifies a script's SHA-256 checksum against CHECKSUM_FILE, prompting the user to continue or abort when the checksum is missing, sha256sum is unavailable, or the checksum does not match.
 verify_script_checksum() {
     local script_path="$1"
     local script_name
     script_name=$(basename "$script_path")
 
     if [ ! -f "$CHECKSUM_FILE" ]; then
-        # No checksum file, skip verification
         return 0
     fi
 
@@ -560,7 +645,6 @@ generate_checksums() {
 
     print_status "Generating checksums for installer scripts..."
 
-    # Create/overwrite checksum file
     : > "$CHECKSUM_FILE"
 
     local count=0
@@ -582,71 +666,66 @@ generate_checksums() {
     return 0
 }
 
-# execute_script executes an installer script from Installers/, verifying existence, readability, file type and checksum, offering to set the executable bit, honoring REQUIRES_ROOT metadata (with an option to run via sudo), showing DESCRIPTION if present, and running the script — it exits with the script's exit code.
+# execute_script executes an installer script from Installers/, verifying existence, readability, file type and checksum, honoring REQUIRES_ROOT metadata (with an option to run via sudo), showing DESCRIPTION if present, and running the script.
 execute_script() {
     local script_name="$1"
     local full_path="$SCRIPT_DIR/Installers/$script_name"
 
     echo ""
 
-    # Check if script exists
     if [ ! -f "$full_path" ]; then
         print_error "Script not found: $full_path"
         pause
         return 1
     fi
 
-    # Check if script is readable
     if [ ! -r "$full_path" ]; then
         print_error "Script not readable: $full_path"
         pause
         return 1
     fi
 
-    # Verify it's actually a shell script
+    # File type verification with fallback for systems without 'file' command (e.g., Alpine)
     local file_type
-    file_type=$(file -b "$full_path" 2>/dev/null || echo "unknown")
-    if [[ ! "$file_type" =~ (shell|bash|sh|text|ASCII) ]]; then
-        print_error "File does not appear to be a shell script: $file_type"
-        pause
-        return 1
+    if command -v file >/dev/null 2>&1; then
+        file_type=$(file -b "$full_path" 2>/dev/null || echo "unknown")
+        if [ "$file_type" != "unknown" ] && [[ ! "$file_type" =~ (shell|bash|sh|text|ASCII|script) ]]; then
+            print_error "File does not appear to be a shell script: $file_type"
+            pause
+            return 1
+        fi
+    else
+        # Fallback: check for shebang if 'file' command unavailable
+        local first_line
+        first_line=$(head -n 1 "$full_path" 2>/dev/null)
+        if [[ ! "$first_line" =~ ^#! ]]; then
+            print_warn "Cannot verify file type (file command not available)"
+            if ! confirm_prompt "  Continue anyway? (y/N): " "n"; then
+                pause
+                return 1
+            fi
+        fi
     fi
 
-    # Verify checksum if available
     if ! verify_script_checksum "$full_path"; then
         print_error "Script verification failed. Aborting."
         pause
         return 1
     fi
 
-    # Check if script is executable, offer to fix if not
-    if [ ! -x "$full_path" ]; then
-        print_warn "Script is not executable: $script_name"
-        if confirm_prompt "  Make it executable? (Y/n): " "y"; then
-            if chmod +x "$full_path"; then
-                print_success "Made script executable."
-            else
-                print_error "Failed to make script executable."
-                pause
-                return 1
-            fi
-        else
-            print_status "Running with bash directly..."
-        fi
-    fi
+    # Silently fix permissions if needed (already handled at startup, but just in case)
+    [ ! -x "$full_path" ] && chmod +x "$full_path" 2>/dev/null || true
 
     # Parse script metadata for root requirement
     local requires_root
     requires_root=$(parse_script_metadata "$full_path" "REQUIRES_ROOT")
 
-    # If no metadata, check for common root indicators
     if [ -z "$requires_root" ]; then
         if grep -qE '^\s*(sudo|apt|dnf|yum|pacman|zypper|systemctl|hostnamectl|usermod|chmod|chown)\s' "$full_path" 2>/dev/null; then
             requires_root="true"
         fi
     fi
 
-    # Handle root requirement
     if [ "$requires_root" = "true" ]; then
         if ! is_root; then
             print_warn "This script requires root privileges."
@@ -688,7 +767,6 @@ execute_script() {
         fi
     fi
 
-    # Show script description if available
     local description
     description=$(parse_script_metadata "$full_path" "DESCRIPTION")
     if [ -n "$description" ]; then
@@ -736,8 +814,9 @@ show_help() {
     echo -e "    ${CYAN}# REQUIRES_ROOT: true${NC} - Script needs root privileges"
     echo -e "    ${CYAN}# DESCRIPTION: text${NC}  - Brief script description"
     echo ""
-    echo -e "  ${YELLOW}Security:${NC}"
-    echo -e "    Run '${CYAN}generate-checksums${NC}' to create integrity hashes"
+    echo -e "  ${YELLOW}Hidden Commands:${NC}"
+    echo -e "    ${CYAN}generate-checksums${NC}  - Create integrity hashes for scripts"
+    echo -e "    ${CYAN}fix-permissions${NC}     - Fix executable bit on all scripts"
     echo ""
     echo -e "  ${YELLOW}Location:${NC} $SCRIPT_DIR"
     echo -e "  ${YELLOW}Branch:${NC}   $(get_current_branch)"
@@ -746,8 +825,13 @@ show_help() {
     pause
 }
 
-# --- INITIAL UPDATE CHECK ---
+# --- STARTUP TASKS ---
 clear
+
+# Fix permissions silently on startup
+fix_permissions silent
+
+# Check for updates
 check_for_updates
 
 # --- MAIN LOOP ---
@@ -776,8 +860,9 @@ while true; do
         7) execute_script "linutil.sh" ;;
         8) switch_branch ;;
         9|h|help) show_help ;;
-        0|q|exit) echo -e "\n${GREEN}Goodbye!${NC}"; exit 0 ;;
+        0|q|exit) exit 0 ;;
         generate-checksums) generate_checksums; pause ;;
+        fix-permissions) fix_permissions; pause ;;
         "") ;;
         *) print_error "Invalid option: $choice"; sleep 1 ;;
     esac
