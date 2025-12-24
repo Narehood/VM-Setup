@@ -230,6 +230,10 @@ while [[ $# -gt 0 ]]; do
         -y|--yes) SKIP_REBOOT_PROMPT="true"; shift ;;
         -l|--log)
             LOGFILE="$2"
+            if [[ -z "${2:-}" ]] || [[ "$2" == -* ]]; then
+                echo "Error: -l|--log requires a filename argument" >&2
+                exit 1
+            fi
             shift 2
             ;;
         *)
