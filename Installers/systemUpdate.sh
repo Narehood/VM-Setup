@@ -111,7 +111,7 @@ check_reboot_required() {
             local running installed
             running=$(uname -r)
             installed=$(pacman -Q linux 2>/dev/null | awk '{print $2}' || true)
-            if [[ -n "$installed" ]] && [[ ! "$running" =~ ${installed%%-*} ]]; then
+            if [[ -n "$installed" ]] && [[ "$running" != *"${installed%%-*}"* ]]; then
                 NEEDS_REBOOT="true"
             fi
             ;;
