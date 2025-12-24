@@ -37,6 +37,8 @@ Includes automated security patching and self-updating capabilities.
   <img src="https://img.shields.io/badge/Fedora-294172?style=flat-square&logo=fedora&logoColor=white" alt="Fedora" />
   <img src="https://img.shields.io/badge/RHEL/CentOS-262525?style=flat-square&logo=redhat&logoColor=white" alt="RHEL" />
   <img src="https://img.shields.io/badge/openSUSE-73BA25?style=flat-square&logo=opensuse&logoColor=white" alt="SUSE" />
+  <img src="https://img.shields.io/badge/Pop!_OS-48B9C7?style=flat&logo=Pop!_OS&logoColor=white" alt="Pop OS" />
+  <img src="https://img.shields.io/badge/Gentoo-54487A?style=flat&logo=gentoo&logoColor=white" alt="Gentoo" />
 </div>
 
 ---
@@ -100,6 +102,7 @@ This project utilizes and wraps several excellent community scripts:
 *Bug reports are welcome, but fixes are not guaranteed.*
 
 </div>
+
 
 
 
