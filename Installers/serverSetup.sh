@@ -12,6 +12,7 @@ BLUE='\033[1;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
+# show_header clears the screen and prints a colored, formatted header showing the tool name and current version.
 show_header() {
     clear
     echo -e "${BLUE}==================================================${NC}"
@@ -21,12 +22,18 @@ show_header() {
     echo ""
 }
 
+# print_step prints a formatted step message prefixed with a blue "[STEP]" tag and a leading blank line, using the first argument as the message.
 print_step() { echo -e "\n${BLUE}[STEP]${NC} $1"; }
+# print_success prints MESSAGE prefixed with a green [OK] indicator to stdout.
 print_success() { echo -e "${GREEN}[OK]${NC} $1"; }
+# print_warn prints a warning message prefixed with `[WARN]` (yellow) and echoes it to stdout.
 print_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+# print_error prints an error message prefixed with `[ERROR]` in red and resets terminal color.
 print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+# print_info prints an informational message prefixed with `[INFO]` in cyan color to stdout.
 print_info() { echo -e "${CYAN}[INFO]${NC} $1"; }
 
+# show_help prints usage information, supported distributions, and exits the script.
 show_help() {
     cat << EOF
 VM Initial Configuration Tool v${VERSION}
@@ -54,6 +61,7 @@ OS=""
 VERSION_ID=""
 QUIET="false"
 
+# cleanup unmounts /mnt if it is a mount point.
 cleanup() {
     if mountpoint -q /mnt 2>/dev/null; then
         umount /mnt 2>/dev/null || true
@@ -61,6 +69,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# check_root ensures the script is running as root and exits with an error message if not.
 check_root() {
     if [[ $EUID -ne 0 ]]; then
         print_error "This script requires root privileges. Run with sudo."
@@ -68,6 +77,8 @@ check_root() {
     fi
 }
 
+# detect_os detects the current operating system and sets the global variables `OS` and `VERSION_ID`.
+# It prefers values from `/etc/os-release`, falls back to distribution-specific files or `uname` when necessary, and prints the detected values.
 detect_os() {
     print_info "Detecting Operating System..."
     if [[ -f /etc/os-release ]]; then
@@ -87,23 +98,27 @@ detect_os() {
     print_success "Detected: $OS ($VERSION_ID)"
 }
 
-# Helper to identify distro families
+# is_debian_based determines whether the detected OS is a Debian-family distribution (debian, ubuntu, pop, linuxmint, kali).
 is_debian_based() {
     [[ "$OS" =~ ^(debian|ubuntu|pop|linuxmint|kali)$ ]]
 }
 
+# is_rhel_based checks whether the detected OS belongs to the RHEL family (fedora, redhat, centos, rocky, almalinux).
 is_rhel_based() {
     [[ "$OS" =~ ^(fedora|redhat|centos|rocky|almalinux)$ ]]
 }
 
+# is_arch_based reports whether the detected OS is an Arch-family distribution (arch, endeavouros, or manjaro).
 is_arch_based() {
     [[ "$OS" =~ ^(arch|endeavouros|manjaro)$ ]]
 }
 
+# is_suse_based checks whether the current OS belongs to the SUSE family ("suse", "opensuse..." or "sles").
 is_suse_based() {
     [[ "$OS" =~ ^(suse|opensuse.*|sles)$ ]]
 }
 
+# update_repos updates package repositories for the detected OS if they haven't been updated yet.
 update_repos() {
     if [[ "$PKG_MANAGER_UPDATED" == "true" ]]; then
         return
@@ -130,6 +145,7 @@ update_repos() {
     print_success "Repositories updated."
 }
 
+# install_pkg installs one or more packages using the detected distribution's package manager and returns a non-zero status if installation fails or no package names are provided.
 install_pkg() {
     if [[ $# -eq 0 ]]; then
         return 1
@@ -155,6 +171,7 @@ install_pkg() {
     return $result
 }
 
+# ensure_sudo ensures sudo is installed on the system; if missing, it attempts installation via the detected distribution's package manager and, on success, sets PKG_MANAGER_UPDATED="true", otherwise prints an error and exits with status 1.
 ensure_sudo() {
     if ! command -v sudo &>/dev/null; then
         print_warn "Sudo not found. Installing..."
@@ -177,11 +194,14 @@ ensure_sudo() {
     fi
 }
 
+# validate_hostname validates that a hostname consists of 1–63 characters, starts and ends with an alphanumeric character, and may contain hyphens between characters.
 validate_hostname() {
     local hostname="$1"
     [[ "$hostname" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$ ]]
 }
 
+# install_xcp_tools_iso mounts a guest-tools ISO attached via Xen Orchestra and runs its installer to install XCP-NG guest tools.
+# Prompts the user to confirm ISO attachment, mounts the ISO at /mnt, looks for an `install.sh` under `/mnt/Linux` or `/mnt`, executes it if found, and unmounts when finished (can be skipped by the user).
 install_xcp_tools_iso() {
     print_info "Tools installed via Guest Tools ISO."
 
@@ -232,6 +252,7 @@ install_xcp_tools_iso() {
     done
 }
 
+# prompt_yes_no prompts the user with a yes/no question, accepts an optional default ('y' or 'n') as the second argument, and returns success (exit code 0) when the answer is yes.
 prompt_yes_no() {
     local prompt="$1"
     local default="${2:-n}"

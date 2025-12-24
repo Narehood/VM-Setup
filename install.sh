@@ -21,6 +21,7 @@ CHECKSUM_FILE="$SCRIPT_DIR/Installers/.checksums.sha256"
 
 trap 'echo -e "\n${GREEN}Goodbye!${NC}"' EXIT
 
+# print_centered prints TEXT centered within UI_WIDTH, using an optional COLOR escape code for output.
 print_centered() {
     local text="$1"
     local color="${2:-$NC}"
@@ -29,6 +30,7 @@ print_centered() {
     printf "${color}%${padding}s%s${NC}\n" "" "$text"
 }
 
+# print_line prints a line made of a repeated character (default '=') spanning UI_WIDTH and echoes it using an optional color (default BLUE).
 print_line() {
     local char="${1:-=}"
     local color="${2:-$BLUE}"
@@ -37,16 +39,22 @@ print_line() {
     echo -e "${color}${line}${NC}"
 }
 
+# print_status prints an informational message prefixed with [INFO] in cyan; the message text is taken from the first argument.
 print_status() { echo -e "${CYAN}[INFO]${NC} $1"; }
+# print_success prints a success message prefixed with "[OK]" in green and echoes the provided text.
 print_success() { echo -e "${GREEN}[OK]${NC} $1"; }
+# print_warn prints a warning message prefixed with `[WARN]` in yellow color to stdout.
 print_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+# print_error prints an error message prefixed with "[ERROR]" in red.
 print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
+# pause waits for the user to press Enter to continue and return to the menu.
 pause() {
     echo ""
     read -rp "Press [Enter] to return to the menu..."
 }
 
+# confirm_prompt displays a prompt, reads a single-line response (defaults to 'n' if empty), and exits with status 0 when the response is `y` or `Y` (non-zero otherwise).
 confirm_prompt() {
     local prompt="$1"
     local default="${2:-n}"
@@ -57,6 +65,7 @@ confirm_prompt() {
     [[ "$response" =~ ^[Yy]$ ]]
 }
 
+# truncate_string truncates a string to a maximum length and appends `..` when truncation occurs.
 truncate_string() {
     local str="$1"
     local max_len="$2"
@@ -67,14 +76,17 @@ truncate_string() {
     fi
 }
 
+# get_current_branch prints the current Git branch name or "unknown" if not in a Git repository or Git cannot determine the branch.
 get_current_branch() {
     git branch --show-current 2>/dev/null || echo "unknown"
 }
 
+# is_root determines whether the effective user ID is 0 (root).
 is_root() {
     [[ "$EUID" -eq 0 ]]
 }
 
+# fix_permissions ensures all Installers/*.sh files are executable; pass "silent" as the first argument to suppress per-file messages and summary.
 fix_permissions() {
     local silent="${1:-}"
     local installers_dir="$SCRIPT_DIR/Installers"
@@ -110,6 +122,7 @@ fix_permissions() {
     return 0
 }
 
+# show_header prints the colored ASCII-art banner, a centered VERSION/author line, and a divider.
 show_header() {
     clear
     echo -e "${BLUE}███████╗██╗   ██╗███████╗████████╗███████╗███╗   ███╗    ███████╗███████╗████████╗██╗   ██╗██████╗ ${NC}"
@@ -122,6 +135,7 @@ show_header() {
     print_line "=" "$BLUE"
 }
 
+# show_stats prints a concise system information panel (OS, kernel, hostname, IP, subnet, gateway, load average, memory and disk usage, uptime, and current Git branch), truncating long values and handling missing files/commands gracefully.
 show_stats() {
     local distro="Unknown"
     local os_id=""
@@ -246,6 +260,7 @@ show_stats() {
     print_line "=" "$BLUE"
 }
 
+# check_for_updates checks the script's Git repository for remote changes, offers to download and apply updates, handles uncommitted local changes (stash, discard, or cancel), and restarts the script if the update succeeds.
 check_for_updates() {
     echo ""
     print_status "Checking for updates..."
@@ -350,6 +365,7 @@ check_for_updates() {
     fi
 }
 
+# switch_branch switches the script's Git workspace to a selected local or remote branch, offering to stash or discard uncommitted changes, creating a tracking branch if needed, pulling upstream changes when configured, and restarting the menu on success.
 switch_branch() {
     clear
     print_line "=" "$BLUE"
@@ -549,12 +565,15 @@ switch_branch() {
     exec bash "$SCRIPT_PATH"
 }
 
+# parse_script_metadata reads the first 20 lines of a script and echoes the value for a metadata header matching `key` (e.g., `REQUIRES_ROOT:` or `DESCRIPTION:`).
 parse_script_metadata() {
     local script_path="$1"
     local key="$2"
     head -n 20 "$script_path" 2>/dev/null | grep -i "^# *${key}:" | head -n 1 | sed "s/^# *${key}: *//i"
 }
 
+# verify_script_checksum Verifies a script's sha256 checksum from CHECKSUM_FILE and prompts the user on missing or mismatched entries.
+# If CHECKSUM_FILE is missing or `sha256sum` is not available the check is skipped. Prompts the user to continue when no checksum is found or when the computed checksum differs; returns 0 on success or after user confirmation, returns 1 if the user declines to proceed.
 verify_script_checksum() {
     local script_path="$1"
     local script_name
@@ -596,6 +615,9 @@ verify_script_checksum() {
     return 0
 }
 
+# generate_checksums generates SHA-256 checksums for all scripts in Installers/ and writes them to CHECKSUM_FILE.
+# It requires the `sha256sum` utility and returns non-zero if the Installers directory is missing, `sha256sum` is unavailable, or no installer scripts are found.
+# On success it overwrites any existing checksum file with one entry per script and returns 0.
 generate_checksums() {
     local installers_dir="$SCRIPT_DIR/Installers"
 
@@ -630,6 +652,7 @@ generate_checksums() {
     return 0
 }
 
+# execute_script executes an installer from Installers/, verifying existence/readability and file type, validating checksum, ensuring executability, honoring REQUIRES_ROOT (prompting to run with sudo, continue without root, or cancel), printing an optional DESCRIPTION, running the script, and reporting its exit code.
 execute_script() {
     local script_name="$1"
     local full_path="$SCRIPT_DIR/Installers/$script_name"
@@ -738,6 +761,7 @@ execute_script() {
     return $exit_code
 }
 
+# show_help displays the help and information screen describing menu options, supported distributions, script metadata headers, hidden commands, and current script location/branch.
 show_help() {
     clear
     print_line "=" "$BLUE"
