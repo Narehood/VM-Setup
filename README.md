@@ -14,7 +14,7 @@
   <a href="https://github.com/Narehood/VM-Setup/issues"><img src="https://img.shields.io/github/issues/Narehood/VM-Setup?style=social" alt="Issues" /></a>
 </p>
 
-**The all-in-one post-installation utility for XCP-NG Virtual Machines.**
+**The all-in-one post-installation utility for XCP-NG Virtual Machines. (or any other Linux install)**
 
 Effortlessly configure Docker Hosts, UniFi Controllers, Xen Orchestra, or simply install Guest Tools.<br>
 Includes automated security patching and self-updating capabilities.
@@ -100,6 +100,7 @@ This project utilizes and wraps several excellent community scripts:
 *Bug reports are welcome, but fixes are not guaranteed.*
 
 </div>
+
 
 
 
