@@ -1,10 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
-VERSION="1.2.0"
+VERSION="1.3.0"
 LOGFILE="/var/log/system-update.log"
 LOCKFILE="/var/run/system-update.lock"
 LOG_ENABLED="true"
+QUIET="false"
 
 # --- UI & FORMATTING ---
 
@@ -14,39 +15,49 @@ YELLOW='\033[1;33m'
 BLUE='\033[1;34m'
 NC='\033[0m'
 
-# print_status outputs an informational message prefixed with a blue [INFO] tag to stdout and appends the line to $LOGFILE if logging is enabled.
+# print_status outputs an informational message prefixed with a blue [INFO] tag.
+# In quiet mode, only logs to file (if enabled). Otherwise prints to stdout and logs.
 print_status() {
-    if [[ "$LOG_ENABLED" == "true" ]]; then
+    if [[ "$QUIET" == "true" ]]; then
+        [[ "$LOG_ENABLED" == "true" ]] && echo -e "${BLUE}[INFO]${NC} $1" >> "$LOGFILE"
+    elif [[ "$LOG_ENABLED" == "true" ]]; then
         echo -e "${BLUE}[INFO]${NC} $1" | tee -a "$LOGFILE"
     else
         echo -e "${BLUE}[INFO]${NC} $1"
     fi
 }
 
-# print_success prints a success message prefixed with a green "[SUCCESS]" tag and appends it to the configured log file if logging is enabled.
+# print_success prints a success message prefixed with a green "[SUCCESS]" tag.
+# In quiet mode, only logs to file (if enabled). Otherwise prints to stdout and logs.
 print_success() {
-    if [[ "$LOG_ENABLED" == "true" ]]; then
+    if [[ "$QUIET" == "true" ]]; then
+        [[ "$LOG_ENABLED" == "true" ]] && echo -e "${GREEN}[SUCCESS]${NC} $1" >> "$LOGFILE"
+    elif [[ "$LOG_ENABLED" == "true" ]]; then
         echo -e "${GREEN}[SUCCESS]${NC} $1" | tee -a "$LOGFILE"
     else
         echo -e "${GREEN}[SUCCESS]${NC} $1"
     fi
 }
 
-# print_warn prints a warning message prefixed with a yellow [WARN] tag to stdout and appends the same line to LOGFILE if logging is enabled.
+# print_warn prints a warning message prefixed with a yellow [WARN] tag.
+# In quiet mode, only logs to file (if enabled). Otherwise prints to stdout and logs.
 print_warn() {
-    if [[ "$LOG_ENABLED" == "true" ]]; then
+    if [[ "$QUIET" == "true" ]]; then
+        [[ "$LOG_ENABLED" == "true" ]] && echo -e "${YELLOW}[WARN]${NC} $1" >> "$LOGFILE"
+    elif [[ "$LOG_ENABLED" == "true" ]]; then
         echo -e "${YELLOW}[WARN]${NC} $1" | tee -a "$LOGFILE"
     else
         echo -e "${YELLOW}[WARN]${NC} $1"
     fi
 }
 
-# print_error prints MESSAGE prefixed with a red "[ERROR]" tag and appends it to LOGFILE if logging is enabled.
+# print_error prints MESSAGE prefixed with a red "[ERROR]" tag.
+# Errors always print to stderr regardless of quiet mode, and log if enabled.
 print_error() {
     if [[ "$LOG_ENABLED" == "true" ]]; then
-        echo -e "${RED}[ERROR]${NC} $1" | tee -a "$LOGFILE"
+        echo -e "${RED}[ERROR]${NC} $1" | tee -a "$LOGFILE" >&2
     else
-        echo -e "${RED}[ERROR]${NC} $1"
+        echo -e "${RED}[ERROR]${NC} $1" >&2
     fi
 }
 
@@ -67,6 +78,7 @@ Options:
     -h, --help          Show this help message
     -v, --version       Show version
     -d, --dry-run       Show what would be done without making changes
+    -q, --quiet         Suppress stdout output (errors still print to stderr)
     -y, --yes           Skip reboot prompt (auto-decline)
     -l, --log FILE      Log to specified file (default: $LOGFILE)
 
@@ -227,7 +239,7 @@ update_system() {
     print_success "System updated and cleaned successfully."
 }
 
-# prompt_reboot prompts the user to reboot when a reboot is required, skips prompting in non-interactive or configured-skip modes, and initiates a reboot if the user confirms.
+# prompt_reboot prompts the user to reboot when a reboot is required, skips prompting in non-interactive, quiet, or configured-skip modes, and initiates a reboot if the user confirms.
 prompt_reboot() {
     check_reboot_required
 
@@ -235,10 +247,10 @@ prompt_reboot() {
         return 0
     fi
 
-    echo ""
+    [[ "$QUIET" != "true" ]] && echo ""
     print_warn "A system reboot is recommended to apply all updates."
 
-    if [[ "$SKIP_REBOOT_PROMPT" == "true" ]]; then
+    if [[ "$SKIP_REBOOT_PROMPT" == "true" || "$QUIET" == "true" ]]; then
         print_status "Reboot prompt skipped. Please remember to reboot later."
         return 0
     fi
@@ -288,6 +300,7 @@ while [[ $# -gt 0 ]]; do
         -h|--help) show_help ;;
         -v|--version) echo "v${VERSION}"; exit 0 ;;
         -d|--dry-run) DRY_RUN="true"; shift ;;
+        -q|--quiet) QUIET="true"; shift ;;
         -y|--yes) SKIP_REBOOT_PROMPT="true"; shift ;;
         -l|--log)
             if [[ -z "${2:-}" ]] || [[ "$2" == -* ]]; then
