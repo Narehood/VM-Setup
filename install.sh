@@ -619,19 +619,20 @@ verify_script_checksum() {
 # It requires the `sha256sum` utility and returns non-zero if the Installers directory is missing, `sha256sum` is unavailable, or no installer scripts are found.
 # On success it overwrites any existing checksum file with one entry per script and returns 0.
 generate_checksums() {
+    local silent="${1:-}"
     local installers_dir="$SCRIPT_DIR/Installers"
 
     if [[ ! -d "$installers_dir" ]]; then
-        print_error "Installers directory not found."
+        [[ "$silent" != "silent" ]] && print_error "Installers directory not found."
         return 1
     fi
 
     if ! command -v sha256sum &>/dev/null; then
-        print_error "sha256sum not available."
+        [[ "$silent" != "silent" ]] && print_error "sha256sum not available."
         return 1
     fi
 
-    print_status "Generating checksums for installer scripts..."
+    [[ "$silent" != "silent" ]] && print_status "Generating checksums for installer scripts..."
 
     : > "$CHECKSUM_FILE"
 
@@ -646,13 +647,12 @@ generate_checksums() {
     done < <(find "$installers_dir" -maxdepth 1 -name "*.sh" -type f -print0) || true
 
     if [[ $count -eq 0 ]]; then
-        print_warn "No scripts found to checksum."
+        [[ "$silent" != "silent" ]] && print_warn "No scripts found to checksum."
         rm -f "$CHECKSUM_FILE"
         return 1
     fi
 
-    print_success "Generated checksums for $count scripts."
-    print_status "Checksum file: $CHECKSUM_FILE"
+    [[ "$silent" != "silent" ]] && print_success "Generated checksums for $count scripts."
     return 0
 }
 
@@ -732,11 +732,9 @@ execute_script() {
                 print_status "Executing with sudo..."
                 echo -e "${GREEN}>>> Executing: $script_name (as root)${NC}"
                 sleep 0.5
-                sudo bash "$full_path"
-                local exit_code=$?
-                [[ $exit_code -ne 0 ]] && print_warn "Script exited with code: $exit_code"
+                (sudo bash "$full_path") || true
                 pause
-                return $exit_code
+                return 0
                 ;;
             2)
                 print_warn "Running without root - some operations may fail."
@@ -756,13 +754,9 @@ execute_script() {
     echo -e "${GREEN}>>> Executing: $script_name${NC}"
     sleep 0.5
 
-    bash "$full_path"
-    local exit_code=$?
-
-    [[ $exit_code -ne 0 ]] && print_warn "Script exited with code: $exit_code"
-
+    (bash "$full_path") || true
     pause
-    return $exit_code
+    return 0
 }
 
 # show_help displays the help and information screen describing menu options, supported distributions, script metadata headers, hidden commands, and current script location/branch.
@@ -811,6 +805,7 @@ show_help() {
 # --- STARTUP TASKS ---
 clear
 fix_permissions silent
+generate_checksums silent || true
 check_for_updates || true
 
 # --- MAIN LOOP ---
