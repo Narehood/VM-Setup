@@ -95,21 +95,31 @@ check_root() {
 # It prefers values from `/etc/os-release`, falls back to distribution-specific files or `uname` when necessary, and prints the detected values.
 detect_os() {
     print_info "Detecting Operating System..."
-    if [[ -f /etc/os-release ]]; then
-        source /etc/os-release
-        OS="${ID:-unknown}"
-        VERSION_ID="${VERSION_ID:-unknown}"
-    elif [[ -f /etc/redhat-release ]]; then
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        OS="$ID"
+        VERSION="${VERSION_ID:-unknown}"
+    elif [ -f /etc/redhat-release ]; then
         OS="redhat"
-        VERSION_ID=$(rpm -q --queryformat '%{VERSION}' centos-release 2>/dev/null || echo "unknown")
-    elif [[ -f /etc/debian_version ]]; then
+        
+        VERSION=$(rpm -q --queryformat '%{VERSION}' centos-release 2>/dev/null)
+        
+        if [ -z "$VERSION" ] || [ "$VERSION" == "unknown" ]; then
+            if [ -f /etc/redhat-release ]; then
+                VERSION=$(grep -oP '(?:release\s+)\K[\d.]+' /etc/redhat-release | cut -d. -f1-2)
+                VERSION="${VERSION:-unknown}"
+            else
+                VERSION="unknown"
+            fi
+        fi
+    elif [ -f /etc/debian_version ]; then
         OS="debian"
-        VERSION_ID=$(cat /etc/debian_version)
+        VERSION=$(cat /etc/debian_version)
     else
         OS=$(uname -s | tr '[:upper:]' '[:lower:]')
-        VERSION_ID=$(uname -r)
+        VERSION=$(uname -r)
     fi
-    print_success "Detected: $OS ($VERSION_ID)"
+    print_success "Detected: $OS ($VERSION)"
 }
 
 # is_debian_based determines whether the detected OS is a Debian-family distribution (debian, ubuntu, pop, linuxmint, kali).
