@@ -73,7 +73,17 @@ detect_os() {
         VERSION="${VERSION_ID:-unknown}"
     elif [ -f /etc/redhat-release ]; then
         OS="redhat"
-        VERSION=$(rpm -q --queryformat '%{VERSION}' centos-release 2>/dev/null || echo "unknown")
+        
+        VERSION=$(rpm -q --queryformat '%{VERSION}' centos-release 2>/dev/null)
+        
+        if [ -z "$VERSION" ] || [ "$VERSION" == "unknown" ]; then
+            if [ -f /etc/redhat-release ]; then
+                VERSION=$(grep -oP '(?:release\s+)\K[\d.]+' /etc/redhat-release | cut -d. -f1-2)
+                VERSION="${VERSION:-unknown}"
+            else
+                VERSION="unknown"
+            fi
+        fi
     elif [ -f /etc/debian_version ]; then
         OS="debian"
         VERSION=$(cat /etc/debian_version)
