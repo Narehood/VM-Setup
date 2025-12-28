@@ -356,20 +356,28 @@ print_step "Standard System Utilities"
 print_info "Installing: net-tools, btop, curl, wget, file, nano..."
 update_repos
 
+local install_result=0
+
 if [[ "$OS" == "alpine" ]]; then
-    install_pkg sudo net-tools nano curl wget file htop
+    install_pkg sudo net-tools nano curl wget file htop || install_result=$?
 elif is_arch_based; then
-    install_pkg net-tools btop whois curl wget nano
+    install_pkg net-tools btop whois curl wget nano || install_result=$?
 elif is_debian_based; then
-    install_pkg net-tools btop plocate whois curl wget nano
+    install_pkg net-tools btop plocate whois curl wget nano || install_result=$?
 elif is_rhel_based; then
-    install_pkg net-tools btop whois curl wget nano
+    install_pkg net-tools btop whois curl wget nano || install_result=$?
 elif is_suse_based; then
-    install_pkg net-tools btop whois curl wget nano
+    install_pkg net-tools btop whois curl wget nano || install_result=$?
 else
     print_warn "Unsupported system for standard tools."
+    install_result=1
 fi
-print_success "Utilities installed."
+
+if [[ $install_result -eq 0 ]]; then
+    print_success "Utilities installed."
+else
+    print_error "Failed to install one or more utilities on $OS."
+fi
 
 # Hostname Configuration
 print_step "Hostname Configuration"
