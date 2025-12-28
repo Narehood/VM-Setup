@@ -16,57 +16,45 @@ WHITE='\033[1;37m'
 NC='\033[0m'
 
 UI_WIDTH=86
-VERSION="3.3.3"
+VERSION="3.4.0"
 CHECKSUM_FILE="$SCRIPT_DIR/Installers/.checksums.sha256"
 
-# Handle Ctrl+C gracefully
 trap 'echo -e "\n${GREEN}Goodbye!${NC}"' EXIT
 
-# print_centered centers the given text within UI_WIDTH, applies an optional ANSI color (defaults to no color), and prints the result.
+# print_centered prints TEXT centered within UI_WIDTH, using an optional COLOR escape code for output.
 print_centered() {
     local text="$1"
     local color="${2:-$NC}"
     local padding=$(( (UI_WIDTH - ${#text}) / 2 ))
-    if [ "$padding" -lt 0 ]; then padding=0; fi
+    [[ "$padding" -lt 0 ]] && padding=0
     printf "${color}%${padding}s%s${NC}\n" "" "$text"
 }
 
-# print_line prints a horizontal line across UI_WIDTH using a repeated character (default '=') and an optional color (default $BLUE).
+# print_line prints a line made of a repeated character (default '=') spanning UI_WIDTH and echoes it using an optional color (default BLUE).
 print_line() {
     local char="${1:-=}"
     local color="${2:-$BLUE}"
     local line
-    line=$(printf "%${UI_WIDTH}s" "" | sed "s/ /${char}/g")
+    line=$(printf "%${UI_WIDTH}s" "" | tr ' ' "$char")
     echo -e "${color}${line}${NC}"
 }
 
-# print_status prints an informational message prefixed with "[INFO]" in cyan color.
-print_status() {
-    echo -e "${CYAN}[INFO]${NC} $1"
-}
-
-# print_success prints a success message prefixed with a green "[OK]" tag.
-print_success() {
-    echo -e "${GREEN}[OK]${NC} $1"
-}
-
-# print_warn prints a warning message prefixed with "[WARN]" in yellow to stdout.
-print_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
-}
-
+# print_status prints an informational message prefixed with [INFO] in cyan; the message text is taken from the first argument.
+print_status() { echo -e "${CYAN}[INFO]${NC} $1"; }
+# print_success prints a success message prefixed with "[OK]" in green and echoes the provided text.
+print_success() { echo -e "${GREEN}[OK]${NC} $1"; }
+# print_warn prints a warning message prefixed with `[WARN]` in yellow color to stdout.
+print_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 # print_error prints an error message prefixed with "[ERROR]" in red.
-print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
+print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
-# pause prompts the user to press Enter to continue and waits for input.
+# pause waits for the user to press Enter to continue and return to the menu.
 pause() {
     echo ""
     read -rp "Press [Enter] to return to the menu..."
 }
 
-# confirm_prompt prompts the user with the provided prompt and returns success if the reply starts with `Y` or `y`; an optional second argument supplies the default answer (`n` if omitted).
+# confirm_prompt displays a prompt, reads a single-line response (defaults to 'n' if empty), and exits with status 0 when the response is `y` or `Y` (non-zero otherwise).
 confirm_prompt() {
     local prompt="$1"
     local default="${2:-n}"
@@ -77,55 +65,54 @@ confirm_prompt() {
     [[ "$response" =~ ^[Yy]$ ]]
 }
 
-# truncate_string truncates a string to a maximum length and appends ".." when truncation occurs.
+# truncate_string truncates a string to a maximum length and appends `..` when truncation occurs.
 truncate_string() {
     local str="$1"
     local max_len="$2"
-    if [ ${#str} -gt "$max_len" ]; then
+    if [[ ${#str} -gt "$max_len" ]]; then
         echo "${str:0:$((max_len - 2))}.."
     else
         echo "$str"
     fi
 }
 
-# get_current_branch prints the current Git branch name or "unknown" if the repository or Git command is not available.
+# get_current_branch prints the current Git branch name or "unknown" if not in a Git repository or Git cannot determine the branch.
 get_current_branch() {
     git branch --show-current 2>/dev/null || echo "unknown"
 }
 
-# is_root checks whether the script is running as root by testing if the effective UID equals 0.
+# is_root determines whether the effective user ID is 0 (root).
 is_root() {
-    [ "$EUID" -eq 0 ]
+    [[ "$EUID" -eq 0 ]]
 }
 
-# fix_permissions sets the executable bit on all .sh files in Installers/ and returns the count of files fixed.
-# When called with "silent" as the first argument, it suppresses output.
+# fix_permissions ensures all Installers/*.sh files are executable; pass "silent" as the first argument to suppress per-file messages and summary.
 fix_permissions() {
     local silent="${1:-}"
     local installers_dir="$SCRIPT_DIR/Installers"
     local fixed=0
     local total=0
 
-    if [ ! -d "$installers_dir" ]; then
-        [ "$silent" != "silent" ] && print_error "Installers directory not found."
+    if [[ ! -d "$installers_dir" ]]; then
+        [[ "$silent" != "silent" ]] && print_error "Installers directory not found."
         return 0
     fi
 
     while IFS= read -r -d '' script; do
-        total=$((total + 1))
-        if [ ! -x "$script" ]; then
+        ((total++))
+        if [[ ! -x "$script" ]]; then
             if chmod +x "$script" 2>/dev/null; then
-                fixed=$((fixed + 1))
-                [ "$silent" != "silent" ] && print_success "Fixed: $(basename "$script")"
+                ((fixed++))
+                [[ "$silent" != "silent" ]] && print_success "Fixed: $(basename "$script")"
             else
-                [ "$silent" != "silent" ] && print_error "Failed: $(basename "$script")"
+                [[ "$silent" != "silent" ]] && print_error "Failed: $(basename "$script")"
             fi
         fi
     done < <(find "$installers_dir" -maxdepth 1 -name "*.sh" -type f -print0 2>/dev/null)
 
-    if [ "$silent" != "silent" ]; then
+    if [[ "$silent" != "silent" ]]; then
         echo ""
-        if [ $fixed -eq 0 ]; then
+        if [[ $fixed -eq 0 ]]; then
             print_success "All $total scripts already have correct permissions."
         else
             print_success "Fixed permissions on $fixed of $total scripts."
@@ -135,7 +122,7 @@ fix_permissions() {
     return 0
 }
 
-# show_header clears the terminal and displays the ASCII banner, a centered version/author line, and a separator line.
+# show_header prints the colored ASCII-art banner, a centered VERSION/author line, and a divider.
 show_header() {
     clear
     echo -e "${BLUE}███████╗██╗   ██╗███████╗████████╗███████╗███╗   ███╗    ███████╗███████╗████████╗██╗   ██╗██████╗ ${NC}"
@@ -148,71 +135,87 @@ show_header() {
     print_line "=" "$BLUE"
 }
 
-# show_stats prints a formatted system information table including OS, kernel, hostname, IP/subnet/gateway, load average, memory and disk usage, uptime, and current Git branch.
+# show_stats prints a concise system information panel (OS, kernel, hostname, IP, subnet, gateway, load average, memory and disk usage, uptime, and current Git branch), truncating long values and handling missing files/commands gracefully.
 show_stats() {
-    # OS Detection
     local distro="Unknown"
-    if [ -f /etc/os-release ]; then
-        . /etc/os-release
-        if [ "$ID" = "alpine" ]; then
-            distro="Alpine ${VERSION_ID:-}"
-        else
-            distro="${PRETTY_NAME:-$ID}"
-        fi
+    local os_id=""
+
+    if [[ -f /etc/os-release ]]; then
+        source /etc/os-release
+        os_id="${ID:-}"
+
+        case "$os_id" in
+            alpine)
+                distro="Alpine ${VERSION_ID:-}"
+                ;;
+            pop)
+                distro="Pop!_OS ${VERSION_ID:-}"
+                ;;
+            endeavouros)
+                distro="EndeavourOS"
+                ;;
+            manjaro)
+                distro="Manjaro ${VERSION_ID:-}"
+                ;;
+            arch)
+                distro="Arch Linux"
+                ;;
+            ubuntu|debian|fedora|rocky|almalinux|centos|rhel|opensuse*|suse|sles|linuxmint|kali)
+                distro="${PRETTY_NAME:-$ID}"
+                ;;
+            *)
+                distro="${PRETTY_NAME:-$ID}"
+                ;;
+        esac
     fi
     distro=$(truncate_string "$distro" 32)
 
-    # Kernel
     local kernel
     kernel=$(truncate_string "$(uname -r)" 32)
 
-    # Uptime
     local uptime_str="N/A"
-    if [ -f /proc/uptime ]; then
+    if [[ -f /proc/uptime ]]; then
         local uptime_secs
         uptime_secs=$(cut -d. -f1 /proc/uptime)
         local days=$((uptime_secs / 86400))
         local hours=$(( (uptime_secs % 86400) / 3600 ))
         local mins=$(( (uptime_secs % 3600) / 60 ))
-        if [ "$days" -gt 0 ]; then
+        if [[ "$days" -gt 0 ]]; then
             uptime_str="${days}d ${hours}h ${mins}m"
-        elif [ "$hours" -gt 0 ]; then
+        elif [[ "$hours" -gt 0 ]]; then
             uptime_str="${hours}h ${mins}m"
         else
             uptime_str="${mins}m"
         fi
     fi
 
-    # Load average
     local cpu_load="N/A"
-    if [ -f /proc/loadavg ]; then
+    if [[ -f /proc/loadavg ]]; then
         cpu_load=$(LC_ALL=C awk '{printf "%.2f (1m)", $1}' /proc/loadavg)
     fi
 
-    # Memory from /proc/meminfo
     local mem_usage="N/A"
-    if [ -f /proc/meminfo ]; then
+    if [[ -f /proc/meminfo ]]; then
         local mem_total mem_avail mem_used mem_pct
         mem_total=$(LC_ALL=C awk '/^MemTotal:/ {print int($2/1024)}' /proc/meminfo)
         mem_avail=$(LC_ALL=C awk '/^MemAvailable:/ {print int($2/1024)}' /proc/meminfo)
-        if [ -n "$mem_total" ] && [ -n "$mem_avail" ] && [ "$mem_total" -gt 0 ]; then
+        if [[ -n "$mem_total" ]] && [[ -n "$mem_avail" ]] && [[ "$mem_total" -gt 0 ]]; then
             mem_used=$((mem_total - mem_avail))
             mem_pct=$((mem_used * 100 / mem_total))
             mem_usage="${mem_used}/${mem_total}MB (${mem_pct}%)"
         fi
     fi
 
-    # Disk usage
     local disk_usage="N/A"
-    if command -v df >/dev/null 2>&1; then
+    if command -v df &>/dev/null; then
         local disk_info
         disk_info=$(LC_ALL=C df -P / 2>/dev/null | awk 'NR==2 {print $3, $2, $5}')
-        if [ -n "$disk_info" ]; then
+        if [[ -n "$disk_info" ]]; then
             local used total pct
             read -r used total pct <<< "$disk_info"
-            if [ -n "$used" ] && [ -n "$total" ] && [ -n "$pct" ]; then
+            if [[ -n "$used" ]] && [[ -n "$total" ]] && [[ -n "$pct" ]]; then
                 local used_h total_h
-                if [ "$total" -ge 1048576 ]; then
+                if [[ "$total" -ge 1048576 ]]; then
                     used_h="$((used / 1048576))G"
                     total_h="$((total / 1048576))G"
                 else
@@ -224,19 +227,17 @@ show_stats() {
         fi
     fi
 
-    # Hostname
     local hostname_str
     hostname_str=$(truncate_string "$(hostname)" 30)
 
-    # Network info
     local ip_addr="N/A"
     local subnet="N/A"
     local gateway="N/A"
 
-    if command -v ip >/dev/null 2>&1; then
+    if command -v ip &>/dev/null; then
         local full_ip
         full_ip=$(LC_ALL=C ip -4 addr show scope global 2>/dev/null | awk '/inet / {print $2; exit}')
-        if [ -n "$full_ip" ]; then
+        if [[ -n "$full_ip" ]]; then
             ip_addr="${full_ip%%/*}"
             subnet="/${full_ip##*/}"
         fi
@@ -244,11 +245,9 @@ show_stats() {
         gateway=$(truncate_string "${gateway:-N/A}" 20)
     fi
 
-    # Current branch
     local current_branch
     current_branch=$(truncate_string "$(get_current_branch)" 30)
 
-    # Display
     echo -e "${WHITE}SYSTEM INFORMATION${NC}"
     printf "  ${YELLOW}%-11s${NC} : %-30s ${YELLOW}%-11s${NC} : %s\n" "OS" "$distro" "IP Address" "$ip_addr"
     printf "  ${YELLOW}%-11s${NC} : %-30s ${YELLOW}%-11s${NC} : %s\n" "Kernel" "$kernel" "Subnet" "$subnet"
@@ -261,18 +260,18 @@ show_stats() {
     print_line "=" "$BLUE"
 }
 
-# check_for_updates checks the script's git repository for remote updates, offers to download and apply them, and restarts the script when an update is applied. It returns a non-zero status when Git is not available, the directory is not a Git repository, fetching fails, or no upstream branch is configured.
+# check_for_updates checks the script's Git repository for remote changes, offers to download and apply updates, handles uncommitted local changes (stash, discard, or cancel), and restarts the script if the update succeeds.
 check_for_updates() {
     echo ""
     print_status "Checking for updates..."
 
-    if ! command -v git >/dev/null 2>&1; then
+    if ! command -v git &>/dev/null; then
         print_error "Git is not installed. Cannot check for updates."
         sleep 2
         return 1
     fi
 
-    if [ ! -d "$SCRIPT_DIR/.git" ]; then
+    if [[ ! -d "$SCRIPT_DIR/.git" ]]; then
         print_warn "Not a git repository. Skipping update check."
         sleep 2
         return 1
@@ -293,7 +292,7 @@ check_for_updates() {
         return 1
     fi
 
-    if [ "$local_rev" = "$remote_rev" ]; then
+    if [[ "$local_rev" = "$remote_rev" ]]; then
         print_success "Menu is up to date."
         sleep 1
         return 0
@@ -306,13 +305,12 @@ check_for_updates() {
         return 0
     fi
 
-    # Check for uncommitted changes before pulling
     local has_changes="false"
     if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
         has_changes="true"
     fi
 
-    if [ "$has_changes" = "true" ]; then
+    if [[ "$has_changes" = "true" ]]; then
         print_warn "You have uncommitted local changes."
         echo ""
         echo -e "  ${WHITE}Options:${NC}"
@@ -340,12 +338,12 @@ check_for_updates() {
                     return 0
                 fi
                 print_status "Discarding changes..."
-                if ! git reset --hard HEAD >/dev/null 2>&1; then
+                if ! git reset --hard HEAD &>/dev/null; then
                     print_error "Failed to reset working directory."
                     sleep 2
                     return 1
                 fi
-                git clean -fd >/dev/null 2>&1 || true
+                git clean -fd &>/dev/null || true
                 print_success "Changes discarded."
                 ;;
             *)
@@ -356,7 +354,6 @@ check_for_updates() {
         esac
     fi
 
-    # Now pull
     if git pull --quiet; then
         print_success "Updated successfully. Restarting..."
         sleep 1
@@ -368,7 +365,7 @@ check_for_updates() {
     fi
 }
 
-# switch_branch switches the script's Git repository branch: it fetches branches, presents a selectable list of local and remote branches, offers handling for uncommitted changes (stash, discard, or cancel), checks out the chosen branch (creating it from origin if needed), pulls updates when an upstream exists, verifies the switch, and restarts the menu on success.
+# switch_branch switches the script's Git workspace to a selected local or remote branch, offering to stash or discard uncommitted changes, creating a tracking branch if needed, pulling upstream changes when configured, and restarting the menu on success.
 switch_branch() {
     clear
     print_line "=" "$BLUE"
@@ -376,13 +373,13 @@ switch_branch() {
     print_line "=" "$BLUE"
     echo ""
 
-    if ! command -v git >/dev/null 2>&1; then
+    if ! command -v git &>/dev/null; then
         print_error "Git is not installed."
         pause
         return 1
     fi
 
-    if [ ! -d "$SCRIPT_DIR/.git" ]; then
+    if [[ ! -d "$SCRIPT_DIR/.git" ]]; then
         print_error "Not a git repository."
         pause
         return 1
@@ -396,7 +393,7 @@ switch_branch() {
     local current_branch
     current_branch=$(get_current_branch)
 
-    if [ -z "$current_branch" ] || [ "$current_branch" = "unknown" ]; then
+    if [[ -z "$current_branch" ]] || [[ "$current_branch" = "unknown" ]]; then
         print_warn "Currently in detached HEAD state."
         current_branch="(detached)"
     fi
@@ -404,17 +401,15 @@ switch_branch() {
     echo -e "  Current branch: ${GREEN}$current_branch${NC}"
     echo ""
 
-    # Collect branches
     local branches=()
     local branch_display=()
 
-    # Local branches
     while IFS= read -r branch; do
         branch="${branch#\* }"
         branch="${branch// /}"
-        if [ -n "$branch" ]; then
+        if [[ -n "$branch" ]]; then
             branches+=("$branch")
-            if [ "$branch" = "$current_branch" ]; then
+            if [[ "$branch" = "$current_branch" ]]; then
                 branch_display+=("$branch (current)")
             else
                 branch_display+=("$branch")
@@ -422,26 +417,25 @@ switch_branch() {
         fi
     done < <(git branch 2>/dev/null)
 
-    # Remote branches (exclude HEAD and local duplicates)
     while IFS= read -r branch; do
         branch="${branch// /}"
         branch="${branch#origin/}"
-        if [ -n "$branch" ] && [ "$branch" != "HEAD" ]; then
+        if [[ -n "$branch" ]] && [[ "$branch" != "HEAD" ]]; then
             local is_local="false"
             for local_branch in "${branches[@]}"; do
-                if [ "$local_branch" = "$branch" ]; then
+                if [[ "$local_branch" = "$branch" ]]; then
                     is_local="true"
                     break
                 fi
             done
-            if [ "$is_local" = "false" ]; then
+            if [[ "$is_local" = "false" ]]; then
                 branches+=("$branch")
                 branch_display+=("$branch (remote)")
             fi
         fi
     done < <(git branch -r 2>/dev/null | grep -v '\->')
 
-    if [ ${#branches[@]} -eq 0 ]; then
+    if [[ ${#branches[@]} -eq 0 ]]; then
         print_error "No branches found."
         pause
         return 1
@@ -461,13 +455,13 @@ switch_branch() {
 
     read -rp "  Select branch [0-$((${#branches[@]}))] : " selection
 
-    if [ "$selection" = "0" ] || [ -z "$selection" ]; then
+    if [[ "$selection" = "0" ]] || [[ -z "$selection" ]]; then
         print_status "Cancelled."
         sleep 1
         return 0
     fi
 
-    if ! [[ "$selection" =~ ^[0-9]+$ ]] || [ "$selection" -lt 1 ] || [ "$selection" -gt ${#branches[@]} ]; then
+    if ! [[ "$selection" =~ ^[0-9]+$ ]] || [[ "$selection" -lt 1 ]] || [[ "$selection" -gt ${#branches[@]} ]]; then
         print_error "Invalid selection."
         sleep 1
         return 1
@@ -475,19 +469,18 @@ switch_branch() {
 
     local selected_branch="${branches[$((selection - 1))]}"
 
-    if [ "$selected_branch" = "$current_branch" ]; then
+    if [[ "$selected_branch" = "$current_branch" ]]; then
         print_status "Already on branch '$selected_branch'."
         sleep 1
         return 0
     fi
 
-    # Check for uncommitted changes
     local has_changes="false"
     if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
         has_changes="true"
     fi
 
-    if [ "$has_changes" = "true" ]; then
+    if [[ "$has_changes" = "true" ]]; then
         print_warn "You have uncommitted changes."
         echo ""
         echo -e "  ${WHITE}Options:${NC}"
@@ -515,12 +508,12 @@ switch_branch() {
                     return 0
                 fi
                 print_status "Discarding changes..."
-                if ! git reset --hard HEAD >/dev/null 2>&1; then
+                if ! git reset --hard HEAD &>/dev/null; then
                     print_error "Failed to reset working directory."
                     pause
                     return 1
                 fi
-                git clean -fd >/dev/null 2>&1 || true
+                git clean -fd &>/dev/null || true
                 print_success "Changes discarded."
                 ;;
             *)
@@ -534,7 +527,6 @@ switch_branch() {
     echo ""
     print_status "Switching to branch '$selected_branch'..."
 
-    # Check if branch exists locally or needs to be checked out from remote
     local checkout_output
     if git show-ref --verify --quiet "refs/heads/$selected_branch" 2>/dev/null; then
         checkout_output=$(git checkout "$selected_branch" 2>&1)
@@ -543,25 +535,23 @@ switch_branch() {
     fi
 
     local checkout_status=$?
-    if [ $checkout_status -ne 0 ]; then
+    if [[ $checkout_status -ne 0 ]]; then
         print_error "Failed to switch branch."
         echo -e "  ${RED}Details:${NC} $checkout_output"
         pause
         return 1
     fi
 
-    # Verify we're on the correct branch
     local new_branch
     new_branch=$(get_current_branch)
-    if [ "$new_branch" != "$selected_branch" ]; then
+    if [[ "$new_branch" != "$selected_branch" ]]; then
         print_error "Branch switch verification failed."
         print_error "Expected: $selected_branch, Got: $new_branch"
         pause
         return 1
     fi
 
-    # Pull latest if tracking remote
-    if git rev-parse --abbrev-ref '@{u}' >/dev/null 2>&1; then
+    if git rev-parse --abbrev-ref '@{u}' &>/dev/null; then
         print_status "Pulling latest changes..."
         if ! git pull --quiet 2>/dev/null; then
             print_warn "Could not pull latest changes. You may need to pull manually."
@@ -575,27 +565,23 @@ switch_branch() {
     exec bash "$SCRIPT_PATH"
 }
 
-# parse_script_metadata extracts the value for a metadata `KEY` from the first 20 lines of a script's header (lines formatted as `# KEY: value`), matching the key case-insensitively and echoes the value or an empty string if not found.
+# parse_script_metadata reads the first 20 lines of a script and echoes the value for a metadata header matching `key` (e.g., `REQUIRES_ROOT:` or `DESCRIPTION:`).
 parse_script_metadata() {
     local script_path="$1"
     local key="$2"
-    local value=""
-
-    value=$(head -n 20 "$script_path" 2>/dev/null | grep -i "^# *${key}:" | head -n 1 | sed "s/^# *${key}: *//i")
-    echo "$value"
+    head -n 20 "$script_path" 2>/dev/null | grep -i "^# *${key}:" | head -n 1 | sed "s/^# *${key}: *//i"
 }
 
-# verify_script_checksum verifies a script's SHA-256 checksum against CHECKSUM_FILE, prompting the user to continue or abort when the checksum is missing, sha256sum is unavailable, or the checksum does not match.
+# verify_script_checksum Verifies a script's sha256 checksum from CHECKSUM_FILE and prompts the user on missing or mismatched entries.
+# If CHECKSUM_FILE is missing or `sha256sum` is not available the check is skipped. Prompts the user to continue when no checksum is found or when the computed checksum differs; returns 0 on success or after user confirmation, returns 1 if the user declines to proceed.
 verify_script_checksum() {
     local script_path="$1"
     local script_name
     script_name=$(basename "$script_path")
 
-    if [ ! -f "$CHECKSUM_FILE" ]; then
-        return 0
-    fi
+    [[ ! -f "$CHECKSUM_FILE" ]] && return 0
 
-    if ! command -v sha256sum >/dev/null 2>&1; then
+    if ! command -v sha256sum &>/dev/null; then
         print_warn "sha256sum not available, skipping integrity check."
         return 0
     fi
@@ -603,7 +589,7 @@ verify_script_checksum() {
     local expected_hash
     expected_hash=$(grep " ${script_name}$" "$CHECKSUM_FILE" 2>/dev/null | awk '{print $1}')
 
-    if [ -z "$expected_hash" ]; then
+    if [[ -z "$expected_hash" ]]; then
         print_warn "No checksum found for $script_name"
         if ! confirm_prompt "  Continue without verification? (y/N): " "n"; then
             return 1
@@ -614,7 +600,7 @@ verify_script_checksum() {
     local actual_hash
     actual_hash=$(sha256sum "$script_path" 2>/dev/null | awk '{print $1}')
 
-    if [ "$expected_hash" != "$actual_hash" ]; then
+    if [[ "$expected_hash" != "$actual_hash" ]]; then
         print_error "Checksum verification FAILED for $script_name"
         print_error "Expected: $expected_hash"
         print_error "Got:      $actual_hash"
@@ -629,16 +615,18 @@ verify_script_checksum() {
     return 0
 }
 
-# generate_checksums generates SHA-256 checksums for all `*.sh` files in the Installers directory and writes them to the CHECKSUM_FILE, returning non-zero if the directory or `sha256sum` is missing or no scripts were found.
+# generate_checksums generates SHA-256 checksums for all scripts in Installers/ and writes them to CHECKSUM_FILE.
+# It requires the `sha256sum` utility and returns non-zero if the Installers directory is missing, `sha256sum` is unavailable, or no installer scripts are found.
+# On success it overwrites any existing checksum file with one entry per script and returns 0.
 generate_checksums() {
     local installers_dir="$SCRIPT_DIR/Installers"
 
-    if [ ! -d "$installers_dir" ]; then
+    if [[ ! -d "$installers_dir" ]]; then
         print_error "Installers directory not found."
         return 1
     fi
 
-    if ! command -v sha256sum >/dev/null 2>&1; then
+    if ! command -v sha256sum &>/dev/null; then
         print_error "sha256sum not available."
         return 1
     fi
@@ -649,13 +637,11 @@ generate_checksums() {
 
     local count=0
     while IFS= read -r -d '' script; do
-        local script_name
-        script_name=$(basename "$script")
         sha256sum "$script" | sed "s|.*/||" >> "$CHECKSUM_FILE"
         ((count++))
     done < <(find "$installers_dir" -maxdepth 1 -name "*.sh" -type f -print0)
 
-    if [ $count -eq 0 ]; then
+    if [[ $count -eq 0 ]]; then
         print_warn "No scripts found to checksum."
         rm -f "$CHECKSUM_FILE"
         return 1
@@ -666,36 +652,34 @@ generate_checksums() {
     return 0
 }
 
-# execute_script executes an installer script from Installers/, verifying existence, readability, file type and checksum, honoring REQUIRES_ROOT metadata (with an option to run via sudo), showing DESCRIPTION if present, and running the script.
+# execute_script executes an installer from Installers/, verifying existence/readability and file type, validating checksum, ensuring executability, honoring REQUIRES_ROOT (prompting to run with sudo, continue without root, or cancel), printing an optional DESCRIPTION, running the script, and reporting its exit code.
 execute_script() {
     local script_name="$1"
     local full_path="$SCRIPT_DIR/Installers/$script_name"
 
     echo ""
 
-    if [ ! -f "$full_path" ]; then
+    if [[ ! -f "$full_path" ]]; then
         print_error "Script not found: $full_path"
         pause
         return 1
     fi
 
-    if [ ! -r "$full_path" ]; then
+    if [[ ! -r "$full_path" ]]; then
         print_error "Script not readable: $full_path"
         pause
         return 1
     fi
 
-    # File type verification with fallback for systems without 'file' command (e.g., Alpine)
     local file_type
-    if command -v file >/dev/null 2>&1; then
+    if command -v file &>/dev/null; then
         file_type=$(file -b "$full_path" 2>/dev/null || echo "unknown")
-        if [ "$file_type" != "unknown" ] && [[ ! "$file_type" =~ (shell|bash|sh|text|ASCII|script) ]]; then
+        if [[ "$file_type" != "unknown" ]] && [[ ! "$file_type" =~ (shell|bash|sh|text|ASCII|script) ]]; then
             print_error "File does not appear to be a shell script: $file_type"
             pause
             return 1
         fi
     else
-        # Fallback: check for shebang if 'file' command unavailable
         local first_line
         first_line=$(head -n 1 "$full_path" 2>/dev/null)
         if [[ ! "$first_line" =~ ^#! ]]; then
@@ -713,65 +697,57 @@ execute_script() {
         return 1
     fi
 
-    # Silently fix permissions if needed (already handled at startup, but just in case)
-    [ ! -x "$full_path" ] && chmod +x "$full_path" 2>/dev/null || true
+    [[ ! -x "$full_path" ]] && chmod +x "$full_path" 2>/dev/null || true
 
-    # Parse script metadata for root requirement
     local requires_root
     requires_root=$(parse_script_metadata "$full_path" "REQUIRES_ROOT")
 
-    if [ -z "$requires_root" ]; then
+    if [[ -z "$requires_root" ]]; then
         if grep -qE '^\s*(sudo|apt|dnf|yum|pacman|zypper|systemctl|hostnamectl|usermod|chmod|chown)\s' "$full_path" 2>/dev/null; then
             requires_root="true"
         fi
     fi
 
-    if [ "$requires_root" = "true" ]; then
-        if ! is_root; then
-            print_warn "This script requires root privileges."
-            echo ""
-            echo -e "  ${WHITE}Options:${NC}"
-            echo -e "    ${CYAN}1.${NC} Run with sudo"
-            echo -e "    ${CYAN}2.${NC} Run anyway (may fail)"
-            echo -e "    ${CYAN}0.${NC} Cancel"
-            echo ""
-            read -rp "  Select option [0-2]: " root_option
+    if [[ "$requires_root" = "true" ]] && ! is_root; then
+        print_warn "This script requires root privileges."
+        echo ""
+        echo -e "  ${WHITE}Options:${NC}"
+        echo -e "    ${CYAN}1.${NC} Run with sudo"
+        echo -e "    ${CYAN}2.${NC} Run anyway (may fail)"
+        echo -e "    ${CYAN}0.${NC} Cancel"
+        echo ""
+        read -rp "  Select option [0-2]: " root_option
 
-            case "$root_option" in
-                1)
-                    if ! command -v sudo >/dev/null 2>&1; then
-                        print_error "sudo is not installed."
-                        pause
-                        return 1
-                    fi
-                    print_status "Executing with sudo..."
-                    echo -e "${GREEN}>>> Executing: $script_name (as root)${NC}"
-                    sleep 0.5
-                    sudo bash "$full_path"
-                    local exit_code=$?
-                    if [ $exit_code -ne 0 ]; then
-                        print_warn "Script exited with code: $exit_code"
-                    fi
+        case "$root_option" in
+            1)
+                if ! command -v sudo &>/dev/null; then
+                    print_error "sudo is not installed."
                     pause
-                    return $exit_code
-                    ;;
-                2)
-                    print_warn "Running without root - some operations may fail."
-                    ;;
-                *)
-                    print_status "Cancelled."
-                    sleep 1
-                    return 0
-                    ;;
-            esac
-        fi
+                    return 1
+                fi
+                print_status "Executing with sudo..."
+                echo -e "${GREEN}>>> Executing: $script_name (as root)${NC}"
+                sleep 0.5
+                sudo bash "$full_path"
+                local exit_code=$?
+                [[ $exit_code -ne 0 ]] && print_warn "Script exited with code: $exit_code"
+                pause
+                return $exit_code
+                ;;
+            2)
+                print_warn "Running without root - some operations may fail."
+                ;;
+            *)
+                print_status "Cancelled."
+                sleep 1
+                return 0
+                ;;
+        esac
     fi
 
     local description
     description=$(parse_script_metadata "$full_path" "DESCRIPTION")
-    if [ -n "$description" ]; then
-        print_status "Description: $description"
-    fi
+    [[ -n "$description" ]] && print_status "Description: $description"
 
     echo -e "${GREEN}>>> Executing: $script_name${NC}"
     sleep 0.5
@@ -779,15 +755,13 @@ execute_script() {
     bash "$full_path"
     local exit_code=$?
 
-    if [ $exit_code -ne 0 ]; then
-        print_warn "Script exited with code: $exit_code"
-    fi
+    [[ $exit_code -ne 0 ]] && print_warn "Script exited with code: $exit_code"
 
     pause
     return $exit_code
 }
 
-# show_help displays a help and information screen describing the menu options, metadata format, security/checksum guidance, current script location and Git branch, then waits for the user to press Enter.
+# show_help displays the help and information screen describing menu options, supported distributions, script metadata headers, hidden commands, and current script location/branch.
 show_help() {
     clear
     print_line "=" "$BLUE"
@@ -809,6 +783,11 @@ show_help() {
     echo -e "    ${CYAN}9${NC} - Display this help screen"
     echo -e "    ${CYAN}0${NC} - Exit the menu"
     echo ""
+    echo -e "  ${YELLOW}Supported Distributions:${NC}"
+    echo -e "    Debian, Ubuntu, Pop!_OS, Linux Mint, Kali, Fedora, RHEL,"
+    echo -e "    CentOS, Rocky, AlmaLinux, Arch, EndeavourOS, Manjaro,"
+    echo -e "    Alpine, openSUSE, SLES"
+    echo ""
     echo -e "  ${YELLOW}Script Metadata:${NC}"
     echo -e "    Installer scripts can include metadata headers:"
     echo -e "    ${CYAN}# REQUIRES_ROOT: true${NC} - Script needs root privileges"
@@ -827,11 +806,7 @@ show_help() {
 
 # --- STARTUP TASKS ---
 clear
-
-# Fix permissions silently on startup
 fix_permissions silent
-
-# Check for updates
 check_for_updates
 
 # --- MAIN LOOP ---
