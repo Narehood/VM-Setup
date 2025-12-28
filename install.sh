@@ -807,7 +807,7 @@ show_help() {
 # --- STARTUP TASKS ---
 clear
 fix_permissions silent
-check_for_updates
+check_for_updates || true
 
 # --- MAIN LOOP ---
 while true; do
