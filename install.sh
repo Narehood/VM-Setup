@@ -637,8 +637,10 @@ generate_checksums() {
 
     local count=0
     while IFS= read -r -d '' script; do
-        sha256sum "$script" | sed "s|.*/||" >> "$CHECKSUM_FILE"
-        ((count++))
+        if [[ -n "$script" ]]; then
+            sha256sum "$script" >> "$CHECKSUM_FILE"
+            ((count++))
+        fi
     done < <(find "$installers_dir" -maxdepth 1 -name "*.sh" -type f -print0) || true
 
     if [[ $count -eq 0 ]]; then
