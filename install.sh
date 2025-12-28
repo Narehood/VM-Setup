@@ -108,7 +108,7 @@ fix_permissions() {
                 [[ "$silent" != "silent" ]] && print_error "Failed: $(basename "$script")"
             fi
         fi
-    done < <(find "$installers_dir" -maxdepth 1 -name "*.sh" -type f -print0 2>/dev/null)
+    done < <(find "$installers_dir" -maxdepth 1 -name "*.sh" -type f -print0 2>/dev/null) || true
 
     if [[ "$silent" != "silent" ]]; then
         echo ""
@@ -415,7 +415,7 @@ switch_branch() {
                 branch_display+=("$branch")
             fi
         fi
-    done < <(git branch 2>/dev/null)
+    done < <(git branch 2>/dev/null) || true
 
     while IFS= read -r branch; do
         branch="${branch// /}"
@@ -433,7 +433,7 @@ switch_branch() {
                 branch_display+=("$branch (remote)")
             fi
         fi
-    done < <(git branch -r 2>/dev/null | grep -v '\->')
+    done < <(git branch -r 2>/dev/null | grep -v '\->') || true
 
     if [[ ${#branches[@]} -eq 0 ]]; then
         print_error "No branches found."
@@ -639,7 +639,7 @@ generate_checksums() {
     while IFS= read -r -d '' script; do
         sha256sum "$script" | sed "s|.*/||" >> "$CHECKSUM_FILE"
         ((count++))
-    done < <(find "$installers_dir" -maxdepth 1 -name "*.sh" -type f -print0)
+    done < <(find "$installers_dir" -maxdepth 1 -name "*.sh" -type f -print0) || true
 
     if [[ $count -eq 0 ]]; then
         print_warn "No scripts found to checksum."
@@ -831,7 +831,7 @@ while true; do
         3) execute_script "Docker-Prep.sh" ;;
         4) execute_script "Automated-Security-Patches.sh" ;;
         5) execute_script "systemUpdate.sh" ;;
-        6) check_for_updates ;;
+        6) check_for_updates || true ;;
         7) execute_script "linutil.sh" ;;
         8) switch_branch ;;
         9|h|help) show_help ;;
