@@ -19,8 +19,6 @@ UI_WIDTH=86
 VERSION="3.4.0"
 CHECKSUM_FILE="$SCRIPT_DIR/Installers/.checksums.sha256"
 
-trap 'echo -e "\n${GREEN}Goodbye!${NC}"' EXIT
-
 # print_centered prints TEXT centered within UI_WIDTH, using an optional COLOR escape code for output.
 print_centered() {
     local text="$1"
@@ -834,7 +832,7 @@ while true; do
         7) execute_script "linutil.sh" ;;
         8) switch_branch ;;
         9|h|help) show_help ;;
-        0|q|exit) exit 0 ;;
+        0|q|exit) echo -e "\n${GREEN}Goodbye!${NC}"; exit 0 ;;
         generate-checksums) generate_checksums; pause ;;
         fix-permissions) fix_permissions; pause ;;
         "") ;;
