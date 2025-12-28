@@ -189,14 +189,8 @@ install_pkg() {
 ensure_sudo() {
     if ! command -v sudo &>/dev/null; then
         print_warn "Sudo not found. Installing..."
-        if is_debian_based; then
-            apt-get update -qq >/dev/null 2>&1
-            apt-get install -y -qq sudo >/dev/null 2>&1
-        elif is_rhel_based; then
-            dnf install -y -q sudo >/dev/null 2>&1
-        elif [[ "$OS" == "alpine" ]]; then
-            apk add sudo >/dev/null 2>&1
-        fi
+        update_repos
+        install_pkg sudo
 
         if command -v sudo &>/dev/null; then
             PKG_MANAGER_UPDATED="true"
