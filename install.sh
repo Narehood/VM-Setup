@@ -1,5 +1,5 @@
 #!/bin/bash
-set -euo pipefail
+set -uo pipefail
 
 # --- 1. CRITICAL SETUP & RESTART FIX ---
 SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
@@ -567,7 +567,7 @@ switch_branch() {
 parse_script_metadata() {
     local script_path="$1"
     local key="$2"
-    head -n 20 "$script_path" 2>/dev/null | grep -i "^# *${key}:" | head -n 1 | sed "s/^# *${key}: *//i"
+    head -n 20 "$script_path" 2>/dev/null | grep -i "^# *${key}:" | head -n 1 | sed "s/^# *${key}: *//i" || echo ""
 }
 
 # verify_script_checksum Verifies a script's sha256 checksum from CHECKSUM_FILE and prompts the user on missing or mismatched entries.
@@ -585,7 +585,7 @@ verify_script_checksum() {
     fi
 
     local expected_hash
-    expected_hash=$(grep " ${script_name}$" "$CHECKSUM_FILE" 2>/dev/null | awk '{print $1}')
+    expected_hash=$(grep " ${script_name}$" "$CHECKSUM_FILE" 2>/dev/null | awk '{print $1}' || echo "")
 
     if [[ -z "$expected_hash" ]]; then
         print_warn "No checksum found for $script_name"
@@ -596,7 +596,7 @@ verify_script_checksum() {
     fi
 
     local actual_hash
-    actual_hash=$(sha256sum "$script_path" 2>/dev/null | awk '{print $1}')
+    actual_hash=$(sha256sum "$script_path" 2>/dev/null | awk '{print $1}' || echo "")
 
     if [[ "$expected_hash" != "$actual_hash" ]]; then
         print_error "Checksum verification FAILED for $script_name"
@@ -656,6 +656,8 @@ generate_checksums() {
 
 # execute_script executes an installer from Installers/, verifying existence/readability and file type, validating checksum, ensuring executability, honoring REQUIRES_ROOT (prompting to run with sudo, continue without root, or cancel), printing an optional DESCRIPTION, running the script, and reporting its exit code.
 execute_script() {
+    set +e
+    
     local script_name="$1"
     local full_path="$SCRIPT_DIR/Installers/$script_name"
 
@@ -664,13 +666,15 @@ execute_script() {
     if [[ ! -f "$full_path" ]]; then
         print_error "Script not found: $full_path"
         pause
-        return 1
+        set -e
+        return 0
     fi
 
     if [[ ! -r "$full_path" ]]; then
         print_error "Script not readable: $full_path"
         pause
-        return 1
+        set -e
+        return 0
     fi
 
     local file_type
@@ -679,16 +683,18 @@ execute_script() {
         if [[ "$file_type" != "unknown" ]] && [[ ! "$file_type" =~ (shell|bash|sh|text|ASCII|script) ]]; then
             print_error "File does not appear to be a shell script: $file_type"
             pause
-            return 1
+            set -e
+            return 0
         fi
     else
         local first_line
-        first_line=$(head -n 1 "$full_path" 2>/dev/null)
+        first_line=$(head -n 1 "$full_path" 2>/dev/null || echo "")
         if [[ ! "$first_line" =~ ^#! ]]; then
             print_warn "Cannot verify file type (file command not available)"
             if ! confirm_prompt "  Continue anyway? (y/N): " "n"; then
                 pause
-                return 1
+                set -e
+                return 0
             fi
         fi
     fi
@@ -696,12 +702,13 @@ execute_script() {
     if ! verify_script_checksum "$full_path"; then
         print_error "Script verification failed. Aborting."
         pause
-        return 1
+        set -e
+        return 0
     fi
 
     [[ ! -x "$full_path" ]] && chmod +x "$full_path" 2>/dev/null || true
 
-    local requires_root
+    local requires_root=""
     requires_root=$(parse_script_metadata "$full_path" "REQUIRES_ROOT")
 
     if [[ -z "$requires_root" ]]; then
@@ -725,13 +732,15 @@ execute_script() {
                 if ! command -v sudo &>/dev/null; then
                     print_error "sudo is not installed."
                     pause
-                    return 1
+                    set -e
+                    return 0
                 fi
                 print_status "Executing with sudo..."
                 echo -e "${GREEN}>>> Executing: $script_name (as root)${NC}"
                 sleep 0.5
-                (sudo bash "$full_path") || true
+                sudo bash "$full_path"
                 pause
+                set -e
                 return 0
                 ;;
             2)
@@ -740,20 +749,22 @@ execute_script() {
             *)
                 print_status "Cancelled."
                 sleep 1
+                set -e
                 return 0
                 ;;
         esac
     fi
 
-    local description
+    local description=""
     description=$(parse_script_metadata "$full_path" "DESCRIPTION")
     [[ -n "$description" ]] && print_status "Description: $description"
 
     echo -e "${GREEN}>>> Executing: $script_name${NC}"
     sleep 0.5
 
-    (bash "$full_path") || true
+    bash "$full_path"
     pause
+    set -e
     return 0
 }
 
