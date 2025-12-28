@@ -16,7 +16,7 @@ WHITE='\033[1;37m'
 NC='\033[0m'
 
 UI_WIDTH=86
-VERSION="3.4.0"
+VERSION="3.4.1"
 CHECKSUM_FILE="$SCRIPT_DIR/Installers/.checksums.sha256"
 
 # print_centered prints TEXT centered within UI_WIDTH, using an optional COLOR escape code for output.
