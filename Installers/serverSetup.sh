@@ -221,7 +221,7 @@ validate_hostname() {
 # install_xcp_tools_iso mounts a guest-tools ISO attached via Xen Orchestra and runs its installer to install XCP-NG guest tools.
 # Prompts the user to confirm ISO attachment, mounts the ISO at /mnt, looks for an `install.sh` under `/mnt/Linux` or `/mnt`, executes it if found, and unmounts when finished (can be skipped by the user).
 install_xcp_tools_iso() {
-    print_info "Tools installed via Guest Tools ISO."
+    print_info "Installing XCP-NG tools from Guest Tools ISO..."
 
     while true; do
         echo -e "${YELLOW}Action required:${NC} Ensure 'guest-tools.iso' is attached in Xen Orchestra."
