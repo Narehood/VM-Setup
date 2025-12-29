@@ -26,11 +26,39 @@ load_settings() {
     AUTO_UPDATE_CHECK="true"
     CONFIRM_UPDATES_ON_STARTUP="false"
     
-    if [[ -f "$SETTINGS_FILE" ]]; then
-        source "$SETTINGS_FILE"
-    else
+    if [[ ! -f "$SETTINGS_FILE" ]]; then
         save_settings
+        return
     fi
+    
+    local file_perms
+    file_perms=$(stat -c %a "$SETTINGS_FILE" 2>/dev/null || stat -f %OLp "$SETTINGS_FILE" 2>/dev/null)
+    if [[ -n "$file_perms" ]] && [[ "$file_perms" != "600" ]]; then
+        chmod 600 "$SETTINGS_FILE" 2>/dev/null || true
+    fi
+    
+    local line key value
+    while IFS= read -r line; do
+        [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+        
+        key="${line%%=*}"
+        value="${line#*=}"
+        
+        key=$(echo "$key" | xargs)
+        value=$(echo "$value" | xargs)
+        
+        value="${value#\"}"
+        value="${value%\"}"
+        
+        case "$key" in
+            AUTO_UPDATE_CHECK)
+                [[ "$value" =~ ^(true|false)$ ]] && AUTO_UPDATE_CHECK="$value"
+                ;;
+            CONFIRM_UPDATES_ON_STARTUP)
+                [[ "$value" =~ ^(true|false)$ ]] && CONFIRM_UPDATES_ON_STARTUP="$value"
+                ;;
+        esac
+    done < "$SETTINGS_FILE"
 }
 
 save_settings() {
@@ -42,6 +70,7 @@ AUTO_UPDATE_CHECK="$AUTO_UPDATE_CHECK"
 # CONFIRM_UPDATES_ON_STARTUP: Prompt before applying updates (true/false)
 CONFIRM_UPDATES_ON_STARTUP="$CONFIRM_UPDATES_ON_STARTUP"
 EOF
+    chmod 600 "$SETTINGS_FILE" 2>/dev/null || true
 }
 
 load_settings
