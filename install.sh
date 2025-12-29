@@ -16,7 +16,7 @@ WHITE='\033[1;37m'
 NC='\033[0m'
 
 UI_WIDTH=86
-VERSION="3.5.0"
+VERSION="3.5.1"
 CHECKSUM_FILE="$SCRIPT_DIR/Installers/.checksums.sha256"
 
 # --- 3. SETTINGS & CONFIGURATION ---
@@ -24,6 +24,7 @@ SETTINGS_FILE="$SCRIPT_DIR/settings.conf"
 
 load_settings() {
     AUTO_UPDATE_CHECK="true"
+    CONFIRM_UPDATES_ON_STARTUP="false"
     
     if [[ -f "$SETTINGS_FILE" ]]; then
         source "$SETTINGS_FILE"
@@ -37,6 +38,9 @@ save_settings() {
 # System Setup Menu - Configuration
 # AUTO_UPDATE_CHECK: Check for updates on startup (true/false)
 AUTO_UPDATE_CHECK="$AUTO_UPDATE_CHECK"
+
+# CONFIRM_UPDATES_ON_STARTUP: Prompt before applying updates (true/false)
+CONFIRM_UPDATES_ON_STARTUP="$CONFIRM_UPDATES_ON_STARTUP"
 EOF
 }
 
@@ -913,16 +917,18 @@ manage_settings() {
     echo ""
 
     echo -e "  ${WHITE}Current Settings:${NC}"
-    printf "  ${YELLOW}%-28s${NC} : %s\n" "Auto Update Check" "$AUTO_UPDATE_CHECK"
+    printf "  ${YELLOW}%-35s${NC} : %s\n" "Auto Update Check" "$AUTO_UPDATE_CHECK"
+    printf "  ${YELLOW}%-35s${NC} : %s\n" "Confirm Updates on Startup" "$CONFIRM_UPDATES_ON_STARTUP"
     echo ""
     print_line "-" "$BLUE"
 
     echo -e "  ${WHITE}Change Settings:${NC}"
     echo -e "    ${CYAN}1.${NC} Toggle Auto Update Check"
+    echo -e "    ${CYAN}2.${NC} Toggle Confirm Updates on Startup"
     echo -e "    ${CYAN}0.${NC} Back to Menu"
     echo ""
 
-    read -rp "  Select option [0-1]: " settings_choice
+    read -rp "  Select option [0-2]: " settings_choice
 
     case "$settings_choice" in
         1)
@@ -935,6 +941,16 @@ manage_settings() {
             print_success "Setting updated to: $AUTO_UPDATE_CHECK"
             sleep 2
             ;;
+        2)
+            if [[ "$CONFIRM_UPDATES_ON_STARTUP" = "true" ]]; then
+                CONFIRM_UPDATES_ON_STARTUP="false"
+            else
+                CONFIRM_UPDATES_ON_STARTUP="true"
+            fi
+            save_settings
+            print_success "Setting updated to: $CONFIRM_UPDATES_ON_STARTUP"
+            sleep 2
+            ;;
     esac
 }
 
@@ -944,7 +960,11 @@ fix_permissions silent
 generate_checksums silent || true
 
 if [[ "$AUTO_UPDATE_CHECK" = "true" ]]; then
-    check_for_updates || true
+    if [[ "$CONFIRM_UPDATES_ON_STARTUP" = "true" ]]; then
+        check_for_updates_interactive || true
+    else
+        check_for_updates || true
+    fi
 fi
 
 # --- MAIN LOOP ---
