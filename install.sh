@@ -19,6 +19,29 @@ UI_WIDTH=86
 VERSION="3.5.0"
 CHECKSUM_FILE="$SCRIPT_DIR/Installers/.checksums.sha256"
 
+# --- 3. SETTINGS & CONFIGURATION ---
+SETTINGS_FILE="$SCRIPT_DIR/settings.conf"
+
+load_settings() {
+    AUTO_UPDATE_CHECK="true"
+    
+    if [[ -f "$SETTINGS_FILE" ]]; then
+        source "$SETTINGS_FILE"
+    else
+        save_settings
+    fi
+}
+
+save_settings() {
+    cat > "$SETTINGS_FILE" << EOF
+# System Setup Menu - Configuration
+# AUTO_UPDATE_CHECK: Check for updates on startup (true/false)
+AUTO_UPDATE_CHECK="$AUTO_UPDATE_CHECK"
+EOF
+}
+
+load_settings
+
 # print_centered prints TEXT centered within UI_WIDTH, using an optional COLOR escape code for output.
 print_centered() {
     local text="$1"
@@ -856,6 +879,7 @@ show_help() {
     echo -e "    ${CYAN}7${NC} - Launch LinUtil utility"
     echo -e "    ${CYAN}8${NC} - Switch to a different branch (dev/testing)"
     echo -e "    ${CYAN}9${NC} - Display this help screen"
+    echo -e "    ${CYAN}s${NC} - Settings"
     echo -e "    ${CYAN}0${NC} - Exit the menu"
     echo ""
     echo -e "  ${YELLOW}Supported Distributions:${NC}"
@@ -880,11 +904,48 @@ show_help() {
     pause
 }
 
+# manage_settings displays current settings and allows the user to modify them.
+manage_settings() {
+    clear
+    print_line "=" "$BLUE"
+    print_centered "SETTINGS" "$WHITE"
+    print_line "=" "$BLUE"
+    echo ""
+
+    echo -e "  ${WHITE}Current Settings:${NC}"
+    printf "  ${YELLOW}%-28s${NC} : %s\n" "Auto Update Check" "$AUTO_UPDATE_CHECK"
+    echo ""
+    print_line "-" "$BLUE"
+
+    echo -e "  ${WHITE}Change Settings:${NC}"
+    echo -e "    ${CYAN}1.${NC} Toggle Auto Update Check"
+    echo -e "    ${CYAN}0.${NC} Back to Menu"
+    echo ""
+
+    read -rp "  Select option [0-1]: " settings_choice
+
+    case "$settings_choice" in
+        1)
+            if [[ "$AUTO_UPDATE_CHECK" = "true" ]]; then
+                AUTO_UPDATE_CHECK="false"
+            else
+                AUTO_UPDATE_CHECK="true"
+            fi
+            save_settings
+            print_success "Setting updated to: $AUTO_UPDATE_CHECK"
+            sleep 2
+            ;;
+    esac
+}
+
 # --- STARTUP TASKS ---
 clear
 fix_permissions silent
 generate_checksums silent || true
-check_for_updates || true
+
+if [[ "$AUTO_UPDATE_CHECK" = "true" ]]; then
+    check_for_updates || true
+fi
 
 # --- MAIN LOOP ---
 while true; do
@@ -897,10 +958,11 @@ while true; do
     printf "  ${CYAN}3.${NC} %-38s ${CYAN}7.${NC} %s\n" "Docker Host Preparation" "Launch LinUtil"
     printf "  ${CYAN}4.${NC} %-38s ${CYAN}8.${NC} %s\n" "Auto Security Patches" "Switch Branch"
     echo ""
-    printf "  ${CYAN}9.${NC} %-38s ${CYAN}0.${NC} ${RED}%s${NC}\n" "Help / About" "Exit"
+    printf "  ${CYAN}9.${NC} %-38s ${CYAN}s.${NC} %s\n" "Help / About" "Settings"
+    printf "  ${CYAN}0.${NC} ${RED}%-38s${NC}\n" "Exit"
     echo ""
     print_line "-" "$BLUE"
-    read -rp "  Enter selection [0-9]: " choice
+    read -rp "  Enter selection [0-9,s]: " choice
 
     case "$choice" in
         1) execute_script "serverSetup.sh" ;;
@@ -912,6 +974,7 @@ while true; do
         7) execute_script "linutil.sh" ;;
         8) switch_branch ;;
         9|h|help) show_help ;;
+        s|settings) manage_settings ;;
         0|q|exit) echo -e "\n${GREEN}Goodbye!${NC}"; exit 0 ;;
         generate-checksums) generate_checksums; pause ;;
         fix-permissions) fix_permissions; pause ;;
