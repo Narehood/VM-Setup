@@ -22,6 +22,7 @@ CHECKSUM_FILE="$SCRIPT_DIR/Installers/.checksums.sha256"
 # --- 3. SETTINGS & CONFIGURATION ---
 SETTINGS_FILE="$SCRIPT_DIR/settings.conf"
 
+# load_settings loads AUTO_UPDATE_CHECK and CONFIRM_UPDATES_ON_STARTUP from SETTINGS_FILE, initializing defaults, creating the file if missing, normalizing its permissions to 600 when possible, and applying only valid `true`/`false` values.
 load_settings() {
     AUTO_UPDATE_CHECK="true"
     CONFIRM_UPDATES_ON_STARTUP="false"
@@ -61,6 +62,7 @@ load_settings() {
     done < "$SETTINGS_FILE"
 }
 
+# save_settings writes current AUTO_UPDATE_CHECK and CONFIRM_UPDATES_ON_STARTUP to SETTINGS_FILE and sets the file's permissions to 600 when possible.
 save_settings() {
     cat > "$SETTINGS_FILE" << EOF
 # System Setup Menu - Configuration
@@ -937,7 +939,7 @@ show_help() {
     pause
 }
 
-# manage_settings displays current settings and allows the user to modify them.
+# manage_settings displays current settings (Auto Update Check and Confirm Updates on Startup), lets the user toggle them, and saves changes to the settings file.
 manage_settings() {
     clear
     print_line "=" "$BLUE"
