@@ -17,11 +17,11 @@
 **The all-in-one post-installation utility for XCP-NG Virtual Machines.**
 
 Effortlessly configure Docker Hosts, UniFi Controllers, Xen Orchestra, or simply install Guest Tools.<br>
-Includes automated security patching and self-updating capabilities.
+Includes automated security patching, self-updating capabilities, and persistent user preferences.
 
 <!-- <img src="https://your-image-link-here.png" alt="Dashboard Preview" width="700" /> -->
 
-[Features](#-features) • [Quick Start](#-quick-start) • [Menu Options](#-menu-options) • [Credits](#-credits--acknowledgements)
+[Features](#-features) • [Quick Start](#-quick-start) • [Menu Options](#-menu-options) • [Configuration](#-configuration) • [Credits](#-credits--acknowledgements)
 
 </div>
 
@@ -63,6 +63,7 @@ bash install.sh
 | **Security** | Enable automated unattended security upgrades |
 | **Maintenance** | System update helper and self-updating menu |
 | **LinUtil** | Integrated launcher for Chris Titus's Linux Utility |
+| **Persistent Settings** | User preferences stored locally and respected on each run |
 
 ---
 
@@ -79,6 +80,42 @@ The script provides an interactive dashboard with the following modules:
 | **Run System Updates** | Smart wrapper for apt/dnf/pacman/apk |
 | **Update This Menu** | Pulls latest changes from GitHub |
 | **Launch LinUtil** | External utility integration |
+| **Switch Branch** | Change to dev/testing branches |
+| **Settings** | Manage user preferences and behavior |
+
+---
+
+## ⚙️ Configuration
+
+The menu supports persistent user settings stored in `settings.conf`. Access settings by selecting **s** from the main menu.
+
+### Available Settings
+
+| Setting | Default | Description |
+| :--- | :---: | :--- |
+| **Auto Update Check** | `true` | Automatically check for menu updates on startup |
+| **Confirm Updates on Startup** | `false` | Prompt before applying updates (if Auto Update Check is enabled) |
+
+### Managing Settings
+
+Settings are managed through the interactive settings menu:
+
+1. Launch the menu: `bash install.sh`
+2. Press `s` or select **Settings** from the main menu
+3. Toggle any setting with the corresponding number
+4. Changes are saved automatically to `settings.conf`
+
+### Manual Configuration
+
+For advanced users, you can directly edit `settings.conf`:
+
+```bash
+# settings.conf
+AUTO_UPDATE_CHECK="true"
+CONFIRM_UPDATES_ON_STARTUP="false"
+```
+
+**Note:** The `settings.conf` file is protected with restrictive permissions (600) for security.
 
 ---
 
@@ -102,7 +139,3 @@ This project utilizes and wraps several excellent community scripts:
 *Bug reports are welcome, but fixes are not guaranteed.*
 
 </div>
-
-
-
-
