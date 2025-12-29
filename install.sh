@@ -187,7 +187,7 @@ show_header() {
     echo -e "${BLUE}╚════██║  ╚██╔╝  ╚════██║   ██║   ██╔══╝  ██║╚██╔╝██║    ╚════██║██╔══╝     ██║   ██║   ██║██╔═══╝ ${NC}"
     echo -e "${BLUE}███████║   ██║   ███████║   ██║   ███████╗██║ ╚═╝ ██║    ███████║███████╗   ██║   ╚██████╔╝██║     ${NC}"
     echo -e "${BLUE}╚══════╝   ╚═╝   ╚══════╝   ╚═╝   ╚══════╝╚═╝     ╚═╝    ╚══════╝╚══════╝   ╚═╝    ╚═════╝ ╚═╝     ${NC}"
-    print_centered "VERSION $VERSION  |  BY: MICHAEL NAREHOOD" "$CYAN"
+    print_centered "VERSION $VERSION  |  BY: NAREHOOD" "$CYAN"
     print_line "=" "$BLUE"
 }
 
