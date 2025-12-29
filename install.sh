@@ -16,7 +16,7 @@ WHITE='\033[1;37m'
 NC='\033[0m'
 
 UI_WIDTH=86
-VERSION="3.4.1"
+VERSION="3.5.0"
 CHECKSUM_FILE="$SCRIPT_DIR/Installers/.checksums.sha256"
 
 # print_centered prints TEXT centered within UI_WIDTH, using an optional COLOR escape code for output.
@@ -258,8 +258,76 @@ show_stats() {
     print_line "=" "$BLUE"
 }
 
-# check_for_updates checks the script's Git repository for remote changes, offers to download and apply updates, handles uncommitted local changes (stash, discard, or cancel), and restarts the script if the update succeeds.
+# check_for_updates checks the script's Git repository for remote changes and automatically applies updates, handling uncommitted local changes (stash or discard), and restarts the script if the update succeeds.
 check_for_updates() {
+    echo ""
+    print_status "Checking for updates..."
+
+    if ! command -v git &>/dev/null; then
+        print_error "Git is not installed. Cannot check for updates."
+        sleep 2
+        return 1
+    fi
+
+    if [[ ! -d "$SCRIPT_DIR/.git" ]]; then
+        print_warn "Not a git repository. Skipping update check."
+        sleep 2
+        return 1
+    fi
+
+    if ! git fetch --quiet 2>/dev/null; then
+        print_error "Failed to fetch from remote. Check your network connection."
+        sleep 2
+        return 1
+    fi
+
+    local local_rev remote_rev
+    local_rev=$(git rev-parse @ 2>/dev/null)
+
+    if ! remote_rev=$(git rev-parse '@{u}' 2>/dev/null); then
+        print_error "No upstream branch configured. Skipping update check."
+        sleep 2
+        return 1
+    fi
+
+    if [[ "$local_rev" = "$remote_rev" ]]; then
+        print_success "Menu is up to date."
+        sleep 1
+        return 0
+    fi
+
+    print_warn "New version available."
+    print_status "Applying updates..."
+
+    local has_changes="false"
+    if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
+        has_changes="true"
+    fi
+
+    if [[ "$has_changes" = "true" ]]; then
+        print_status "Stashing uncommitted changes..."
+        local stash_msg="Auto-stash before update on $(date '+%Y-%m-%d %H:%M')"
+        if ! git stash push -m "$stash_msg" 2>/dev/null; then
+            print_error "Failed to stash changes."
+            sleep 2
+            return 1
+        fi
+        print_success "Changes stashed."
+    fi
+
+    if git pull --quiet; then
+        print_success "Updated successfully. Restarting..."
+        sleep 1
+        exec bash "$SCRIPT_PATH"
+    else
+        print_error "Update failed. Please try manually with 'git pull'."
+        sleep 2
+        return 1
+    fi
+}
+
+# check_for_updates_interactive is like check_for_updates but prompts the user before downloading and applying updates.
+check_for_updates_interactive() {
     echo ""
     print_status "Checking for updates..."
 
@@ -657,7 +725,7 @@ generate_checksums() {
 # execute_script executes an installer from Installers/, verifying existence/readability and file type, validating checksum, ensuring executability, honoring REQUIRES_ROOT (prompting to run with sudo, continue without root, or cancel), printing an optional DESCRIPTION, running the script, and reporting its exit code.
 execute_script() {
     set +e
-    
+
     local script_name="$1"
     local full_path="$SCRIPT_DIR/Installers/$script_name"
 
@@ -801,8 +869,9 @@ show_help() {
     echo -e "    ${CYAN}# DESCRIPTION: text${NC}  - Brief script description"
     echo ""
     echo -e "  ${YELLOW}Hidden Commands:${NC}"
-    echo -e "    ${CYAN}generate-checksums${NC}  - Create integrity hashes for scripts"
-    echo -e "    ${CYAN}fix-permissions${NC}     - Fix executable bit on all scripts"
+    echo -e "    ${CYAN}generate-checksums${NC}     - Create integrity hashes for scripts"
+    echo -e "    ${CYAN}fix-permissions${NC}        - Fix executable bit on all scripts"
+    echo -e "    ${CYAN}check-updates-interactive${NC} - Check updates with confirmation prompt"
     echo ""
     echo -e "  ${YELLOW}Location:${NC} $SCRIPT_DIR"
     echo -e "  ${YELLOW}Branch:${NC}   $(get_current_branch)"
@@ -846,6 +915,7 @@ while true; do
         0|q|exit) echo -e "\n${GREEN}Goodbye!${NC}"; exit 0 ;;
         generate-checksums) generate_checksums; pause ;;
         fix-permissions) fix_permissions; pause ;;
+        check-updates-interactive) check_for_updates_interactive || true ;;
         "") ;;
         *) print_error "Invalid option: $choice"; sleep 1 ;;
     esac
