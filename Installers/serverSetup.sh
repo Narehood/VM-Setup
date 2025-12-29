@@ -356,7 +356,7 @@ print_step "Standard System Utilities"
 print_info "Installing: net-tools, btop, curl, wget, file, nano..."
 update_repos
 
-local install_result=0
+install_result=0
 
 if [[ "$OS" == "alpine" ]]; then
     install_pkg sudo net-tools nano curl wget file htop || install_result=$?

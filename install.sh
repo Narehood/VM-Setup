@@ -1,5 +1,5 @@
 #!/bin/bash
-set -euo pipefail
+set -uo pipefail
 
 # --- 1. CRITICAL SETUP & RESTART FIX ---
 SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
@@ -16,10 +16,8 @@ WHITE='\033[1;37m'
 NC='\033[0m'
 
 UI_WIDTH=86
-VERSION="3.4.0"
+VERSION="3.5.0"
 CHECKSUM_FILE="$SCRIPT_DIR/Installers/.checksums.sha256"
-
-trap 'echo -e "\n${GREEN}Goodbye!${NC}"' EXIT
 
 # print_centered prints TEXT centered within UI_WIDTH, using an optional COLOR escape code for output.
 print_centered() {
@@ -108,7 +106,7 @@ fix_permissions() {
                 [[ "$silent" != "silent" ]] && print_error "Failed: $(basename "$script")"
             fi
         fi
-    done < <(find "$installers_dir" -maxdepth 1 -name "*.sh" -type f -print0 2>/dev/null)
+    done < <(find "$installers_dir" -maxdepth 1 -name "*.sh" -type f -print0 2>/dev/null) || true
 
     if [[ "$silent" != "silent" ]]; then
         echo ""
@@ -260,8 +258,76 @@ show_stats() {
     print_line "=" "$BLUE"
 }
 
-# check_for_updates checks the script's Git repository for remote changes, offers to download and apply updates, handles uncommitted local changes (stash, discard, or cancel), and restarts the script if the update succeeds.
+# check_for_updates checks the script's Git repository for remote changes and automatically applies updates, handling uncommitted local changes (stash or discard), and restarts the script if the update succeeds.
 check_for_updates() {
+    echo ""
+    print_status "Checking for updates..."
+
+    if ! command -v git &>/dev/null; then
+        print_error "Git is not installed. Cannot check for updates."
+        sleep 2
+        return 1
+    fi
+
+    if [[ ! -d "$SCRIPT_DIR/.git" ]]; then
+        print_warn "Not a git repository. Skipping update check."
+        sleep 2
+        return 1
+    fi
+
+    if ! git fetch --quiet 2>/dev/null; then
+        print_error "Failed to fetch from remote. Check your network connection."
+        sleep 2
+        return 1
+    fi
+
+    local local_rev remote_rev
+    local_rev=$(git rev-parse @ 2>/dev/null)
+
+    if ! remote_rev=$(git rev-parse '@{u}' 2>/dev/null); then
+        print_error "No upstream branch configured. Skipping update check."
+        sleep 2
+        return 1
+    fi
+
+    if [[ "$local_rev" = "$remote_rev" ]]; then
+        print_success "Menu is up to date."
+        sleep 1
+        return 0
+    fi
+
+    print_warn "New version available."
+    print_status "Applying updates..."
+
+    local has_changes="false"
+    if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
+        has_changes="true"
+    fi
+
+    if [[ "$has_changes" = "true" ]]; then
+        print_status "Stashing uncommitted changes..."
+        local stash_msg="Auto-stash before update on $(date '+%Y-%m-%d %H:%M')"
+        if ! git stash push -m "$stash_msg" 2>/dev/null; then
+            print_error "Failed to stash changes."
+            sleep 2
+            return 1
+        fi
+        print_success "Changes stashed."
+    fi
+
+    if git pull --quiet; then
+        print_success "Updated successfully. Restarting..."
+        sleep 1
+        exec bash "$SCRIPT_PATH"
+    else
+        print_error "Update failed. Please try manually with 'git pull'."
+        sleep 2
+        return 1
+    fi
+}
+
+# check_for_updates_interactive is like check_for_updates but prompts the user before downloading and applying updates.
+check_for_updates_interactive() {
     echo ""
     print_status "Checking for updates..."
 
@@ -415,7 +481,7 @@ switch_branch() {
                 branch_display+=("$branch")
             fi
         fi
-    done < <(git branch 2>/dev/null)
+    done < <(git branch 2>/dev/null) || true
 
     while IFS= read -r branch; do
         branch="${branch// /}"
@@ -433,7 +499,7 @@ switch_branch() {
                 branch_display+=("$branch (remote)")
             fi
         fi
-    done < <(git branch -r 2>/dev/null | grep -v '\->')
+    done < <(git branch -r 2>/dev/null | grep -v '\->') || true
 
     if [[ ${#branches[@]} -eq 0 ]]; then
         print_error "No branches found."
@@ -569,7 +635,7 @@ switch_branch() {
 parse_script_metadata() {
     local script_path="$1"
     local key="$2"
-    head -n 20 "$script_path" 2>/dev/null | grep -i "^# *${key}:" | head -n 1 | sed "s/^# *${key}: *//i"
+    head -n 20 "$script_path" 2>/dev/null | grep -i "^# *${key}:" | head -n 1 | sed "s/^# *${key}: *//i" || echo ""
 }
 
 # verify_script_checksum Verifies a script's sha256 checksum from CHECKSUM_FILE and prompts the user on missing or mismatched entries.
@@ -587,7 +653,7 @@ verify_script_checksum() {
     fi
 
     local expected_hash
-    expected_hash=$(grep " ${script_name}$" "$CHECKSUM_FILE" 2>/dev/null | awk '{print $1}')
+    expected_hash=$(grep " ${script_name}$" "$CHECKSUM_FILE" 2>/dev/null | awk '{print $1}' || echo "")
 
     if [[ -z "$expected_hash" ]]; then
         print_warn "No checksum found for $script_name"
@@ -598,7 +664,7 @@ verify_script_checksum() {
     fi
 
     local actual_hash
-    actual_hash=$(sha256sum "$script_path" 2>/dev/null | awk '{print $1}')
+    actual_hash=$(sha256sum "$script_path" 2>/dev/null | awk '{print $1}' || echo "")
 
     if [[ "$expected_hash" != "$actual_hash" ]]; then
         print_error "Checksum verification FAILED for $script_name"
@@ -619,41 +685,47 @@ verify_script_checksum() {
 # It requires the `sha256sum` utility and returns non-zero if the Installers directory is missing, `sha256sum` is unavailable, or no installer scripts are found.
 # On success it overwrites any existing checksum file with one entry per script and returns 0.
 generate_checksums() {
+    local silent="${1:-}"
     local installers_dir="$SCRIPT_DIR/Installers"
 
     if [[ ! -d "$installers_dir" ]]; then
-        print_error "Installers directory not found."
+        [[ "$silent" != "silent" ]] && print_error "Installers directory not found."
         return 1
     fi
 
     if ! command -v sha256sum &>/dev/null; then
-        print_error "sha256sum not available."
+        [[ "$silent" != "silent" ]] && print_error "sha256sum not available."
         return 1
     fi
 
-    print_status "Generating checksums for installer scripts..."
+    [[ "$silent" != "silent" ]] && print_status "Generating checksums for installer scripts..."
 
     : > "$CHECKSUM_FILE"
 
     local count=0
     while IFS= read -r -d '' script; do
-        sha256sum "$script" | sed "s|.*/||" >> "$CHECKSUM_FILE"
-        ((count++))
-    done < <(find "$installers_dir" -maxdepth 1 -name "*.sh" -type f -print0)
+        if [[ -n "$script" ]]; then
+            local filename
+            filename=$(basename "$script")
+            sha256sum "$script" | awk -v fname="$filename" '{print $1, fname}' >> "$CHECKSUM_FILE"
+            ((count++))
+        fi
+    done < <(find "$installers_dir" -maxdepth 1 -name "*.sh" -type f -print0) || true
 
     if [[ $count -eq 0 ]]; then
-        print_warn "No scripts found to checksum."
+        [[ "$silent" != "silent" ]] && print_warn "No scripts found to checksum."
         rm -f "$CHECKSUM_FILE"
         return 1
     fi
 
-    print_success "Generated checksums for $count scripts."
-    print_status "Checksum file: $CHECKSUM_FILE"
+    [[ "$silent" != "silent" ]] && print_success "Generated checksums for $count scripts."
     return 0
 }
 
 # execute_script executes an installer from Installers/, verifying existence/readability and file type, validating checksum, ensuring executability, honoring REQUIRES_ROOT (prompting to run with sudo, continue without root, or cancel), printing an optional DESCRIPTION, running the script, and reporting its exit code.
 execute_script() {
+    set +e
+
     local script_name="$1"
     local full_path="$SCRIPT_DIR/Installers/$script_name"
 
@@ -662,13 +734,15 @@ execute_script() {
     if [[ ! -f "$full_path" ]]; then
         print_error "Script not found: $full_path"
         pause
-        return 1
+        set -e
+        return 0
     fi
 
     if [[ ! -r "$full_path" ]]; then
         print_error "Script not readable: $full_path"
         pause
-        return 1
+        set -e
+        return 0
     fi
 
     local file_type
@@ -677,16 +751,18 @@ execute_script() {
         if [[ "$file_type" != "unknown" ]] && [[ ! "$file_type" =~ (shell|bash|sh|text|ASCII|script) ]]; then
             print_error "File does not appear to be a shell script: $file_type"
             pause
-            return 1
+            set -e
+            return 0
         fi
     else
         local first_line
-        first_line=$(head -n 1 "$full_path" 2>/dev/null)
+        first_line=$(head -n 1 "$full_path" 2>/dev/null || echo "")
         if [[ ! "$first_line" =~ ^#! ]]; then
             print_warn "Cannot verify file type (file command not available)"
             if ! confirm_prompt "  Continue anyway? (y/N): " "n"; then
                 pause
-                return 1
+                set -e
+                return 0
             fi
         fi
     fi
@@ -694,12 +770,13 @@ execute_script() {
     if ! verify_script_checksum "$full_path"; then
         print_error "Script verification failed. Aborting."
         pause
-        return 1
+        set -e
+        return 0
     fi
 
     [[ ! -x "$full_path" ]] && chmod +x "$full_path" 2>/dev/null || true
 
-    local requires_root
+    local requires_root=""
     requires_root=$(parse_script_metadata "$full_path" "REQUIRES_ROOT")
 
     if [[ -z "$requires_root" ]]; then
@@ -723,16 +800,16 @@ execute_script() {
                 if ! command -v sudo &>/dev/null; then
                     print_error "sudo is not installed."
                     pause
-                    return 1
+                    set -e
+                    return 0
                 fi
                 print_status "Executing with sudo..."
                 echo -e "${GREEN}>>> Executing: $script_name (as root)${NC}"
                 sleep 0.5
                 sudo bash "$full_path"
-                local exit_code=$?
-                [[ $exit_code -ne 0 ]] && print_warn "Script exited with code: $exit_code"
                 pause
-                return $exit_code
+                set -e
+                return 0
                 ;;
             2)
                 print_warn "Running without root - some operations may fail."
@@ -740,12 +817,13 @@ execute_script() {
             *)
                 print_status "Cancelled."
                 sleep 1
+                set -e
                 return 0
                 ;;
         esac
     fi
 
-    local description
+    local description=""
     description=$(parse_script_metadata "$full_path" "DESCRIPTION")
     [[ -n "$description" ]] && print_status "Description: $description"
 
@@ -753,12 +831,9 @@ execute_script() {
     sleep 0.5
 
     bash "$full_path"
-    local exit_code=$?
-
-    [[ $exit_code -ne 0 ]] && print_warn "Script exited with code: $exit_code"
-
     pause
-    return $exit_code
+    set -e
+    return 0
 }
 
 # show_help displays the help and information screen describing menu options, supported distributions, script metadata headers, hidden commands, and current script location/branch.
@@ -794,8 +869,9 @@ show_help() {
     echo -e "    ${CYAN}# DESCRIPTION: text${NC}  - Brief script description"
     echo ""
     echo -e "  ${YELLOW}Hidden Commands:${NC}"
-    echo -e "    ${CYAN}generate-checksums${NC}  - Create integrity hashes for scripts"
-    echo -e "    ${CYAN}fix-permissions${NC}     - Fix executable bit on all scripts"
+    echo -e "    ${CYAN}generate-checksums${NC}     - Create integrity hashes for scripts"
+    echo -e "    ${CYAN}fix-permissions${NC}        - Fix executable bit on all scripts"
+    echo -e "    ${CYAN}check-updates-interactive${NC} - Check updates with confirmation prompt"
     echo ""
     echo -e "  ${YELLOW}Location:${NC} $SCRIPT_DIR"
     echo -e "  ${YELLOW}Branch:${NC}   $(get_current_branch)"
@@ -807,7 +883,8 @@ show_help() {
 # --- STARTUP TASKS ---
 clear
 fix_permissions silent
-check_for_updates
+generate_checksums silent || true
+check_for_updates || true
 
 # --- MAIN LOOP ---
 while true; do
@@ -831,13 +908,14 @@ while true; do
         3) execute_script "Docker-Prep.sh" ;;
         4) execute_script "Automated-Security-Patches.sh" ;;
         5) execute_script "systemUpdate.sh" ;;
-        6) check_for_updates ;;
+        6) check_for_updates || true ;;
         7) execute_script "linutil.sh" ;;
         8) switch_branch ;;
         9|h|help) show_help ;;
-        0|q|exit) exit 0 ;;
+        0|q|exit) echo -e "\n${GREEN}Goodbye!${NC}"; exit 0 ;;
         generate-checksums) generate_checksums; pause ;;
         fix-permissions) fix_permissions; pause ;;
+        check-updates-interactive) check_for_updates_interactive || true ;;
         "") ;;
         *) print_error "Invalid option: $choice"; sleep 1 ;;
     esac
