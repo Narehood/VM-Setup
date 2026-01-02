@@ -352,8 +352,8 @@ set_database_root_password() {
         elif [[ $major -eq 8 ]]; then
             print_info "MySQL 8.0.x detected - using ALTER USER"
             /usr/bin/mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '$password';" 2>/dev/null || return 1
-        elif [[ $major -eq 5 && $minor -ge 7 ]] || [[ $major -gt 5 ]]; then
-            print_info "MySQL $major.$minor.$patch detected - using ALTER USER"
+        elif [[ $major -gt 5 ]] || [[ $major -eq 5 && ($minor -gt 7 || ($minor -eq 7 && $patch -ge 6)) ]]; then
+            print_info "MySQL $major.$minor.$patch detected (5.7.6+) - using ALTER USER"
             /usr/bin/mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '$password';" 2>/dev/null || return 1
         else
             print_warn "MySQL $major.$minor.$patch (pre-5.7.6) detected - using legacy SET PASSWORD with PASSWORD()"
