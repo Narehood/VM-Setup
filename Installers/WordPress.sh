@@ -83,9 +83,7 @@ cleanup() {
         fi
         
         print_info "Removing WordPress files..." >&2
-        rm -rf "${INSTALL_DIR:?}"/wordpress 2>/dev/null || true
-        rm -f "${INSTALL_DIR:?}"/wp-config.php 2>/dev/null || true
-        rm -f "${INSTALL_DIR:?}"/.htaccess 2>/dev/null || true
+        rm -rf "${INSTALL_DIR:?}"/* 2>/dev/null || true
         
         print_info "Removing virtual host configurations..." >&2
         for vhost in "${VHOST_FILES[@]}"; do
