@@ -4,7 +4,7 @@ set -euo pipefail
 # REQUIRES_ROOT: true
 # DESCRIPTION: Installs WordPress with Apache, MariaDB/MySQL, PHP, and SSL certificates
 
-VERSION="2.3.2"
+VERSION="2.3.3"
 INSTALL_DIR="/var/www/html"
 CREDS_FILE="/root/.wp-creds"
 LOG_FILE="/var/log/wordpress-install.log"
@@ -301,21 +301,41 @@ set_database_root_password() {
     
     print_info "Detected database version: $db_version"
     
-    if [[ "$db_version" =~ ^8\.0\.([0-9]+) ]]; then
-        local minor="${BASH_REMATCH[1]}"
-        if [[ $minor -ge 11 ]]; then
-            print_info "Using modern ALTER USER syntax"
+    if [[ "$db_version" == "unknown" ]]; then
+        print_warn "Could not detect database version, attempting ALTER USER"
+        /usr/bin/mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '$password';" 2>/dev/null && return 0
+        print_warn "ALTER USER failed, trying legacy method with PASSWORD()"
+        /usr/bin/mysql -e "SET PASSWORD FOR 'root'@'localhost' = PASSWORD('$password');" 2>/dev/null && return 0
+        return 1
+    fi
+    
+    if [[ "$db_version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+        local major="${BASH_REMATCH[1]}"
+        local minor="${BASH_REMATCH[2]}"
+        local patch="${BASH_REMATCH[3]}"
+        
+        if [[ "$db_version" =~ -MariaDB ]]; then
+            print_info "Detected MariaDB - using ALTER USER syntax"
+            /usr/bin/mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '$password';" 2>/dev/null || return 1
+            return 0
+        fi
+        
+        if [[ $major -gt 8 ]]; then
+            print_info "MySQL $major.$minor.$patch detected - using ALTER USER"
+            /usr/bin/mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '$password';" 2>/dev/null || return 1
+        elif [[ $major -eq 8 ]]; then
+            print_info "MySQL 8.0.x detected - using ALTER USER"
+            /usr/bin/mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '$password';" 2>/dev/null || return 1
+        elif [[ $major -eq 5 && $minor -ge 7 ]] || [[ $major -gt 5 ]]; then
+            print_info "MySQL $major.$minor.$patch detected - using ALTER USER"
             /usr/bin/mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '$password';" 2>/dev/null || return 1
         else
-            print_warn "MySQL 8.0.0-8.0.10 detected, using legacy method"
-            /usr/bin/mysql -e "SET PASSWORD FOR 'root'@'localhost' = '$password';" 2>/dev/null || return 1
+            print_warn "MySQL $major.$minor.$patch (pre-5.7.6) detected - using legacy SET PASSWORD with PASSWORD()"
+            /usr/bin/mysql -e "SET PASSWORD FOR 'root'@'localhost' = PASSWORD('$password');" 2>/dev/null || return 1
         fi
     else
-        print_info "Using ALTER USER syntax for database version"
-        /usr/bin/mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '$password';" 2>/dev/null || {
-            print_warn "ALTER USER failed, trying legacy SET PASSWORD"
-            /usr/bin/mysql -e "SET PASSWORD FOR 'root'@'localhost' = '$password';" 2>/dev/null || return 1
-        }
+        print_info "Could not parse version format, attempting ALTER USER"
+        /usr/bin/mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '$password';" 2>/dev/null || return 1
     fi
     
     return 0
