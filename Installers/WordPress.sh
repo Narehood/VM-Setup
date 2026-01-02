@@ -4,10 +4,13 @@ set -euo pipefail
 # REQUIRES_ROOT: true
 # DESCRIPTION: Installs WordPress with Apache, MySQL/MariaDB, PHP, and SSL certificates
 
-VERSION="2.1.0"
+VERSION="2.2.0"
 INSTALL_DIR="/var/www/html"
 SSL_DIR="/etc/apache2/ssl"
 CREDS_FILE="/root/.wp-creds"
+LOG_FILE="/var/log/wordpress-install.log"
+
+INSTALLATION_FAILED=1
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -21,25 +24,31 @@ export PATH=$PATH:/usr/local/sbin:/usr/sbin:/sbin
 PKG_MANAGER_UPDATED="false"
 OS=""
 VERSION_ID=""
+WEB_SERVICE=""
+WEB_USER=""
+DB_USER=""
+DB_NAME=""
+VHOST_FILES=()
+PACKAGES_INSTALLED=()
 
 print_step() {
-    echo -e "\n${BLUE}[STEP]${NC} $1"
+    echo -e "\n${BLUE}[STEP]${NC} $1" | tee -a "$LOG_FILE"
 }
 
 print_success() {
-    echo -e "${GREEN}[OK]${NC} $1"
+    echo -e "${GREEN}[OK]${NC} $1" | tee -a "$LOG_FILE"
 }
 
 print_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
+    echo -e "${YELLOW}[WARN]${NC} $1" | tee -a "$LOG_FILE"
 }
 
 print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    echo -e "${RED}[ERROR]${NC} $1" | tee -a "$LOG_FILE"
 }
 
 print_info() {
-    echo -e "${CYAN}[INFO]${NC} $1"
+    echo -e "${CYAN}[INFO]${NC} $1" | tee -a "$LOG_FILE"
 }
 
 show_header() {
@@ -52,13 +61,53 @@ show_header() {
 }
 
 cleanup() {
-    :
+    if [[ $INSTALLATION_FAILED -ne 0 ]]; then
+        print_error "Installation failed. Rolling back changes..." >&2
+        
+        print_info "Stopping services..." >&2
+        if [[ -n "$WEB_SERVICE" ]]; then
+            systemctl stop "$WEB_SERVICE" 2>/dev/null || true
+            systemctl disable "$WEB_SERVICE" 2>/dev/null || true
+        fi
+        systemctl stop mysql 2>/dev/null || systemctl stop mariadb 2>/dev/null || true
+        
+        print_info "Removing WordPress files..." >&2
+        rm -rf "${INSTALL_DIR:?}"/wordpress 2>/dev/null || true
+        rm -f "${INSTALL_DIR:?}"/wp-config.php 2>/dev/null || true
+        rm -f "${INSTALL_DIR:?}"/.htaccess 2>/dev/null || true
+        
+        print_info "Removing virtual host configurations..." >&2
+        for vhost in "${VHOST_FILES[@]}"; do
+            rm -f "$vhost" 2>/dev/null || true
+        done
+        
+        if [[ -n "$DB_NAME" ]] && [[ -n "$DB_USER" ]]; then
+            print_info "Dropping database and user..." >&2
+            /usr/bin/mysql -e "DROP DATABASE IF EXISTS \`$DB_NAME\`;" 2>/dev/null || true
+            /usr/bin/mysql -e "DROP USER IF EXISTS '$DB_USER'@'localhost';" 2>/dev/null || true
+        fi
+        
+        print_info "Removing temporary files..." >&2
+        rm -f /tmp/latest.tar.gz 2>/dev/null || true
+        rm -f "$CREDS_FILE" 2>/dev/null || true
+        
+        print_error "Rollback complete. Check $LOG_FILE for details." >&2
+    fi
 }
+
 trap cleanup EXIT
 
 check_root() {
     if [[ $EUID -ne 0 ]]; then
         print_error "This script requires root privileges."
+        exit 1
+    fi
+}
+
+check_existing_wordpress() {
+    if [[ -f "$INSTALL_DIR/wp-config.php" ]]; then
+        print_error "WordPress appears to already be installed at $INSTALL_DIR"
+        print_error "Please back up your site and remove existing files before reinstalling."
         exit 1
     fi
 }
@@ -146,6 +195,12 @@ install_pkg() {
         return 1
     fi
 
+    if [[ $result -eq 0 ]]; then
+        for pkg in "$@"; do
+            PACKAGES_INSTALLED+=("$pkg")
+        done
+    fi
+
     return $result
 }
 
@@ -158,9 +213,44 @@ generate_password() {
     openssl rand -base64 32 | tr -d '=' | cut -c1-16
 }
 
+get_mysql_version() {
+    /usr/bin/mysql -N -B -e "SELECT VERSION();" 2>/dev/null | head -n1 || echo "unknown"
+}
+
+set_mysql_root_password() {
+    local password="$1"
+    local mysql_version
+    
+    mysql_version=$(get_mysql_version)
+    
+    print_info "Detected MySQL/MariaDB version: $mysql_version"
+    
+    if [[ "$mysql_version" =~ ^8\.0\.([0-9]+) ]]; then
+        local minor="${BASH_REMATCH[1]}"
+        if [[ $minor -ge 11 ]]; then
+            print_info "Using modern ALTER USER syntax"
+            /usr/bin/mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '$password';" 2>/dev/null || return 1
+        else
+            print_warn "MySQL 8.0.0-8.0.10 detected, using legacy method"
+            /usr/bin/mysql -e "SET PASSWORD FOR 'root'@'localhost' = '$password';" 2>/dev/null || return 1
+        fi
+    else
+        print_info "Using ALTER USER syntax for non-8.0 version"
+        /usr/bin/mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '$password';" 2>/dev/null || {
+            print_warn "ALTER USER failed, trying legacy SET PASSWORD"
+            /usr/bin/mysql -e "SET PASSWORD FOR 'root'@'localhost' = '$password';" 2>/dev/null || return 1
+        }
+    fi
+    
+    return 0
+}
+
 show_header
+print_info "Initializing log: $LOG_FILE"
+
 check_root
 detect_os
+check_existing_wordpress
 
 if ! is_debian_based && ! is_rhel_based && ! is_arch_based; then
     print_error "WordPress installer supports Debian, RHEL, and Arch-based systems only"
@@ -226,13 +316,11 @@ elif is_rhel_based; then
 elif is_arch_based; then
     packages=(
         "apache"
-        "mysql"
+        "mariadb"
         "php"
-        "php-bz2"
         "php-gd"
         "php-curl"
         "php-intl"
-        "php-mbstring"
         "openssl"
         "curl"
         "wget"
@@ -281,23 +369,24 @@ if is_debian_based; then
     a2enmod rewrite >/dev/null 2>&1
     a2enmod ssl >/dev/null 2>&1
 elif is_rhel_based || is_arch_based; then
-    sed -i 's/^#LoadModule rewrite_module/LoadModule rewrite_module/' "$APACHE_CONF"
-    sed -i 's/^#LoadModule ssl_module/LoadModule ssl_module/' "$APACHE_CONF"
+    sed -i 's/^#LoadModule rewrite_module/LoadModule rewrite_module/' "$APACHE_CONF" 2>/dev/null || true
+    sed -i 's/^#LoadModule ssl_module/LoadModule ssl_module/' "$APACHE_CONF" 2>/dev/null || true
 fi
 
 print_success "Web server modules enabled."
 
 print_step "Configuring Database"
 
-systemctl enable mysql >/dev/null 2>&1 || systemctl enable mariadb >/dev/null 2>&1
-systemctl start mysql >/dev/null 2>&1 || systemctl start mariadb >/dev/null 2>&1
+systemctl enable mysql >/dev/null 2>&1 || systemctl enable mariadb >/dev/null 2>&1 || true
+systemctl start mysql >/dev/null 2>&1 || systemctl start mariadb >/dev/null 2>&1 || true
 print_success "Database service started."
 
 print_info "Setting database root password..."
 
-/usr/bin/mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '$MYSQL_ROOT_PASSWORD';" 2>/dev/null || \
-/usr/bin/mysql -e "UPDATE mysql.user SET authentication_string=PASSWORD('$MYSQL_ROOT_PASSWORD') WHERE user='root' AND host='localhost'; FLUSH PRIVILEGES;" 2>/dev/null || \
-/usr/bin/mysql -e "SET PASSWORD FOR 'root'@'localhost' = '$MYSQL_ROOT_PASSWORD';" 2>/dev/null
+if ! set_mysql_root_password "$MYSQL_ROOT_PASSWORD"; then
+    print_error "Failed to set MySQL root password"
+    exit 1
+fi
 
 cat > /root/.my.cnf << EOF
 [client]
@@ -307,14 +396,6 @@ EOF
 
 chmod 600 /root/.my.cnf
 print_success "Database root password set."
-
-if is_debian_based; then
-    print_info "Enabling htaccess support..."
-    sed -i '0,/AllowOverride\ None/ s/AllowOverride\ None/AllowOverride\ All/' "$APACHE_CONF"
-fi
-
-systemctl restart "$WEB_SERVICE" >/dev/null 2>&1
-print_success "Web server configured and restarted."
 
 print_step "Downloading WordPress"
 
@@ -393,7 +474,10 @@ print_success "SSL certificate generated."
 print_step "Configuring SSL Virtual Hosts"
 
 if is_debian_based; then
-    cat > "$SITES_AVAILABLE/wordpress-ssl.conf" << EOF
+    WORDPRESS_SSL_VHOST="$SITES_AVAILABLE/wordpress-ssl.conf"
+    WORDPRESS_HTTP_VHOST="$SITES_AVAILABLE/wordpress-http.conf"
+    
+    cat > "$WORDPRESS_SSL_VHOST" << EOF
 <VirtualHost *:443>
     ServerName $DOMAIN_NAME
     ServerAdmin admin@$DOMAIN_NAME
@@ -413,7 +497,7 @@ if is_debian_based; then
 </VirtualHost>
 EOF
 
-    cat > "$SITES_AVAILABLE/wordpress-http.conf" << EOF
+    cat > "$WORDPRESS_HTTP_VHOST" << EOF
 <VirtualHost *:80>
     ServerName $DOMAIN_NAME
     ServerAdmin admin@$DOMAIN_NAME
@@ -428,11 +512,14 @@ EOF
 </VirtualHost>
 EOF
 
+    VHOST_FILES+=("$WORDPRESS_SSL_VHOST" "$WORDPRESS_HTTP_VHOST")
     a2ensite wordpress-ssl.conf >/dev/null 2>&1
     a2ensite wordpress-http.conf >/dev/null 2>&1
 
 else
-    cat > "$SITES_AVAILABLE/wordpress.conf" << EOF
+    WORDPRESS_VHOST="$SITES_AVAILABLE/wordpress.conf"
+    
+    cat > "$WORDPRESS_VHOST" << EOF
 <VirtualHost *:443>
     ServerName $DOMAIN_NAME
     ServerAdmin admin@$DOMAIN_NAME
@@ -465,12 +552,10 @@ else
 </VirtualHost>
 EOF
 
+    VHOST_FILES+=("$WORDPRESS_VHOST")
 fi
 
-if is_debian_based; then
-    # Modules already enabled at line 281-282, but ensure they're active
-    a2enmod rewrite >/dev/null 2>&1 || true
-fi
+a2enmod rewrite >/dev/null 2>&1 || true
 systemctl restart "$WEB_SERVICE" >/dev/null 2>&1
 print_success "SSL and virtual hosts configured."
 
@@ -495,6 +580,18 @@ Web Server:             $WEB_SERVICE
 Web Server User:        $WEB_USER
 
 Access WordPress at: https://$DOMAIN_NAME/wp-admin
+
+SECURITY WARNING:
+=================
+This file contains sensitive credentials. Please:
+
+1. Securely store this information in a password manager
+2. Delete this file after recording the credentials
+3. Exclude backups of this file from your backup strategy
+4. Ensure any backups containing these credentials are encrypted
+5. Immediately rotate all credentials if this file is exposed
+
+Do NOT share this file with others.
 EOF
 
 chmod 600 "$CREDS_FILE"
@@ -510,6 +607,11 @@ print_info "Database User:     $DB_USER"
 print_info "Domain:            $DOMAIN_NAME"
 print_info "Installation:      $INSTALL_DIR"
 print_info "Credentials File:  $CREDS_FILE (mode 600)"
+print_info "Log File:          $LOG_FILE"
+echo ""
+print_warn "⚠ Review security warning in $CREDS_FILE"
 echo ""
 print_info "Access WordPress at: https://$DOMAIN_NAME/wp-admin"
 echo ""
+
+INSTALLATION_FAILED=0
