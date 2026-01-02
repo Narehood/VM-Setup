@@ -418,16 +418,35 @@ enable_php_apache() {
     fi
 }
 
-# configure_ssl_dir sets the SSL_DIR variable to the appropriate SSL certificate directory for the detected OS family and logs the chosen path.
-configure_ssl_dir() {
+# configure_web_server sets distribution-specific web server, user, config, and SSL directory variables after OS detection.
+# For Debian: apache2, www-data, /etc/apache2/*, /etc/apache2/ssl
+# For RHEL: httpd, apache, /etc/httpd/*, /etc/pki/tls/certs (standard RHEL cert location)
+# For Arch: httpd, http, /etc/httpd/*, /etc/httpd/ssl
+configure_web_server() {
     if is_debian_based; then
+        WEB_SERVICE="apache2"
+        WEB_USER="www-data"
+        APACHE_CONF="/etc/apache2/apache2.conf"
+        SITES_AVAILABLE="/etc/apache2/sites-available"
         SSL_DIR="/etc/apache2/ssl"
-    elif is_rhel_based || is_arch_based; then
+    elif is_rhel_based; then
+        WEB_SERVICE="httpd"
+        WEB_USER="apache"
+        APACHE_CONF="/etc/httpd/conf/httpd.conf"
+        SITES_AVAILABLE="/etc/httpd/conf.d"
+        SSL_DIR="/etc/pki/tls/certs"
+        mkdir -p "$SITES_AVAILABLE"
+    elif is_arch_based; then
+        WEB_SERVICE="httpd"
+        WEB_USER="http"
+        APACHE_CONF="/etc/httpd/conf/httpd.conf"
+        SITES_AVAILABLE="/etc/httpd/conf.d"
         SSL_DIR="/etc/httpd/ssl"
-    else
-        SSL_DIR="/etc/ssl/wordpress"
+        mkdir -p "$SITES_AVAILABLE"
     fi
     
+    print_info "Web server: $WEB_SERVICE"
+    print_info "Web user: $WEB_USER"
     print_info "SSL directory: $SSL_DIR"
 }
 
@@ -464,8 +483,8 @@ check_root
 detect_os
 check_existing_wordpress
 
-if ! is_debian_based && ! is_rhel_based && ! is_arch_based; then
-    print_error "WordPress installer supports Debian, RHEL, and Arch-based systems only"
+if ! is_debian_based && ! is_rhel_based && ! is_arch_based && ! is_suse_based; then
+    print_error "WordPress installer supports Debian, RHEL, Arch, and SUSE-based systems"
     exit 1
 fi
 
@@ -529,26 +548,7 @@ print_success "All packages installed."
 
 print_step "Configuring Web Server"
 
-if is_debian_based; then
-    WEB_SERVICE="apache2"
-    WEB_USER="www-data"
-    APACHE_CONF="/etc/apache2/apache2.conf"
-    SITES_AVAILABLE="/etc/apache2/sites-available"
-elif is_rhel_based; then
-    WEB_SERVICE="httpd"
-    WEB_USER="apache"
-    APACHE_CONF="/etc/httpd/conf/httpd.conf"
-    SITES_AVAILABLE="/etc/httpd/conf.d"
-    mkdir -p "$SITES_AVAILABLE"
-elif is_arch_based; then
-    WEB_SERVICE="httpd"
-    WEB_USER="http"
-    APACHE_CONF="/etc/httpd/conf/httpd.conf"
-    SITES_AVAILABLE="/etc/httpd/conf.d"
-    mkdir -p "$SITES_AVAILABLE"
-fi
-
-configure_ssl_dir
+configure_web_server
 
 if [[ -f /var/www/html/index.html ]]; then
     rm /var/www/html/index.html
@@ -662,7 +662,7 @@ cat > "$INSTALL_DIR/.htaccess" << 'EOF'
 <IfModule mod_rewrite.c>
 RewriteEngine On
 RewriteBase /
-RewriteRule ^index.php$ – [L]
+RewriteRule ^index.php$ - [L]
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule . /index.php [L]
@@ -682,7 +682,7 @@ mkdir -p "$SSL_DIR"
     -subj "/C=US/ST=State/L=City/O=Organization/CN=$DOMAIN_NAME" \
     >/dev/null 2>&1
 chmod 600 "$SSL_DIR/apache-selfsigned.key"
-print_success "SSL certificate generated."
+print_success "SSL certificate generated at: $SSL_DIR/apache-selfsigned.crt"
 
 print_step "Configuring SSL Virtual Hosts"
 
@@ -823,6 +823,7 @@ print_info "Database Service:  $DB_SERVICE"
 print_info "PHP Version:       $PHP_VERSION"
 print_info "Domain:            $DOMAIN_NAME"
 print_info "Installation:      $INSTALL_DIR"
+print_info "SSL Directory:     $SSL_DIR"
 print_info "Credentials File:  $CREDS_FILE (mode 600)"
 print_info "Log File:          $LOG_FILE"
 echo ""
