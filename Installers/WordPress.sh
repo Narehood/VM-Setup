@@ -4,7 +4,7 @@ set -euo pipefail
 # REQUIRES_ROOT: true
 # DESCRIPTION: Installs WordPress with Apache, MySQL/MariaDB, PHP, and SSL certificates
 
-VERSION="2.2.0"
+VERSION="2.3.0"
 INSTALL_DIR="/var/www/html"
 SSL_DIR="/etc/apache2/ssl"
 CREDS_FILE="/root/.wp-creds"
@@ -28,6 +28,7 @@ WEB_SERVICE=""
 WEB_USER=""
 DB_USER=""
 DB_NAME=""
+PHP_VERSION=""
 VHOST_FILES=()
 PACKAGES_INSTALLED=()
 
@@ -204,6 +205,72 @@ install_pkg() {
     return $result
 }
 
+get_available_php_versions() {
+    local versions=()
+    
+    if is_debian_based; then
+        versions+=($(apt-cache search --names-only '^php[0-9]+$' 2>/dev/null | awk '{print $1}' | sed 's/php//' | sort -V | tail -5))
+    elif is_rhel_based; then
+        versions+=($(dnf module list php 2>/dev/null | grep -E '^\s+php' | awk '{print $1}' | sed 's/php://' | sort -V | tail -5))
+    elif is_arch_based; then
+        if pacman -Qs php &>/dev/null; then
+            versions+=("$(pacman -Q php 2>/dev/null | awk '{print $2}' | cut -d- -f1)")
+        else
+            versions+=("8.3" "8.2" "8.1")
+        fi
+    fi
+    
+    if [[ ${#versions[@]} -eq 0 ]]; then
+        versions=("8.3" "8.2" "8.1" "8.0" "7.4")
+    fi
+    
+    printf '%s\n' "${versions[@]}"
+}
+
+get_active_php_version() {
+    if command -v php &>/dev/null; then
+        php -v 2>/dev/null | head -n1 | grep -oP 'PHP\s+\K[0-9]+\.[0-9]+' || echo "unknown"
+    else
+        echo "none"
+    fi
+}
+
+select_php_version() {
+    print_step "PHP Version Selection"
+    
+    local active_version
+    active_version=$(get_active_php_version)
+    print_info "Currently active PHP version: $active_version"
+    echo ""
+    
+    local available_versions
+    available_versions=$(get_available_php_versions)
+    local versions_array=()
+    
+    echo -e "${CYAN}Available PHP Versions:${NC}"
+    local i=1
+    while IFS= read -r version; do
+        versions_array+=("$version")
+        local marker=""
+        if [[ "$version" == "$active_version" ]]; then
+            marker=" (active)"
+        fi
+        printf "  ${BLUE}%d.${NC} PHP %s%s\n" "$i" "$version" "$marker"
+        ((i++))
+    done <<< "$available_versions"
+    
+    echo ""
+    read -p "  Select PHP version [1-${#versions_array[@]}]: " php_selection
+    
+    if ! [[ "$php_selection" =~ ^[0-9]+$ ]] || [[ $php_selection -lt 1 ]] || [[ $php_selection -gt ${#versions_array[@]} ]]; then
+        print_error "Invalid selection"
+        exit 1
+    fi
+    
+    PHP_VERSION="${versions_array[$((php_selection - 1))]}"
+    print_success "Selected PHP version: $PHP_VERSION"
+}
+
 validate_domain() {
     local domain="$1"
     [[ "$domain" =~ ^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$ ]] || [[ "$domain" =~ ^localhost$ ]]
@@ -245,6 +312,54 @@ set_mysql_root_password() {
     return 0
 }
 
+get_php_packages() {
+    local version="$1"
+    local packages=()
+    
+    if is_debian_based; then
+        packages=(
+            "php${version}"
+            "php${version}-bz2"
+            "php${version}-mysqli"
+            "php${version}-curl"
+            "php${version}-gd"
+            "php${version}-intl"
+            "php${version}-common"
+            "php${version}-mbstring"
+            "php${version}-xml"
+        )
+    elif is_rhel_based; then
+        packages=(
+            "php"
+            "php-bz2"
+            "php-mysqli"
+            "php-curl"
+            "php-gd"
+            "php-intl"
+            "php-common"
+            "php-mbstring"
+            "php-xml"
+        )
+    elif is_arch_based; then
+        packages=(
+            "php"
+            "php-gd"
+            "php-curl"
+            "php-intl"
+        )
+    fi
+    
+    printf '%s\n' "${packages[@]}"
+}
+
+enable_php_apache() {
+    if is_debian_based; then
+        a2enmod "php${PHP_VERSION}" >/dev/null 2>&1 || true
+        a2dismod mpm_prefork >/dev/null 2>&1 || true
+        a2enmod mpm_prefork >/dev/null 2>&1 || true
+    fi
+}
+
 show_header
 print_info "Initializing log: $LOG_FILE"
 
@@ -264,6 +379,8 @@ DB_PASSWORD=$(generate_password)
 MYSQL_ROOT_PASSWORD=$(generate_password)
 print_success "Database credentials generated."
 
+select_php_version
+
 print_step "SSL Certificate Configuration"
 read -p "Enter domain name (for SSL certificate) [localhost]: " DOMAIN_NAME
 DOMAIN_NAME="${DOMAIN_NAME:-localhost}"
@@ -279,58 +396,45 @@ print_step "Installing Required Packages"
 update_repos
 
 if is_debian_based; then
-    packages=(
+    base_packages=(
         "apache2"
         "mysql-server"
-        "php"
-        "php-bz2"
-        "php-mysqli"
-        "php-curl"
-        "php-gd"
-        "php-intl"
-        "php-common"
-        "php-mbstring"
-        "php-xml"
         "openssl"
         "curl"
         "wget"
     )
 elif is_rhel_based; then
-    packages=(
+    base_packages=(
         "httpd"
         "mysql-server"
-        "php"
-        "php-bz2"
-        "php-mysqli"
-        "php-curl"
-        "php-gd"
-        "php-intl"
-        "php-common"
-        "php-mbstring"
-        "php-xml"
         "openssl"
         "curl"
         "wget"
     )
     dnf install -y epel-release -q >/dev/null 2>&1 || true
 elif is_arch_based; then
-    packages=(
+    base_packages=(
         "apache"
         "mariadb"
-        "php"
-        "php-gd"
-        "php-curl"
-        "php-intl"
         "openssl"
         "curl"
         "wget"
     )
 fi
 
-for pkg in "${packages[@]}"; do
+for pkg in "${base_packages[@]}"; do
     if ! install_pkg "$pkg"; then
         print_error "Failed to install $pkg"
         exit 1
+    fi
+done
+
+print_info "Installing PHP $PHP_VERSION and extensions..."
+php_packages=($(get_php_packages "$PHP_VERSION"))
+
+for pkg in "${php_packages[@]}"; do
+    if ! install_pkg "$pkg"; then
+        print_warn "Could not install $pkg, continuing..."
     fi
 done
 
@@ -368,9 +472,11 @@ print_success "Web server enabled and started."
 if is_debian_based; then
     a2enmod rewrite >/dev/null 2>&1
     a2enmod ssl >/dev/null 2>&1
+    enable_php_apache
 elif is_rhel_based || is_arch_based; then
     sed -i 's/^#LoadModule rewrite_module/LoadModule rewrite_module/' "$APACHE_CONF" 2>/dev/null || true
     sed -i 's/^#LoadModule ssl_module/LoadModule ssl_module/' "$APACHE_CONF" 2>/dev/null || true
+    sed -i 's/^#LoadModule proxy_fcgi_module/LoadModule proxy_fcgi_module/' "$APACHE_CONF" 2>/dev/null || true
 fi
 
 print_success "Web server modules enabled."
@@ -566,6 +672,7 @@ WordPress Installation Credentials
 ===================================
 Generated: $(date)
 OS: $OS
+PHP Version: $PHP_VERSION
 
 Database Name:     $DB_NAME
 Database User:     $DB_USER
@@ -604,6 +711,7 @@ echo -e "${BLUE}========================================${NC}"
 echo ""
 print_info "Database Name:     $DB_NAME"
 print_info "Database User:     $DB_USER"
+print_info "PHP Version:       $PHP_VERSION"
 print_info "Domain:            $DOMAIN_NAME"
 print_info "Installation:      $INSTALL_DIR"
 print_info "Credentials File:  $CREDS_FILE (mode 600)"
