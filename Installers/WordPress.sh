@@ -467,7 +467,10 @@ EOF
 
 fi
 
-a2enmod rewrite >/dev/null 2>&1
+if is_debian_based; then
+    # Modules already enabled at line 281-282, but ensure they're active
+    a2enmod rewrite >/dev/null 2>&1 || true
+fi
 systemctl restart "$WEB_SERVICE" >/dev/null 2>&1
 print_success "SSL and virtual hosts configured."
 
