@@ -2,11 +2,10 @@
 set -euo pipefail
 
 # REQUIRES_ROOT: true
-# DESCRIPTION: Installs WordPress with Apache, MySQL/MariaDB, PHP, and SSL certificates
+# DESCRIPTION: Installs WordPress with Apache, MariaDB/MySQL, PHP, and SSL certificates
 
-VERSION="2.3.0"
+VERSION="2.3.2"
 INSTALL_DIR="/var/www/html"
-SSL_DIR="/etc/apache2/ssl"
 CREDS_FILE="/root/.wp-creds"
 LOG_FILE="/var/log/wordpress-install.log"
 
@@ -26,8 +25,10 @@ OS=""
 VERSION_ID=""
 WEB_SERVICE=""
 WEB_USER=""
+SSL_DIR=""
 DB_USER=""
 DB_NAME=""
+DB_SERVICE=""
 PHP_VERSION=""
 VHOST_FILES=()
 PACKAGES_INSTALLED=()
@@ -70,7 +71,9 @@ cleanup() {
             systemctl stop "$WEB_SERVICE" 2>/dev/null || true
             systemctl disable "$WEB_SERVICE" 2>/dev/null || true
         fi
-        systemctl stop mysql 2>/dev/null || systemctl stop mariadb 2>/dev/null || true
+        if [[ -n "$DB_SERVICE" ]]; then
+            systemctl stop "$DB_SERVICE" 2>/dev/null || true
+        fi
         
         print_info "Removing WordPress files..." >&2
         rm -rf "${INSTALL_DIR:?}"/wordpress 2>/dev/null || true
@@ -260,7 +263,13 @@ select_php_version() {
     done <<< "$available_versions"
     
     echo ""
-    read -p "  Select PHP version [1-${#versions_array[@]}]: " php_selection
+    
+    if [[ -t 0 ]]; then
+        read -p "  Select PHP version [1-${#versions_array[@]}]: " php_selection
+    else
+        php_selection="1"
+        print_info "Non-interactive mode: using default PHP version"
+    fi
     
     if ! [[ "$php_selection" =~ ^[0-9]+$ ]] || [[ $php_selection -lt 1 ]] || [[ $php_selection -gt ${#versions_array[@]} ]]; then
         print_error "Invalid selection"
@@ -280,19 +289,19 @@ generate_password() {
     openssl rand -base64 32 | tr -d '=' | cut -c1-16
 }
 
-get_mysql_version() {
+get_database_version() {
     /usr/bin/mysql -N -B -e "SELECT VERSION();" 2>/dev/null | head -n1 || echo "unknown"
 }
 
-set_mysql_root_password() {
+set_database_root_password() {
     local password="$1"
-    local mysql_version
+    local db_version
     
-    mysql_version=$(get_mysql_version)
+    db_version=$(get_database_version)
     
-    print_info "Detected MySQL/MariaDB version: $mysql_version"
+    print_info "Detected database version: $db_version"
     
-    if [[ "$mysql_version" =~ ^8\.0\.([0-9]+) ]]; then
+    if [[ "$db_version" =~ ^8\.0\.([0-9]+) ]]; then
         local minor="${BASH_REMATCH[1]}"
         if [[ $minor -ge 11 ]]; then
             print_info "Using modern ALTER USER syntax"
@@ -302,7 +311,7 @@ set_mysql_root_password() {
             /usr/bin/mysql -e "SET PASSWORD FOR 'root'@'localhost' = '$password';" 2>/dev/null || return 1
         fi
     else
-        print_info "Using ALTER USER syntax for non-8.0 version"
+        print_info "Using ALTER USER syntax for database version"
         /usr/bin/mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '$password';" 2>/dev/null || {
             print_warn "ALTER USER failed, trying legacy SET PASSWORD"
             /usr/bin/mysql -e "SET PASSWORD FOR 'root'@'localhost' = '$password';" 2>/dev/null || return 1
@@ -360,6 +369,43 @@ enable_php_apache() {
     fi
 }
 
+configure_ssl_dir() {
+    if is_debian_based; then
+        SSL_DIR="/etc/apache2/ssl"
+    elif is_rhel_based || is_arch_based; then
+        SSL_DIR="/etc/httpd/ssl"
+    else
+        SSL_DIR="/etc/ssl/wordpress"
+    fi
+    
+    print_info "SSL directory: $SSL_DIR"
+}
+
+select_domain() {
+    print_step "Domain Configuration"
+    
+    local domain_input=""
+    
+    if [[ -n "${DOMAIN_NAME:-}" ]]; then
+        print_info "Using DOMAIN_NAME environment variable: $DOMAIN_NAME"
+        domain_input="$DOMAIN_NAME"
+    elif [[ -t 0 ]]; then
+        read -p "Enter domain name (for SSL certificate) [localhost]: " domain_input
+        domain_input="${domain_input:-localhost}"
+    else
+        print_info "Non-interactive mode: using default domain 'localhost'"
+        domain_input="localhost"
+    fi
+    
+    if ! validate_domain "$domain_input"; then
+        print_warn "Invalid domain '$domain_input'. Using 'localhost'."
+        domain_input="localhost"
+    fi
+    
+    DOMAIN_NAME="$domain_input"
+    print_success "Domain set to: $DOMAIN_NAME"
+}
+
 show_header
 print_info "Initializing log: $LOG_FILE"
 
@@ -376,21 +422,11 @@ print_step "Generating Database Credentials"
 DB_NAME="wp_$(date +%s)"
 DB_USER="$DB_NAME"
 DB_PASSWORD=$(generate_password)
-MYSQL_ROOT_PASSWORD=$(generate_password)
+DB_ROOT_PASSWORD=$(generate_password)
 print_success "Database credentials generated."
 
 select_php_version
-
-print_step "SSL Certificate Configuration"
-read -p "Enter domain name (for SSL certificate) [localhost]: " DOMAIN_NAME
-DOMAIN_NAME="${DOMAIN_NAME:-localhost}"
-
-if ! validate_domain "$DOMAIN_NAME"; then
-    print_warn "Invalid domain. Using 'localhost'."
-    DOMAIN_NAME="localhost"
-fi
-
-print_success "Domain set to: $DOMAIN_NAME"
+select_domain
 
 print_step "Installing Required Packages"
 update_repos
@@ -398,7 +434,7 @@ update_repos
 if is_debian_based; then
     base_packages=(
         "apache2"
-        "mysql-server"
+        "mariadb-server"
         "openssl"
         "curl"
         "wget"
@@ -406,7 +442,7 @@ if is_debian_based; then
 elif is_rhel_based; then
     base_packages=(
         "httpd"
-        "mysql-server"
+        "mariadb-server"
         "openssl"
         "curl"
         "wget"
@@ -461,6 +497,8 @@ elif is_arch_based; then
     mkdir -p "$SITES_AVAILABLE"
 fi
 
+configure_ssl_dir
+
 if [[ -f /var/www/html/index.html ]]; then
     rm /var/www/html/index.html
 fi
@@ -483,21 +521,26 @@ print_success "Web server modules enabled."
 
 print_step "Configuring Database"
 
-systemctl enable mysql >/dev/null 2>&1 || systemctl enable mariadb >/dev/null 2>&1 || true
-systemctl start mysql >/dev/null 2>&1 || systemctl start mariadb >/dev/null 2>&1 || true
-print_success "Database service started."
+DB_SERVICE="mariadb"
+if ! systemctl enable "$DB_SERVICE" >/dev/null 2>&1; then
+    DB_SERVICE="mysql"
+    systemctl enable "$DB_SERVICE" >/dev/null 2>&1 || true
+fi
+
+systemctl start "$DB_SERVICE" >/dev/null 2>&1
+print_success "Database service ($DB_SERVICE) started."
 
 print_info "Setting database root password..."
 
-if ! set_mysql_root_password "$MYSQL_ROOT_PASSWORD"; then
-    print_error "Failed to set MySQL root password"
+if ! set_database_root_password "$DB_ROOT_PASSWORD"; then
+    print_error "Failed to set database root password"
     exit 1
 fi
 
 cat > /root/.my.cnf << EOF
 [client]
 user=root
-password=$MYSQL_ROOT_PASSWORD
+password=$DB_ROOT_PASSWORD
 EOF
 
 chmod 600 /root/.my.cnf
@@ -517,6 +560,12 @@ fi
 print_success "WordPress downloaded."
 
 print_step "Extracting WordPress"
+
+if [[ -f "$INSTALL_DIR/index.php" ]] || [[ -f "$INSTALL_DIR/wp-load.php" ]]; then
+    print_error "WordPress files already exist in $INSTALL_DIR"
+    print_error "Please remove existing files before proceeding"
+    exit 1
+fi
 
 /bin/tar -C "$INSTALL_DIR" -zxf /tmp/latest.tar.gz --strip-components=1
 chown -R "$WEB_USER:$WEB_USER" "$INSTALL_DIR"
@@ -544,8 +593,14 @@ EOF
 print_info "Fetching WordPress salts..."
 SALT_OUTPUT=$(curl -s https://api.wordpress.org/secret-key/1.1/salt/)
 if [[ -n "$SALT_OUTPUT" ]]; then
-    sed -i '/define(.AUTH_KEY/,/define(.NONCE_SALT/d' "$INSTALL_DIR/wp-config.php"
-    echo "$SALT_OUTPUT" >> "$INSTALL_DIR/wp-config.php"
+    if grep -q "^?>" "$INSTALL_DIR/wp-config.php"; then
+        sed -i '/^?>$/d' "$INSTALL_DIR/wp-config.php"
+        echo "$SALT_OUTPUT" >> "$INSTALL_DIR/wp-config.php"
+        echo "?>" >> "$INSTALL_DIR/wp-config.php"
+    else
+        sed -i '/define(.AUTH_KEY/,/define(.NONCE_SALT/d' "$INSTALL_DIR/wp-config.php"
+        echo "$SALT_OUTPUT" >> "$INSTALL_DIR/wp-config.php"
+    fi
     print_success "WordPress salts configured."
 else
     print_warn "Could not fetch salts automatically. Please update manually."
@@ -575,6 +630,7 @@ mkdir -p "$SSL_DIR"
     -out "$SSL_DIR/apache-selfsigned.crt" \
     -subj "/C=US/ST=State/L=City/O=Organization/CN=$DOMAIN_NAME" \
     >/dev/null 2>&1
+chmod 600 "$SSL_DIR/apache-selfsigned.key"
 print_success "SSL certificate generated."
 
 print_step "Configuring SSL Virtual Hosts"
@@ -673,11 +729,12 @@ WordPress Installation Credentials
 Generated: $(date)
 OS: $OS
 PHP Version: $PHP_VERSION
+Database: MariaDB
 
 Database Name:     $DB_NAME
 Database User:     $DB_USER
 Database Password: $DB_PASSWORD
-MySQL Root Pass:   $MYSQL_ROOT_PASSWORD
+Database Root Pass: $DB_ROOT_PASSWORD
 
 Installation Directory: $INSTALL_DIR
 SSL Certificate:        $SSL_DIR/apache-selfsigned.crt
@@ -685,6 +742,7 @@ SSL Key:                $SSL_DIR/apache-selfsigned.key
 Domain Name:            $DOMAIN_NAME
 Web Server:             $WEB_SERVICE
 Web Server User:        $WEB_USER
+Database Service:       $DB_SERVICE
 
 Access WordPress at: https://$DOMAIN_NAME/wp-admin
 
@@ -711,6 +769,7 @@ echo -e "${BLUE}========================================${NC}"
 echo ""
 print_info "Database Name:     $DB_NAME"
 print_info "Database User:     $DB_USER"
+print_info "Database Service:  $DB_SERVICE"
 print_info "PHP Version:       $PHP_VERSION"
 print_info "Domain:            $DOMAIN_NAME"
 print_info "Installation:      $INSTALL_DIR"
