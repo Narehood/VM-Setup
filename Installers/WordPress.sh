@@ -4,7 +4,7 @@ set -euo pipefail
 # REQUIRES_ROOT: true
 # DESCRIPTION: Installs WordPress with Apache, MariaDB/MySQL, PHP, and SSL certificates
 
-VERSION="2.3.3"
+VERSION="2.0.0"
 INSTALL_DIR="/var/www/html"
 CREDS_FILE="/root/.wp-creds"
 LOG_FILE="/var/log/wordpress-install.log"
@@ -768,7 +768,6 @@ EOF
     VHOST_FILES+=("$WORDPRESS_VHOST")
 fi
 
-a2enmod rewrite >/dev/null 2>&1 || true
 systemctl restart "$WEB_SERVICE" >/dev/null 2>&1
 print_success "SSL and virtual hosts configured."
 
