@@ -38,7 +38,7 @@ print_step() {
     echo -e "\n${BLUE}[STEP]${NC} $1" | tee -a "$LOG_FILE"
 }
 
-# print_success prints a success message prefixed with a green [OK] tag, echoes it to stdout and appends the same line to the log file.
+# print_success prints a green "[OK]" tagged success message to stdout, appends the same line to the log file, and takes the message text as its first argument.
 print_success() {
     echo -e "${GREEN}[OK]${NC} $1" | tee -a "$LOG_FILE"
 }
@@ -58,7 +58,7 @@ print_info() {
     echo -e "${CYAN}[INFO]${NC} $1" | tee -a "$LOG_FILE"
 }
 
-# show_header clears the terminal and prints the script header banner including the script version.
+# show_header clears the terminal and displays the script header banner with the current VERSION.
 show_header() {
     clear
     echo -e "${BLUE}========================================${NC}"
@@ -106,7 +106,7 @@ cleanup() {
 
 trap cleanup EXIT
 
-# check_root ensures the script is executed as the root user and exits with status 1 (after printing an error) if not.
+# check_root verifies the script is running as the root user and exits with status 1 after printing an error if not.
 check_root() {
     if [[ $EUID -ne 0 ]]; then
         print_error "This script requires root privileges."
@@ -123,7 +123,7 @@ check_existing_wordpress() {
     fi
 }
 
-# detect_os detects the operating system, sets the global variables `OS` and `VERSION_ID` from /etc/os-release or fallback files, and logs the detected values.
+# detect_os detects the operating system and sets the global variables `OS` and `VERSION_ID` from /etc/os-release or sensible fallback files, then logs the detected values.
 detect_os() {
     print_info "Detecting Operating System..."
     if [[ -f /etc/os-release ]]; then
@@ -144,7 +144,7 @@ detect_os() {
 }
 
 # is_debian_based determines whether the detected OS is a Debian-based distribution (debian, ubuntu, pop, linuxmint, kali).
-# Returns 0 if `$OS` matches a Debian-based ID, non-zero otherwise.
+# is_debian_based checks whether the global $OS variable indicates a Debian-based distribution (debian, ubuntu, pop, linuxmint, kali) and returns 0 if it does, non-zero otherwise.
 is_debian_based() {
     [[ "$OS" =~ ^(debian|ubuntu|pop|linuxmint|kali)$ ]]
 }
@@ -192,7 +192,8 @@ update_repos() {
 }
 
 # install_pkg installs one or more packages using the detected OS package manager and appends successfully installed package names to PACKAGES_INSTALLED.
-# Returns 0 on success for all requested packages, non-zero if installation fails or no packages were provided.
+# install_pkg installs one or more packages using the detected OS package manager and, on success, records the package names in PACKAGES_INSTALLED.
+# Returns 0 if all requested packages were installed; returns non-zero if installation fails, no packages were provided, or the OS is unsupported.
 install_pkg() {
     if [[ $# -eq 0 ]]; then
         return 1
@@ -225,7 +226,8 @@ install_pkg() {
 }
 
 # get_available_php_versions prints candidate PHP versions for the current system, one per line.
-# It detects the OS family and queries the package system when possible (Debian/RHEL/Arch), falling back to a sensible default list if detection fails.
+# get_available_php_versions prints a prioritized list of available PHP major.minor versions for the host OS, querying the system package manager when possible (Debian, RHEL, Arch) and falling back to a sensible default set if detection fails.
+# Each version is emitted on its own line.
 get_available_php_versions() {
     local versions=()
     
@@ -300,13 +302,13 @@ select_php_version() {
     print_success "Selected PHP version: $PHP_VERSION"
 }
 
-# validate_domain validates that the given domain is a fully qualified domain name (FQDN) or `localhost`.
+# validate_domain checks whether the provided domain is a valid fully qualified domain name (FQDN) or "localhost".
 validate_domain() {
     local domain="$1"
     [[ "$domain" =~ ^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$ ]] || [[ "$domain" =~ ^localhost$ ]]
 }
 
-# generate_password generates a 16-character random password using OpenSSL's base64 RNG.
+# generate_password generates a 16-character random password using OpenSSL's RNG; the result contains base64 characters with any padding removed.
 generate_password() {
     openssl rand -base64 32 | tr -d '=' | cut -c1-16
 }
@@ -317,6 +319,7 @@ get_database_version() {
 }
 
 # set_database_root_password sets the MariaDB/MySQL root account password to the provided value, choosing the appropriate SQL syntax (ALTER USER or legacy SET PASSWORD) based on the detected database version.
+# password: the new root password to apply.
 set_database_root_password() {
     local password="$1"
     local db_version
@@ -365,7 +368,7 @@ set_database_root_password() {
     return 0
 }
 
-# get_php_packages generates newline-separated package names required for PHP on the detected OS, using `version` to build distribution-specific package names (e.g. `8.1` -> `php8.1` on Debian).
+# get_php_packages outputs newline-separated package names required to install PHP for the detected OS; the optional `version` argument (e.g. "8.1") is used to construct distribution-specific package names when applicable.
 get_php_packages() {
     local version="$1"
     local packages=()
@@ -407,7 +410,7 @@ get_php_packages() {
 }
 
 # enable_php_apache enables the Apache PHP module matching $PHP_VERSION and ensures the prefork MPM is active on Debian-based systems.
-# On non-Debian systems this function is a no-op.
+# enable_php_apache enables the PHP Apache module for the selected PHP version and ensures the prefork MPM is active on Debian-based systems; does nothing on non-Debian systems.
 enable_php_apache() {
     if is_debian_based; then
         a2enmod "php${PHP_VERSION}" >/dev/null 2>&1 || true
@@ -419,7 +422,7 @@ enable_php_apache() {
 # configure_web_server sets distribution-specific web server, user, config, and SSL directory variables after OS detection.
 # For Debian: apache2, www-data, /etc/apache2/*, /etc/apache2/ssl
 # For RHEL: httpd, apache, /etc/httpd/*, /etc/pki/tls/certs (standard RHEL cert location)
-# For Arch: httpd, http, /etc/httpd/*, /etc/httpd/ssl
+# configure_web_server sets WEB_SERVICE, WEB_USER, APACHE_CONF, SITES_AVAILABLE, and SSL_DIR according to the detected OS and creates the sites-available directory when required.
 configure_web_server() {
     if is_debian_based; then
         WEB_SERVICE="apache2"
@@ -448,7 +451,7 @@ configure_web_server() {
     print_info "SSL directory: $SSL_DIR"
 }
 
-# select_domain determines the domain to use for the SSL certificate and sets the global DOMAIN_NAME variable, preferring the DOMAIN_NAME environment variable, prompting the user in interactive mode, or defaulting to "localhost"; it validates the chosen domain and falls back to "localhost" with a warning if invalid.
+# select_domain determines the domain used for the SSL certificate, preferring the `DOMAIN_NAME` environment variable, prompting the user when interactive, or defaulting to "localhost", and sets the global DOMAIN_NAME variable.
 select_domain() {
     print_step "Domain Configuration"
     
