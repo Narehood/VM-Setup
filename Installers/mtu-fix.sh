@@ -461,8 +461,8 @@ show_mtu_menu() {
         echo -e "${CYAN}Select MTU Value:${NC}"
         echo ""
         echo "  1) 1500  - Default (standard networks)"
-        echo "  2) 1450  - OVH vRack / Virtualized environments"
-        echo "  3) 1400  - Safe value for encapsulated traffic"
+        echo "  2) 1450  - Some Virtualized environments"
+        echo "  3) 1350  - OVH vRack w/ PfSense and XCP-NG"
         echo "  4) Custom value"
         echo "  5) Reset to default"
         echo ""
@@ -473,7 +473,7 @@ show_mtu_menu() {
     case "$choice" in
         1) echo "1500" ;;
         2) echo "1450" ;;
-        3) echo "1400" ;;
+        3) echo "1350" ;;
         4)
             read -p "Enter custom MTU (68-9000): " custom_mtu >&2
             if validate_mtu "$custom_mtu"; then
