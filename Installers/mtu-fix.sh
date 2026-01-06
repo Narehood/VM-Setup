@@ -458,7 +458,13 @@ reset_docker_mtu() {
     local tmp_file
     tmp_file=$(mktemp)
 
-    sed '/\"mtu\"/d' "$daemon_json" > "$tmp_file"
+    if command -v jq &>/dev/null && [[ -s "$daemon_json" ]]; then
+        jq 'del(.mtu)' "$daemon_json" > "$tmp_file" 2>/dev/null || {
+            sed '/\"mtu\"/d' "$daemon_json" > "$tmp_file"
+        }
+    else
+        sed '/\"mtu\"/d' "$daemon_json" > "$tmp_file"
+    fi
 
     chmod --reference="$daemon_json" "$tmp_file" 2>/dev/null || chmod 644 "$tmp_file"
     chown --reference="$daemon_json" "$tmp_file" 2>/dev/null || true
