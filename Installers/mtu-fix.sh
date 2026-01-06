@@ -67,7 +67,7 @@ Options:
 Description:
     Configures MTU settings for network interfaces and Docker to resolve
     packet fragmentation issues common in virtualized environments (XCP-NG,
-    OVH vRack, etc.).
+    OVH vRack, Virtual PfSense, etc.).
 
 Supported distributions:
     Alpine, Arch, EndeavourOS, Manjaro, Debian, Ubuntu, Pop!_OS,
