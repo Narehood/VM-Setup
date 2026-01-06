@@ -136,7 +136,7 @@ detect_primary_interface() {
 }
 
 escape_regex() {
-    printf '%s\n' "$1" | sed 's/[[\.*^$/]/\\&/g'
+    printf '%s\n' "$1" | sed 's/[][.*^$/\\]/\\&/g'
 }
 
 prompt_yes_no() {
