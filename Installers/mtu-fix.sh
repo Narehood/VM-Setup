@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-VERSION="1.0.1"
+VERSION="1.0.2"
 
 # --- UI & FORMATTING FUNCTIONS ---
 
@@ -152,7 +152,7 @@ detect_primary_interface() {
 
 # escape_regex escapes regex metacharacters in a string for safe use in sed/grep.
 escape_regex() {
-    printf '%s\n' "$1" | sed 's/[][.*^$/\\]/\\&/g'
+    printf '%s' "$1" | sed 's/[][.*^$/\\]/\\&/g'
 }
 
 # prompt_yes_no prompts the user with a yes/no question and exits with status 0 when the answer is yes and non-zero otherwise.
@@ -416,10 +416,14 @@ update_docker_json() {
 
     if command -v jq &>/dev/null && [[ -f "$daemon_json" ]] && [[ -s "$daemon_json" ]]; then
         jq --arg mtu "$mtu" '.mtu = ($mtu | tonumber)' "$daemon_json" > "$tmp_file" 2>/dev/null || {
-            sed "s/\"mtu\": *[0-9]\+/\"mtu\": $mtu/; t; s/}/\"mtu\": $mtu\n}/" "$daemon_json" > "$tmp_file"
+            if grep -q '"mtu"' "$daemon_json"; then
+                sed "s/\"mtu\": *[0-9]\+/\"mtu\": $mtu/" "$daemon_json" > "$tmp_file"
+            else
+                sed '/{/a\  "mtu": '"$mtu"',' "$daemon_json" > "$tmp_file"
+            fi
         }
     else
-        echo "{\"mtu\": $mtu}" > "$tmp_file"
+        printf '{\n  "mtu": %s\n}\n' "$mtu" > "$tmp_file"
     fi
 
     chmod --reference="$daemon_json" "$tmp_file" 2>/dev/null || chmod 644 "$tmp_file"
@@ -462,8 +466,9 @@ configure_docker_mtu() {
     fi
 }
 
-# apply_docker_bridges_mtu applies the given MTU value to any existing Docker bridge interfaces.
-# It prints success or warning messages for each bridge and does nothing if no Docker bridges are found.
+# apply_docker_bridges_mtu applies the given MTU value to user-created Docker bridge interfaces.
+# Skips docker0, docker1, etc. (managed by Docker daemon) and only applies MTU to user-created bridges (br-*).
+# Checks current MTU first to avoid unnecessary changes and prints appropriate status messages.
 apply_docker_bridges_mtu() {
     local mtu="$1"
 
@@ -478,6 +483,19 @@ apply_docker_bridges_mtu() {
     fi
 
     for bridge in $bridges; do
+        if [[ "$bridge" =~ ^docker[0-9]*$ ]]; then
+            print_info "Skipping $bridge (will be reconfigured on Docker restart)"
+            continue
+        fi
+
+        local current_mtu
+        current_mtu=$(ip link show "$bridge" 2>/dev/null | grep -oP 'mtu \K\d+' || echo "0")
+
+        if [[ "$current_mtu" == "$mtu" ]]; then
+            print_info "$bridge already has MTU $mtu"
+            continue
+        fi
+
         if ip link set dev "$bridge" mtu "$mtu" 2>/dev/null; then
             print_success "Applied MTU $mtu to $bridge"
         else
@@ -486,7 +504,7 @@ apply_docker_bridges_mtu() {
     done
 }
 
-# reset_docker_mtu removes any `mtu` setting from /etc/docker/daemon.json (if present), preserves the file's permissions and ownership where possible, prints status messages, and resets existing Docker bridge interfaces to MTU 1500.
+# reset_docker_mtu removes any `mtu` setting from /etc/docker/daemon.json (if present), preserves the file's permissions and ownership where possible, prints status messages, and skips bridge resets since Docker will manage them on restart.
 reset_docker_mtu() {
     local daemon_json="/etc/docker/daemon.json"
 
@@ -512,7 +530,7 @@ reset_docker_mtu() {
     mv "$tmp_file" "$daemon_json"
     print_success "Removed MTU from Docker configuration"
 
-    apply_docker_bridges_mtu 1500
+    print_info "Skipping bridge MTU reset (Docker daemon restart will restore defaults)"
 }
 
 # test_mtu_size checks if the specified MTU can reach 1.1.1.1 by pinging with ICMP packets sized to MTU-28.
