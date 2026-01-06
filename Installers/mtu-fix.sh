@@ -17,6 +17,7 @@ OS=""
 VERSION_ID=""
 PRIMARY_IFACE=""
 
+# show_header prints a colorized header banner with the tool name and version unless QUIET is true.
 show_header() {
     [[ "$QUIET" == "true" ]] && return
     clear
@@ -27,25 +28,31 @@ show_header() {
     echo ""
 }
 
+# print_step prints a step header message prefixed with "[STEP]" in blue to stdout unless QUIET is true.
 print_step() {
     [[ "$QUIET" == "true" ]] && return
     echo -e "\n${BLUE}[STEP]${NC} $1"
 }
 
+# print_success prints a green "[OK]" success message followed by the provided text unless QUIET is true.
 print_success() {
     [[ "$QUIET" == "true" ]] && return
     echo -e "${GREEN}[OK]${NC} $1"
 }
 
+# print_warn prints a yellow `[WARN]`-prefixed warning message to stdout using the provided text.
 print_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 
+# print_error prints an error message prefixed with [ERROR] in red and echoes the provided message.
 print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
+# print_info prints an informational message prefixed with "[INFO]" in cyan unless QUIET is true.
 print_info() {
     [[ "$QUIET" == "true" ]] && return
     echo -e "${CYAN}[INFO]${NC} $1"
 }
 
+# show_help prints the usage, available options, a brief description of the MTU Configuration Tool, and the list of supported distributions, then exits with status 0.
 show_help() {
     cat << EOF
 MTU Configuration Tool v${VERSION}
@@ -73,6 +80,7 @@ EOF
 
 export PATH=$PATH:/usr/local/sbin:/usr/sbin:/sbin
 
+# check_root verifies the script is running as root and exits with status 1 after printing an error message if not.
 check_root() {
     if [[ $EUID -ne 0 ]]; then
         print_error "This script requires root privileges. Run with sudo."
@@ -80,6 +88,7 @@ check_root() {
     fi
 }
 
+# detect_os detects the current operating system and version and sets the global variables `OS` and `VERSION_ID`. It prefers `/etc/os-release`, falls back to distro-specific release files, and finally to `uname` if needed; it also prints status messages.
 detect_os() {
     print_info "Detecting Operating System..."
     if [ -f /etc/os-release ]; then
@@ -100,22 +109,28 @@ detect_os() {
     print_success "Detected: $OS ($VERSION_ID)"
 }
 
+# is_debian_based returns true if the detected OS is Debian, Ubuntu, Pop, Linux Mint, or Kali.
 is_debian_based() {
     [[ "$OS" =~ ^(debian|ubuntu|pop|linuxmint|kali)$ ]]
 }
 
+# is_rhel_based determines whether the detected OS is a RHEL-family distribution (fedora, redhat, centos, rocky, almalinux).
 is_rhel_based() {
     [[ "$OS" =~ ^(fedora|redhat|centos|rocky|almalinux)$ ]]
 }
 
+# is_arch_based returns true if the detected OS is Arch Linux, EndeavourOS, or Manjaro.
 is_arch_based() {
     [[ "$OS" =~ ^(arch|endeavouros|manjaro)$ ]]
 }
 
+# is_suse_based tests whether OS indicates a SUSE-family distribution (matches `suse`, `opensuse*`, or `sles`).
 is_suse_based() {
     [[ "$OS" =~ ^(suse|opensuse.*|sles)$ ]]
 }
 
+# detect_primary_interface detects the system's primary network interface and sets the global PRIMARY_IFACE variable.
+# It prefers the interface from the default route, falls back to the first non-loopback/non-virtual interface, prints the detected interface and its current MTU, and exits with status 1 if no interface can be determined.
 detect_primary_interface() {
     print_info "Detecting primary network interface..."
 
@@ -135,10 +150,13 @@ detect_primary_interface() {
     print_success "Detected: $PRIMARY_IFACE (current MTU: $current_mtu)"
 }
 
+# escape_regex escapes regex metacharacters in a string for safe use in sed/grep.
 escape_regex() {
     printf '%s\n' "$1" | sed 's/[][.*^$/\\]/\\&/g'
 }
 
+# prompt_yes_no prompts the user with a yes/no question and exits with status 0 when the answer is yes and non-zero otherwise.
+# prompt_yes_no takes two arguments: a prompt string and an optional default ('y' or 'n', default is 'n'); the default controls the displayed choice and the value used when the user presses Enter.
 prompt_yes_no() {
     local prompt="$1"
     local default="${2:-n}"
@@ -155,6 +173,7 @@ prompt_yes_no() {
     [[ "$result" =~ ^[Yy]$ ]]
 }
 
+# validate_mtu validates that an MTU value is an integer between 68 and 9000 (inclusive).
 validate_mtu() {
     local mtu="$1"
     if [[ "$mtu" =~ ^[0-9]+$ ]] && [[ "$mtu" -ge 68 ]] && [[ "$mtu" -le 9000 ]]; then
@@ -163,6 +182,7 @@ validate_mtu() {
     return 1
 }
 
+# apply_mtu_immediate applies the given MTU to the specified network interface immediately and reports success or failure.
 apply_mtu_immediate() {
     local iface="$1"
     local mtu="$2"
@@ -176,6 +196,7 @@ apply_mtu_immediate() {
     fi
 }
 
+# apply_mtu_persistent configures a persistent MTU for the specified network interface using the distribution's preferred mechanism and returns non‑zero if persistent configuration is unsupported.
 apply_mtu_persistent() {
     local iface="$1"
     local mtu="$2"
@@ -199,6 +220,7 @@ apply_mtu_persistent() {
     fi
 }
 
+# apply_mtu_debian adds or updates /etc/network/interfaces to persistently set the MTU for a given network interface by inserting a `post-up ip link set dev <iface> mtu <mtu>` stanza and creates a basic interfaces file if it does not exist.
 apply_mtu_debian() {
     local iface="$1"
     local mtu="$2"
@@ -240,6 +262,9 @@ EOF
     fi
 }
 
+# apply_mtu_alpine updates Alpine's /etc/network/interfaces to persistently set the MTU for the specified network interface.
+# It inserts a `post-up ip link set dev <iface> mtu <mtu>` line for the interface, removing any existing matching post-up entries first.
+# Returns 0 on success, 1 if /etc/network/interfaces is missing or the interface is not present in the file.
 apply_mtu_alpine() {
     local iface="$1"
     local mtu="$2"
@@ -264,6 +289,7 @@ apply_mtu_alpine() {
     fi
 }
 
+# apply_mtu_rhel configures the persistent MTU for an interface on RHEL-family systems, preferring NetworkManager (nmcli) when available and falling back to updating /etc/sysconfig/network-scripts/ifcfg-<iface>.
 apply_mtu_rhel() {
     local iface="$1"
     local mtu="$2"
@@ -290,6 +316,11 @@ apply_mtu_rhel() {
     fi
 }
 
+# apply_mtu_arch applies a persistent MTU for the specified network interface on Arch-based systems.
+# If NetworkManager is available and a connection is associated with the interface, it sets the MTU on that connection;
+# otherwise it creates a systemd-networkd `.link` file under /etc/systemd/network to set MTUBytes for the interface.
+# iface - network interface name (e.g., eth0)
+# mtu - MTU value (integer)
 apply_mtu_arch() {
     local iface="$1"
     local mtu="$2"
@@ -318,6 +349,7 @@ EOF
     print_success "Created systemd-networkd configuration for $iface"
 }
 
+# apply_mtu_suse sets the MTU for a SUSE network interface by updating or appending `MTU=<value>` in `/etc/sysconfig/network/ifcfg-<iface>`, prints a success message on update, and returns non-zero with a warning if the ifcfg file is missing.
 apply_mtu_suse() {
     local iface="$1"
     local mtu="$2"
@@ -333,6 +365,8 @@ apply_mtu_suse() {
     fi
 }
 
+# reset_mtu_config resets MTU configuration for the given network interface and sets the interface MTU to 1500 immediately.
+# It also removes persistent MTU entries from distribution-specific configuration (Debian/Alpine /etc/network/interfaces, RHEL ifcfg or NetworkManager, Arch systemd .link, SUSE ifcfg) so the interface uses the default MTU after reboot.
 reset_mtu_config() {
     local iface="$1"
     local escaped_iface
@@ -373,6 +407,7 @@ reset_mtu_config() {
     fi
 }
 
+# update_docker_json updates or creates the Docker daemon.json file at the given path to set the top-level `mtu` value to the provided numeric MTU, preserving file permissions and ownership when possible.
 update_docker_json() {
     local daemon_json="$1"
     local mtu="$2"
@@ -393,6 +428,8 @@ update_docker_json() {
     mv "$tmp_file" "$daemon_json"
 }
 
+# configure_docker_mtu configures Docker's daemon.json with the given MTU, applies that MTU to existing Docker bridge interfaces, and optionally prompts to restart the Docker service.
+# mtu is the numeric MTU value to write into /etc/docker/daemon.json and to apply to Docker bridge interfaces.
 configure_docker_mtu() {
     local mtu="$1"
 
@@ -425,6 +462,8 @@ configure_docker_mtu() {
     fi
 }
 
+# apply_docker_bridges_mtu applies the given MTU value to any existing Docker bridge interfaces.
+# It prints success or warning messages for each bridge and does nothing if no Docker bridges are found.
 apply_docker_bridges_mtu() {
     local mtu="$1"
 
@@ -447,6 +486,7 @@ apply_docker_bridges_mtu() {
     done
 }
 
+# reset_docker_mtu removes any `mtu` setting from /etc/docker/daemon.json (if present), preserves the file's permissions and ownership where possible, prints status messages, and resets existing Docker bridge interfaces to MTU 1500.
 reset_docker_mtu() {
     local daemon_json="/etc/docker/daemon.json"
 
@@ -475,6 +515,8 @@ reset_docker_mtu() {
     apply_docker_bridges_mtu 1500
 }
 
+# test_mtu_size checks if the specified MTU can reach 1.1.1.1 by pinging with ICMP packets sized to MTU-28.
+# Returns 0 if the ping succeeds, 1 otherwise.
 test_mtu_size() {
     local mtu="$1"
     local target="1.1.1.1"
@@ -486,6 +528,11 @@ test_mtu_size() {
     return 1
 }
 
+# test_mtu_values tests connectivity to 1.1.1.1 using a sequence of MTU sizes and offers the last successful MTU for application.
+# 
+# Runs ICMP tests for MTU values (1500,1450,1400,1350,1300,1250,1200,1150,1100), reports OK/FAIL for each, and tracks the highest tested size that succeeds.
+# If at least one size succeeds, prompts the user to apply the recommended MTU; on confirmation, echoes the chosen MTU to stdout and returns 0.
+# If no sizes succeed or the user declines, prints a warning/info and returns 1.
 test_mtu_values() {
     print_step "Testing MTU Values"
     echo ""
@@ -524,6 +571,7 @@ test_mtu_values() {
     return 1
 }
 
+# show_mtu_menu displays an interactive MTU selection menu, validates user input, and echoes the chosen MTU value or the string "reset".
 show_mtu_menu() {
     {
         echo ""
@@ -570,6 +618,7 @@ show_mtu_menu() {
     esac
 }
 
+# show_current_status prints a header and lists non-loopback network interfaces with their current MTU values.
 show_current_status() {
     print_step "Current MTU Status"
 
