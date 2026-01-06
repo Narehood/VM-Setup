@@ -135,16 +135,20 @@ detect_primary_interface() {
     print_success "Detected: $PRIMARY_IFACE (current MTU: $current_mtu)"
 }
 
+escape_regex() {
+    printf '%s\n' "$1" | sed 's/[[\.*^$/]/\\&/g'
+}
+
 prompt_yes_no() {
     local prompt="$1"
     local default="${2:-n}"
     local result
 
     if [[ "$default" =~ ^[Yy] ]]; then
-        read -p "$prompt (Y/n): " result
+        read -r -p "$prompt (Y/n): " result
         result=${result:-y}
     else
-        read -p "$prompt (y/N): " result
+        read -r -p "$prompt (y/N): " result
         result=${result:-n}
     fi
 
@@ -198,8 +202,11 @@ apply_mtu_persistent() {
 apply_mtu_debian() {
     local iface="$1"
     local mtu="$2"
+    local iface_escaped
     local interfaces_file="/etc/network/interfaces"
     local post_up_cmd="post-up ip link set dev $iface mtu $mtu"
+
+    iface_escaped=$(escape_regex "$iface")
 
     if [[ ! -f "$interfaces_file" ]]; then
         print_warn "$interfaces_file not found. Creating basic configuration."
@@ -217,10 +224,10 @@ EOF
         return 0
     fi
 
-    sed -i "/post-up ip link set dev $iface mtu/d" "$interfaces_file"
+    sed -i "/post-up ip link set dev $iface_escaped mtu/d" "$interfaces_file"
 
-    if grep -qE "^iface $iface" "$interfaces_file"; then
-        sed -i "/^iface $iface/a\\    $post_up_cmd" "$interfaces_file"
+    if grep -qE "^iface $iface_escaped" "$interfaces_file"; then
+        sed -i "/^iface $iface_escaped/a\\    $post_up_cmd" "$interfaces_file"
         print_success "Updated $interfaces_file with MTU $mtu for $iface"
     else
         cat >> "$interfaces_file" << EOF
@@ -236,17 +243,20 @@ EOF
 apply_mtu_alpine() {
     local iface="$1"
     local mtu="$2"
+    local esc_iface
     local interfaces_file="/etc/network/interfaces"
+
+    esc_iface=$(escape_regex "$iface")
 
     if [[ ! -f "$interfaces_file" ]]; then
         print_warn "$interfaces_file not found."
         return 1
     fi
 
-    sed -i "/post-up ip link set dev $iface mtu/d" "$interfaces_file"
+    sed -i "/post-up ip link set dev $esc_iface mtu/d" "$interfaces_file"
 
-    if grep -qE "^iface $iface" "$interfaces_file"; then
-        sed -i "/^iface $iface/a\\    post-up ip link set dev $iface mtu $mtu" "$interfaces_file"
+    if grep -qE "^iface $esc_iface" "$interfaces_file"; then
+        sed -i "/^iface $esc_iface/a\\    post-up ip link set dev $iface mtu $mtu" "$interfaces_file"
         print_success "Updated $interfaces_file with MTU $mtu"
     else
         print_warn "Interface $iface not found in $interfaces_file"
@@ -325,6 +335,7 @@ apply_mtu_suse() {
 
 reset_mtu_config() {
     local iface="$1"
+    local escaped_iface
 
     print_info "Resetting MTU configuration for $iface..."
 
@@ -332,8 +343,9 @@ reset_mtu_config() {
 
     if [[ "$OS" == "alpine" ]] || is_debian_based; then
         local interfaces_file="/etc/network/interfaces"
+        escaped_iface=$(escape_regex "$iface")
         if [[ -f "$interfaces_file" ]]; then
-            sed -i "/post-up ip link set dev $iface mtu/d" "$interfaces_file"
+            sed -i "/post-up ip link set dev $escaped_iface mtu/d" "$interfaces_file"
             print_success "Removed MTU configuration from $interfaces_file"
         fi
     elif is_rhel_based; then
@@ -367,8 +379,10 @@ update_docker_json() {
     local tmp_file
     tmp_file=$(mktemp)
 
-    if [[ -f "$daemon_json" ]] && [[ -s "$daemon_json" ]]; then
-        sed "s/\"mtu\": *[0-9]\+/\"mtu\": $mtu/; t; s/}/\"mtu\": $mtu\n}/" "$daemon_json" > "$tmp_file"
+    if command -v jq &>/dev/null && [[ -f "$daemon_json" ]] && [[ -s "$daemon_json" ]]; then
+        jq --arg mtu "$mtu" '.mtu = ($mtu | tonumber)' "$daemon_json" > "$tmp_file" 2>/dev/null || {
+            sed "s/\"mtu\": *[0-9]\+/\"mtu\": $mtu/; t; s/}/\"mtu\": $mtu\n}/" "$daemon_json" > "$tmp_file"
+        }
     else
         echo "{\"mtu\": $mtu}" > "$tmp_file"
     fi
@@ -474,7 +488,6 @@ test_mtu_values() {
     echo ""
 
     local test_sizes=(1500 1450 1400 1350 1300 1250 1200 1150 1100)
-    local working_mtu=0
     local last_working=0
 
     for size in "${test_sizes[@]}"; do
@@ -484,7 +497,7 @@ test_mtu_values() {
             last_working=$size
         else
             echo -e "${RED}✗ FAIL${NC}"
-            [[ $working_mtu -eq 0 ]] && break
+            [[ $last_working -eq 0 ]] && break
         fi
     done
 
@@ -493,14 +506,16 @@ test_mtu_values() {
         echo -e "${GREEN}Recommendation: Use MTU ${last_working}${NC}"
         echo ""
         if prompt_yes_no "Apply MTU $last_working to your system?" "y"; then
-            return "$last_working"
+            echo "$last_working"
+            return 0
         fi
     else
         print_warn "Could not determine optimal MTU. System may not support ICMP ping."
         print_info "Using default menu instead."
+        return 1
     fi
 
-    return 0
+    return 1
 }
 
 show_mtu_menu() {
@@ -517,14 +532,14 @@ show_mtu_menu() {
         echo ""
     } >&2
 
-    read -p "Selection [1-6]: " choice >&2
+    read -r -p "Selection [1-6]: " choice >&2
 
     case "$choice" in
         1) echo "1500" ;;
         2) echo "1450" ;;
         3) echo "1350" ;;
         4)
-            read -p "Enter custom MTU (68-9000): " custom_mtu >&2
+            read -r -p "Enter custom MTU (68-9000): " custom_mtu >&2
             if validate_mtu "$custom_mtu"; then
                 echo "$custom_mtu"
             else
@@ -533,10 +548,10 @@ show_mtu_menu() {
             fi
             ;;
         5)
-            test_mtu_values
-            local suggested=$?
-            if [[ $suggested -gt 0 ]]; then
-                echo "$suggested"
+            test_result=$(test_mtu_values)
+            test_status=$?
+            if [[ $test_status -eq 0 ]] && [[ -n "$test_result" ]]; then
+                echo "$test_result"
             else
                 show_mtu_menu
             fi
@@ -554,7 +569,7 @@ show_current_status() {
 
     echo ""
     echo -e "${CYAN}Network Interfaces:${NC}"
-    ip -o link show | grep -vE '^[0-9]+: lo:' | while read -r line; do
+    ip -o link show | grep -vE '^[0-9]+: lo:' || true | while read -r line; do
         local iface mtu
         iface=$(echo "$line" | awk -F': ' '{print $2}' | cut -d'@' -f1)
         mtu=$(echo "$line" | grep -oP 'mtu \K\d+')
