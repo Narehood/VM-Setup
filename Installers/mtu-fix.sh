@@ -455,6 +455,54 @@ reset_docker_mtu() {
     apply_docker_bridges_mtu 1500
 }
 
+test_mtu_size() {
+    local mtu="$1"
+    local target="1.1.1.1"
+    local packet_size=$((mtu - 28))
+
+    if ping -c 2 -M do -s "$packet_size" "$target" &>/dev/null; then
+        return 0
+    fi
+    return 1
+}
+
+test_mtu_values() {
+    print_step "Testing MTU Values"
+    echo ""
+    print_info "Testing connectivity to 1.1.1.1 with various MTU sizes..."
+    print_info "This may take a moment..."
+    echo ""
+
+    local test_sizes=(1500 1450 1400 1350 1300 1250 1200 1150 1100)
+    local working_mtu=0
+    local last_working=0
+
+    for size in "${test_sizes[@]}"; do
+        printf "  Testing MTU %d... " "$size"
+        if test_mtu_size "$size"; then
+            echo -e "${GREEN}✓ OK${NC}"
+            last_working=$size
+        else
+            echo -e "${RED}✗ FAIL${NC}"
+            [[ $working_mtu -eq 0 ]] && break
+        fi
+    done
+
+    echo ""
+    if [[ $last_working -gt 0 ]]; then
+        echo -e "${GREEN}Recommendation: Use MTU ${last_working}${NC}"
+        echo ""
+        if prompt_yes_no "Apply MTU $last_working to your system?" "y"; then
+            return "$last_working"
+        fi
+    else
+        print_warn "Could not determine optimal MTU. System may not support ICMP ping."
+        print_info "Using default menu instead."
+    fi
+
+    return 0
+}
+
 show_mtu_menu() {
     {
         echo ""
@@ -464,11 +512,12 @@ show_mtu_menu() {
         echo "  2) 1450  - Some Virtualized environments"
         echo "  3) 1350  - OVH vRack w/ PfSense and XCP-NG"
         echo "  4) Custom value"
-        echo "  5) Reset to default"
+        echo "  5) Test MTU values (ping)"
+        echo "  6) Reset to default"
         echo ""
     } >&2
 
-    read -p "Selection [1-5]: " choice >&2
+    read -p "Selection [1-6]: " choice >&2
 
     case "$choice" in
         1) echo "1500" ;;
@@ -483,7 +532,16 @@ show_mtu_menu() {
                 exit 1
             fi
             ;;
-        5) echo "reset" ;;
+        5)
+            test_mtu_values
+            local suggested=$?
+            if [[ $suggested -gt 0 ]]; then
+                echo "$suggested"
+            else
+                show_mtu_menu
+            fi
+            ;;
+        6) echo "reset" ;;
         *)
             print_error "Invalid selection." >&2
             exit 1
