@@ -17,7 +17,6 @@ OS=""
 VERSION_ID=""
 PRIMARY_IFACE=""
 
-# show_header clears the screen and prints a colored, formatted header showing the tool name and current version.
 show_header() {
     [[ "$QUIET" == "true" ]] && return
     clear
@@ -28,31 +27,25 @@ show_header() {
     echo ""
 }
 
-# print_step prints a formatted step message prefixed with a blue "[STEP]" tag.
 print_step() {
     [[ "$QUIET" == "true" ]] && return
     echo -e "\n${BLUE}[STEP]${NC} $1"
 }
 
-# print_success prints MESSAGE prefixed with a green [OK] indicator to stdout.
 print_success() {
     [[ "$QUIET" == "true" ]] && return
     echo -e "${GREEN}[OK]${NC} $1"
 }
 
-# print_warn prints a warning message prefixed with [WARN] (yellow).
 print_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 
-# print_error prints an error message prefixed with [ERROR] in red.
 print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
-# print_info prints an informational message prefixed with [INFO] in cyan.
 print_info() {
     [[ "$QUIET" == "true" ]] && return
     echo -e "${CYAN}[INFO]${NC} $1"
 }
 
-# show_help prints usage information and exits the script.
 show_help() {
     cat << EOF
 MTU Configuration Tool v${VERSION}
@@ -80,7 +73,6 @@ EOF
 
 export PATH=$PATH:/usr/local/sbin:/usr/sbin:/sbin
 
-# check_root ensures the script is running as root and exits with an error message if not.
 check_root() {
     if [[ $EUID -ne 0 ]]; then
         print_error "This script requires root privileges. Run with sudo."
@@ -88,7 +80,6 @@ check_root() {
     fi
 }
 
-# detect_os detects the current operating system and sets the global variables OS and VERSION_ID.
 detect_os() {
     print_info "Detecting Operating System..."
     if [ -f /etc/os-release ]; then
@@ -109,27 +100,22 @@ detect_os() {
     print_success "Detected: $OS ($VERSION_ID)"
 }
 
-# is_debian_based determines whether the detected OS is a Debian-family distribution.
 is_debian_based() {
     [[ "$OS" =~ ^(debian|ubuntu|pop|linuxmint|kali)$ ]]
 }
 
-# is_rhel_based checks whether the detected OS belongs to the RHEL family.
 is_rhel_based() {
     [[ "$OS" =~ ^(fedora|redhat|centos|rocky|almalinux)$ ]]
 }
 
-# is_arch_based reports whether the detected OS is an Arch-family distribution.
 is_arch_based() {
     [[ "$OS" =~ ^(arch|endeavouros|manjaro)$ ]]
 }
 
-# is_suse_based checks whether the current OS belongs to the SUSE family.
 is_suse_based() {
     [[ "$OS" =~ ^(suse|opensuse.*|sles)$ ]]
 }
 
-# detect_primary_interface finds the primary network interface (excludes lo, docker, veth, br-).
 detect_primary_interface() {
     print_info "Detecting primary network interface..."
 
@@ -149,7 +135,6 @@ detect_primary_interface() {
     print_success "Detected: $PRIMARY_IFACE (current MTU: $current_mtu)"
 }
 
-# prompt_yes_no prompts the user with a yes/no question and returns success when the answer is yes.
 prompt_yes_no() {
     local prompt="$1"
     local default="${2:-n}"
@@ -166,7 +151,6 @@ prompt_yes_no() {
     [[ "$result" =~ ^[Yy]$ ]]
 }
 
-# validate_mtu checks if the provided MTU value is within valid range (68-9000).
 validate_mtu() {
     local mtu="$1"
     if [[ "$mtu" =~ ^[0-9]+$ ]] && [[ "$mtu" -ge 68 ]] && [[ "$mtu" -le 9000 ]]; then
@@ -175,7 +159,6 @@ validate_mtu() {
     return 1
 }
 
-# apply_mtu_immediate applies MTU to an interface immediately without persistence.
 apply_mtu_immediate() {
     local iface="$1"
     local mtu="$2"
@@ -189,7 +172,6 @@ apply_mtu_immediate() {
     fi
 }
 
-# apply_mtu_persistent configures persistent MTU based on the detected OS.
 apply_mtu_persistent() {
     local iface="$1"
     local mtu="$2"
@@ -213,7 +195,6 @@ apply_mtu_persistent() {
     fi
 }
 
-# apply_mtu_debian configures persistent MTU on Debian-based systems using post-up hook.
 apply_mtu_debian() {
     local iface="$1"
     local mtu="$2"
@@ -236,16 +217,12 @@ EOF
         return 0
     fi
 
-    # Remove existing MTU configurations for this interface
     sed -i "/post-up ip link set dev $iface mtu/d" "$interfaces_file"
 
-    # Check if interface stanza exists
     if grep -qE "^iface $iface" "$interfaces_file"; then
-        # Add post-up command after the iface line
         sed -i "/^iface $iface/a\\    $post_up_cmd" "$interfaces_file"
         print_success "Updated $interfaces_file with MTU $mtu for $iface"
     else
-        # Append new interface configuration
         cat >> "$interfaces_file" << EOF
 
 auto $iface
@@ -256,7 +233,6 @@ EOF
     fi
 }
 
-# apply_mtu_alpine configures persistent MTU on Alpine Linux.
 apply_mtu_alpine() {
     local iface="$1"
     local mtu="$2"
@@ -278,7 +254,6 @@ apply_mtu_alpine() {
     fi
 }
 
-# apply_mtu_rhel configures persistent MTU on RHEL-based systems using nmcli.
 apply_mtu_rhel() {
     local iface="$1"
     local mtu="$2"
@@ -294,7 +269,6 @@ apply_mtu_rhel() {
         fi
     fi
 
-    # Fallback to ifcfg file
     local ifcfg_file="/etc/sysconfig/network-scripts/ifcfg-$iface"
     if [[ -f "$ifcfg_file" ]]; then
         sed -i '/^MTU=/d' "$ifcfg_file"
@@ -306,7 +280,6 @@ apply_mtu_rhel() {
     fi
 }
 
-# apply_mtu_arch configures persistent MTU on Arch-based systems.
 apply_mtu_arch() {
     local iface="$1"
     local mtu="$2"
@@ -322,7 +295,6 @@ apply_mtu_arch() {
         fi
     fi
 
-    # Fallback to systemd-networkd
     local networkd_dir="/etc/systemd/network"
     mkdir -p "$networkd_dir"
 
@@ -336,7 +308,6 @@ EOF
     print_success "Created systemd-networkd configuration for $iface"
 }
 
-# apply_mtu_suse configures persistent MTU on SUSE-based systems.
 apply_mtu_suse() {
     local iface="$1"
     local mtu="$2"
@@ -352,13 +323,11 @@ apply_mtu_suse() {
     fi
 }
 
-# reset_mtu_config removes MTU configuration and resets to default (1500).
 reset_mtu_config() {
     local iface="$1"
 
     print_info "Resetting MTU configuration for $iface..."
 
-    # Apply default MTU immediately
     apply_mtu_immediate "$iface" 1500
 
     if [[ "$OS" == "alpine" ]] || is_debian_based; then
@@ -392,7 +361,24 @@ reset_mtu_config() {
     fi
 }
 
-# configure_docker_mtu configures Docker daemon to use the specified MTU.
+update_docker_json() {
+    local daemon_json="$1"
+    local mtu="$2"
+    local tmp_file
+    tmp_file=$(mktemp)
+
+    if [[ -f "$daemon_json" ]] && [[ -s "$daemon_json" ]]; then
+        sed "s/\"mtu\": *[0-9]\+/\"mtu\": $mtu/; t; s/}/\"mtu\": $mtu\n}/" "$daemon_json" > "$tmp_file"
+    else
+        echo "{\"mtu\": $mtu}" > "$tmp_file"
+    fi
+
+    chmod --reference="$daemon_json" "$tmp_file" 2>/dev/null || chmod 644 "$tmp_file"
+    chown --reference="$daemon_json" "$tmp_file" 2>/dev/null || true
+
+    mv "$tmp_file" "$daemon_json"
+}
+
 configure_docker_mtu() {
     local mtu="$1"
 
@@ -407,34 +393,11 @@ configure_docker_mtu() {
     local docker_dir="/etc/docker"
 
     mkdir -p "$docker_dir"
+    [[ -f "$daemon_json" ]] || echo "{}" > "$daemon_json"
 
-    if [[ -f "$daemon_json" ]]; then
-        # Check if file has content and is valid JSON
-        if [[ -s "$daemon_json" ]] && python3 -c "import json; json.load(open('$daemon_json'))" 2>/dev/null; then
-            # Update existing mtu value or add it
-            local tmp_file
-            tmp_file=$(mktemp)
-            python3 -c "
-import json
-with open('$daemon_json', 'r') as f:
-    data = json.load(f)
-data['mtu'] = $mtu
-with open('$tmp_file', 'w') as f:
-    json.dump(data, f, indent=2)
-" 2>/dev/null
-            mv "$tmp_file" "$daemon_json"
-            print_success "Updated $daemon_json with MTU $mtu"
-        else
-            # File exists but is empty or invalid
-            echo "{\"mtu\": $mtu}" > "$daemon_json"
-            print_success "Created $daemon_json with MTU $mtu"
-        fi
-    else
-        echo "{\"mtu\": $mtu}" > "$daemon_json"
-        print_success "Created $daemon_json with MTU $mtu"
-    fi
+    update_docker_json "$daemon_json" "$mtu"
+    print_success "Updated $daemon_json with MTU $mtu"
 
-    # Apply MTU to existing Docker bridges
     apply_docker_bridges_mtu "$mtu"
 
     if prompt_yes_no "Restart Docker service to apply changes?" "y"; then
@@ -448,7 +411,6 @@ with open('$tmp_file', 'w') as f:
     fi
 }
 
-# apply_docker_bridges_mtu applies MTU to all existing Docker bridges.
 apply_docker_bridges_mtu() {
     local mtu="$1"
 
@@ -471,7 +433,6 @@ apply_docker_bridges_mtu() {
     done
 }
 
-# reset_docker_mtu removes MTU configuration from Docker daemon.
 reset_docker_mtu() {
     local daemon_json="/etc/docker/daemon.json"
 
@@ -480,59 +441,56 @@ reset_docker_mtu() {
         return 0
     fi
 
-    if python3 -c "import json; json.load(open('$daemon_json'))" 2>/dev/null; then
-        local tmp_file
-        tmp_file=$(mktemp)
-        python3 -c "
-import json
-with open('$daemon_json', 'r') as f:
-    data = json.load(f)
-data.pop('mtu', None)
-with open('$tmp_file', 'w') as f:
-    json.dump(data, f, indent=2) if data else f.write('{}')
-" 2>/dev/null
-        mv "$tmp_file" "$daemon_json"
-        print_success "Removed MTU from Docker configuration"
-    fi
+    local tmp_file
+    tmp_file=$(mktemp)
+
+    sed '/\"mtu\"/d' "$daemon_json" > "$tmp_file"
+
+    chmod --reference="$daemon_json" "$tmp_file" 2>/dev/null || chmod 644 "$tmp_file"
+    chown --reference="$daemon_json" "$tmp_file" 2>/dev/null || true
+
+    mv "$tmp_file" "$daemon_json"
+    print_success "Removed MTU from Docker configuration"
 
     apply_docker_bridges_mtu 1500
 }
 
-# show_mtu_menu displays the MTU selection menu and returns the selected value.
 show_mtu_menu() {
-    echo ""
-    echo -e "${CYAN}Select MTU Value:${NC}"
-    echo ""
-    echo "  1) 1500  - Default (standard networks)"
-    echo "  2) 1450  - OVH vRack / Virtualized environments"
-    echo "  3) 1400  - Safe value for encapsulated traffic"
-    echo "  4) Custom value"
-    echo "  5) Reset to default"
-    echo ""
-    read -p "Selection [1-5]: " choice
+    {
+        echo ""
+        echo -e "${CYAN}Select MTU Value:${NC}"
+        echo ""
+        echo "  1) 1500  - Default (standard networks)"
+        echo "  2) 1450  - OVH vRack / Virtualized environments"
+        echo "  3) 1400  - Safe value for encapsulated traffic"
+        echo "  4) Custom value"
+        echo "  5) Reset to default"
+        echo ""
+    } >&2
+
+    read -p "Selection [1-5]: " choice >&2
 
     case "$choice" in
         1) echo "1500" ;;
         2) echo "1450" ;;
         3) echo "1400" ;;
         4)
-            read -p "Enter custom MTU (68-9000): " custom_mtu
+            read -p "Enter custom MTU (68-9000): " custom_mtu >&2
             if validate_mtu "$custom_mtu"; then
                 echo "$custom_mtu"
             else
-                print_error "Invalid MTU value. Must be between 68 and 9000."
+                print_error "Invalid MTU value. Must be between 68 and 9000." >&2
                 exit 1
             fi
             ;;
         5) echo "reset" ;;
         *)
-            print_error "Invalid selection."
+            print_error "Invalid selection." >&2
             exit 1
             ;;
     esac
 }
 
-# show_current_status displays the current MTU configuration.
 show_current_status() {
     print_step "Current MTU Status"
 
@@ -564,7 +522,6 @@ detect_os
 detect_primary_interface
 show_current_status
 
-# MTU Selection
 print_step "MTU Configuration"
 selected_mtu=$(show_mtu_menu)
 
@@ -578,12 +535,10 @@ if [[ "$selected_mtu" == "reset" ]]; then
         fi
     fi
 else
-    # Apply to primary interface
     print_step "Applying MTU $selected_mtu"
     apply_mtu_immediate "$PRIMARY_IFACE" "$selected_mtu"
     apply_mtu_persistent "$PRIMARY_IFACE" "$selected_mtu"
 
-    # Docker configuration
     if command -v docker &>/dev/null; then
         echo ""
         if prompt_yes_no "Configure Docker to use MTU $selected_mtu?" "y"; then
@@ -592,7 +547,6 @@ else
     fi
 fi
 
-# Final status
 show_current_status
 
 if [[ "$QUIET" != "true" ]]; then
