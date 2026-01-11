@@ -287,38 +287,6 @@ prompt_yes_no() {
     [[ "$result" =~ ^[Yy]$ ]]
 }
 
-# add_user_to_sudo_group adds a user to the appropriate sudo group based on the OS (wheel for Alpine/RHEL, sudo for Debian-based).
-add_user_to_sudo_group() {
-    local username="$1"
-    
-    if [[ "$OS" == "alpine" ]]; then
-        addgroup "$username" wheel
-    elif is_rhel_based; then
-        /usr/sbin/usermod -aG wheel "$username"
-    else
-        /usr/sbin/usermod -aG sudo "$username"
-    fi
-}
-
-# get_sudo_group_name returns the appropriate sudo group name for the current OS.
-get_sudo_group_name() {
-    if [[ "$OS" == "alpine" ]] || is_rhel_based; then
-        echo "wheel"
-    else
-        echo "sudo"
-    fi
-}
-
-# user_exists checks if a user exists on the system (works on both Alpine and other distros).
-user_exists() {
-    local username="$1"
-    if [[ "$OS" == "alpine" ]]; then
-        getent passwd "$username" >/dev/null 2>&1
-    else
-        id "$username" &>/dev/null
-    fi
-}
-
 # --- MAIN EXECUTION ---
 
 while [[ $# -gt 0 ]]; do
@@ -333,7 +301,10 @@ done
 show_header
 check_root
 detect_os
-ensure_sudo
+
+if [[ "$OS" != "alpine" ]]; then
+    ensure_sudo
+fi
 
 # XCP-NG Tools Installation
 print_step "XCP-NG Guest Tools Configuration"
@@ -391,7 +362,7 @@ update_repos
 install_result=0
 
 if [[ "$OS" == "alpine" ]]; then
-    install_pkg sudo net-tools nano curl wget file htop || install_result=$?
+    install_pkg net-tools nano curl wget file htop || install_result=$?
 elif is_arch_based; then
     install_pkg net-tools btop whois curl wget nano || install_result=$?
 elif is_debian_based; then
@@ -411,40 +382,35 @@ else
     print_error "Failed to install one or more utilities on $OS."
 fi
 
-# Hostname Configuration
-print_step "Hostname Configuration"
-[[ "$QUIET" != "true" ]] && echo -e "Current Hostname: ${CYAN}$(hostname)${NC}"
+# Hostname Configuration (skip for Alpine)
+if [[ "$OS" != "alpine" ]]; then
+    print_step "Hostname Configuration"
+    [[ "$QUIET" != "true" ]] && echo -e "Current Hostname: ${CYAN}$(hostname)${NC}"
 
-if prompt_yes_no "Change hostname?"; then
-    read -p "Enter new hostname: " new_hostname
-    if [[ -z "$new_hostname" ]]; then
-        print_warn "Skipped (empty input)."
-    elif validate_hostname "$new_hostname"; then
-        if [[ "$OS" == "alpine" ]]; then
-            echo "$new_hostname" > /etc/hostname
-            hostname "$new_hostname"
-        else
+    if prompt_yes_no "Change hostname?"; then
+        read -p "Enter new hostname: " new_hostname
+        if [[ -z "$new_hostname" ]]; then
+            print_warn "Skipped (empty input)."
+        elif validate_hostname "$new_hostname"; then
             hostnamectl set-hostname "$new_hostname"
+            print_success "Hostname changed to: $new_hostname"
+        else
+            print_error "Invalid hostname. Must be alphanumeric with optional hyphens (max 63 chars)."
         fi
-        print_success "Hostname changed to: $new_hostname"
-    else
-        print_error "Invalid hostname. Must be alphanumeric with optional hyphens (max 63 chars)."
     fi
 fi
 
-# Sudo User Configuration (Debian-based and Alpine)
-if is_debian_based || [[ "$OS" == "alpine" ]]; then
+# Sudo User Configuration (Debian-based only, skip Alpine)
+if is_debian_based; then
     print_step "User Management"
-    
-    local_sudo_group=$(get_sudo_group_name)
 
-    if prompt_yes_no "Add a user to '$local_sudo_group' group?"; then
+    if prompt_yes_no "Add a user to 'sudo' group?"; then
         read -p "Enter username: " user_to_add
         if [[ -z "$user_to_add" ]]; then
             print_warn "Skipped (empty input)."
-        elif user_exists "$user_to_add"; then
-            add_user_to_sudo_group "$user_to_add"
-            print_success "User '$user_to_add' added to $local_sudo_group group. (Log out to apply)"
+        elif id "$user_to_add" &>/dev/null; then
+            /usr/sbin/usermod -aG sudo "$user_to_add"
+            print_success "User '$user_to_add' added to sudo group. (Log out to apply)"
         else
             print_error "User '$user_to_add' does not exist."
         fi
