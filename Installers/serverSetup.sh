@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-VERSION="1.2.0"
+VERSION="1.2.1"
 
 # --- UI & FORMATTING FUNCTIONS ---
 
@@ -301,7 +301,10 @@ done
 show_header
 check_root
 detect_os
-ensure_sudo
+
+if [[ "$OS" != "alpine" ]]; then
+    ensure_sudo
+fi
 
 # XCP-NG Tools Installation
 print_step "XCP-NG Guest Tools Configuration"
@@ -359,7 +362,7 @@ update_repos
 install_result=0
 
 if [[ "$OS" == "alpine" ]]; then
-    install_pkg sudo net-tools nano curl wget file htop || install_result=$?
+    install_pkg net-tools nano curl wget file htop || install_result=$?
 elif is_arch_based; then
     install_pkg net-tools btop whois curl wget nano || install_result=$?
 elif is_debian_based; then
@@ -379,23 +382,25 @@ else
     print_error "Failed to install one or more utilities on $OS."
 fi
 
-# Hostname Configuration
-print_step "Hostname Configuration"
-[[ "$QUIET" != "true" ]] && echo -e "Current Hostname: ${CYAN}$(hostname)${NC}"
+# Hostname Configuration (skip for Alpine)
+if [[ "$OS" != "alpine" ]]; then
+    print_step "Hostname Configuration"
+    [[ "$QUIET" != "true" ]] && echo -e "Current Hostname: ${CYAN}$(hostname)${NC}"
 
-if prompt_yes_no "Change hostname?"; then
-    read -p "Enter new hostname: " new_hostname
-    if [[ -z "$new_hostname" ]]; then
-        print_warn "Skipped (empty input)."
-    elif validate_hostname "$new_hostname"; then
-        hostnamectl set-hostname "$new_hostname"
-        print_success "Hostname changed to: $new_hostname"
-    else
-        print_error "Invalid hostname. Must be alphanumeric with optional hyphens (max 63 chars)."
+    if prompt_yes_no "Change hostname?"; then
+        read -p "Enter new hostname: " new_hostname
+        if [[ -z "$new_hostname" ]]; then
+            print_warn "Skipped (empty input)."
+        elif validate_hostname "$new_hostname"; then
+            hostnamectl set-hostname "$new_hostname"
+            print_success "Hostname changed to: $new_hostname"
+        else
+            print_error "Invalid hostname. Must be alphanumeric with optional hyphens (max 63 chars)."
+        fi
     fi
 fi
 
-# Sudo User Configuration (Debian-based)
+# Sudo User Configuration (Debian-based only, skip Alpine)
 if is_debian_based; then
     print_step "User Management"
 
