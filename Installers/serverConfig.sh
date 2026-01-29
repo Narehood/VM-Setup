@@ -239,7 +239,6 @@ execute_config() {
         exit 0
     fi
 }
-}
 
 # show_menu displays the available config scripts in a formatted menu.
 show_menu() {
