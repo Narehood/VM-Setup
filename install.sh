@@ -16,7 +16,7 @@ WHITE='\033[1;37m'
 NC='\033[0m'
 
 UI_WIDTH=86
-VERSION="3.6.0"
+SCRIPT_VERSION="3.6.1"
 CHECKSUM_FILE="$SCRIPT_DIR/Installers/.checksums.sha256"
 
 # --- 3. SETTINGS & CONFIGURATION ---
@@ -187,7 +187,7 @@ show_header() {
     echo -e "${BLUE}╚════██║  ╚██╔╝  ╚════██║   ██║   ██╔══╝  ██║╚██╔╝██║    ╚════██║██╔══╝     ██║   ██║   ██║██╔═══╝ ${NC}"
     echo -e "${BLUE}███████║   ██║   ███████║   ██║   ███████╗██║ ╚═╝ ██║    ███████║███████╗   ██║   ╚██████╔╝██║     ${NC}"
     echo -e "${BLUE}╚══════╝   ╚═╝   ╚══════╝   ╚═╝   ╚══════╝╚═╝     ╚═╝    ╚══════╝╚══════╝   ╚═╝    ╚═════╝ ╚═╝     ${NC}"
-    print_centered "VERSION $VERSION  |  BY: NAREHOOD" "$CYAN"
+    print_centered "VERSION $SCRIPT_VERSION  |  BY: NAREHOOD" "$CYAN"
     print_line "=" "$BLUE"
 }
 
@@ -901,7 +901,7 @@ show_help() {
     print_centered "HELP & INFORMATION" "$WHITE"
     print_line "=" "$BLUE"
     echo ""
-    echo -e "  ${WHITE}System Setup Menu${NC} - Version $VERSION"
+    echo -e "  ${WHITE}System Setup Menu${NC} - Version $SCRIPT_VERSION"
     echo -e "  A comprehensive tool for initial system configuration."
     echo ""
     echo -e "  ${YELLOW}Menu Options:${NC}"
