@@ -16,7 +16,7 @@ WHITE='\033[1;37m'
 NC='\033[0m'
 
 UI_WIDTH=86
-VERSION="3.5.4"
+VERSION="3.6.0"
 CHECKSUM_FILE="$SCRIPT_DIR/Installers/.checksums.sha256"
 
 # --- 3. SETTINGS & CONFIGURATION ---
@@ -910,11 +910,11 @@ show_help() {
     echo -e "    ${CYAN}3${NC} - Prepare system for Docker installation"
     echo -e "    ${CYAN}4${NC} - Configure automatic security patch updates"
     echo -e "    ${CYAN}5${NC} - Run full system update"
-    echo -e "    ${CYAN}6${NC} - Check for and apply menu updates"
+    echo -e "    ${CYAN}6${NC} - Server configuration utilities"
     echo -e "    ${CYAN}7${NC} - Launch LinUtil utility"
     echo -e "    ${CYAN}8${NC} - Switch to a different branch (dev/testing)"
     echo -e "    ${CYAN}9${NC} - Display this help screen"
-    echo -e "    ${CYAN}s${NC} - Settings"
+    echo -e "    ${CYAN}s${NC} - Settings (includes menu updates)"
     echo -e "    ${CYAN}0${NC} - Exit the menu"
     echo ""
     echo -e "  ${YELLOW}Supported Distributions:${NC}"
@@ -939,50 +939,64 @@ show_help() {
     pause
 }
 
-# manage_settings displays current settings (Auto Update Check and Confirm Updates on Startup), lets the user toggle them, and saves changes to the settings file.
+# manage_settings displays current settings (Auto Update Check and Confirm Updates on Startup), lets the user toggle them, check for updates, and saves changes to the settings file.
 manage_settings() {
-    clear
-    print_line "=" "$BLUE"
-    print_centered "SETTINGS" "$WHITE"
-    print_line "=" "$BLUE"
-    echo ""
+    while true; do
+        clear
+        print_line "=" "$BLUE"
+        print_centered "SETTINGS" "$WHITE"
+        print_line "=" "$BLUE"
+        echo ""
 
-    echo -e "  ${WHITE}Current Settings:${NC}"
-    printf "  ${YELLOW}%-35s${NC} : %s\n" "Auto Update Check" "$AUTO_UPDATE_CHECK"
-    printf "  ${YELLOW}%-35s${NC} : %s\n" "Confirm Updates on Startup" "$CONFIRM_UPDATES_ON_STARTUP"
-    echo ""
-    print_line "-" "$BLUE"
+        echo -e "  ${WHITE}Current Settings:${NC}"
+        printf "  ${YELLOW}%-35s${NC} : %s\n" "Auto Update Check" "$AUTO_UPDATE_CHECK"
+        printf "  ${YELLOW}%-35s${NC} : %s\n" "Confirm Updates on Startup" "$CONFIRM_UPDATES_ON_STARTUP"
+        echo ""
+        print_line "-" "$BLUE"
 
-    echo -e "  ${WHITE}Change Settings:${NC}"
-    echo -e "    ${CYAN}1.${NC} Toggle Auto Update Check"
-    echo -e "    ${CYAN}2.${NC} Toggle Confirm Updates on Startup"
-    echo -e "    ${CYAN}0.${NC} Back to Menu"
-    echo ""
+        echo -e "  ${WHITE}Options:${NC}"
+        echo -e "    ${CYAN}1.${NC} Toggle Auto Update Check"
+        echo -e "    ${CYAN}2.${NC} Toggle Confirm Updates on Startup"
+        echo -e "    ${CYAN}3.${NC} Check for Menu Updates"
+        echo -e "    ${CYAN}0.${NC} Back to Menu"
+        echo ""
 
-    read -rp "  Select option [0-2]: " settings_choice
+        read -rp "  Select option [0-3]: " settings_choice
 
-    case "$settings_choice" in
-        1)
-            if [[ "$AUTO_UPDATE_CHECK" = "true" ]]; then
-                AUTO_UPDATE_CHECK="false"
-            else
-                AUTO_UPDATE_CHECK="true"
-            fi
-            save_settings
-            print_success "Setting updated to: $AUTO_UPDATE_CHECK"
-            sleep 2
-            ;;
-        2)
-            if [[ "$CONFIRM_UPDATES_ON_STARTUP" = "true" ]]; then
-                CONFIRM_UPDATES_ON_STARTUP="false"
-            else
-                CONFIRM_UPDATES_ON_STARTUP="true"
-            fi
-            save_settings
-            print_success "Setting updated to: $CONFIRM_UPDATES_ON_STARTUP"
-            sleep 2
-            ;;
-    esac
+        case "$settings_choice" in
+            1)
+                if [[ "$AUTO_UPDATE_CHECK" = "true" ]]; then
+                    AUTO_UPDATE_CHECK="false"
+                else
+                    AUTO_UPDATE_CHECK="true"
+                fi
+                save_settings
+                print_success "Setting updated to: $AUTO_UPDATE_CHECK"
+                sleep 1
+                ;;
+            2)
+                if [[ "$CONFIRM_UPDATES_ON_STARTUP" = "true" ]]; then
+                    CONFIRM_UPDATES_ON_STARTUP="false"
+                else
+                    CONFIRM_UPDATES_ON_STARTUP="true"
+                fi
+                save_settings
+                print_success "Setting updated to: $CONFIRM_UPDATES_ON_STARTUP"
+                sleep 1
+                ;;
+            3)
+                check_for_updates_interactive || true
+                pause
+                ;;
+            0|"")
+                return 0
+                ;;
+            *)
+                print_error "Invalid option: $settings_choice"
+                sleep 1
+                ;;
+        esac
+    done
 }
 
 # --- STARTUP TASKS ---
@@ -1005,7 +1019,7 @@ while true; do
 
     echo -e "${WHITE}MENU OPTIONS${NC}"
     printf "  ${CYAN}1.${NC} %-38s ${CYAN}5.${NC} %s\n" "Server Initial Config" "Run System Updates"
-    printf "  ${CYAN}2.${NC} %-38s ${CYAN}6.${NC} %s\n" "Application Installers" "Update This Menu"
+    printf "  ${CYAN}2.${NC} %-38s ${CYAN}6.${NC} %s\n" "Application Installers" "Server Config"
     printf "  ${CYAN}3.${NC} %-38s ${CYAN}7.${NC} %s\n" "Docker Host Preparation" "Launch LinUtil"
     printf "  ${CYAN}4.${NC} %-38s ${CYAN}8.${NC} %s\n" "Auto Security Patches" "Switch Branch"
     echo ""
@@ -1021,7 +1035,7 @@ while true; do
         3) execute_script "Docker-Prep.sh" ;;
         4) execute_script "Automated-Security-Patches.sh" ;;
         5) execute_script "systemUpdate.sh" ;;
-        6) check_for_updates || true ;;
+        6) execute_script "serverConfig.sh" ;;
         7) execute_script "linutil.sh" ;;
         8) switch_branch ;;
         9|h|help) show_help ;;
