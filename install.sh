@@ -16,8 +16,9 @@ WHITE='\033[1;37m'
 NC='\033[0m'
 
 UI_WIDTH=86
-SCRIPT_VERSION="3.6.1"
+SCRIPT_VERSION="3.6.2"
 CHECKSUM_FILE="$SCRIPT_DIR/Installers/.checksums.sha256"
+EXIT_APP_CODE=42
 
 # --- 3. SETTINGS & CONFIGURATION ---
 SETTINGS_FILE="$SCRIPT_DIR/settings.conf"
@@ -864,10 +865,15 @@ execute_script() {
                 print_status "Executing with sudo..."
                 echo -e "${GREEN}>>> Executing: $script_name (as root)${NC}"
                 sleep 0.5
-                sudo bash "$full_path"
-                pause
-                set -e
-                return 0
+                bash "$full_path"
+                local script_exit=$?
+                 if [[ $script_exit -eq $EXIT_APP_CODE ]]; then
+                     echo -e "\n${GREEN}Goodbye!${NC}"
+                 exit 0
+                 fi
+                 pause
+                 set -e
+                 return 0
                 ;;
             2)
                 print_warn "Running without root - some operations may fail."
@@ -887,8 +893,12 @@ execute_script() {
 
     echo -e "${GREEN}>>> Executing: $script_name${NC}"
     sleep 0.5
-
     bash "$full_path"
+    local script_exit=$?
+     if [[ $script_exit -eq $EXIT_APP_CODE ]]; then
+       echo -e "\n${GREEN}Goodbye!${NC}"
+     exit 0
+     fi
     pause
     set -e
     return 0
