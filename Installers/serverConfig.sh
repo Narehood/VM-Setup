@@ -221,8 +221,10 @@ execute_config() {
     print_line "-" "$BLUE"
     sleep 0.5
 
+    set +e
     bash "$script_name"
     local exit_code=$?
+    set -e
 
     echo ""
     print_line "-" "$BLUE"
@@ -236,6 +238,7 @@ execute_config() {
         echo -e "\n${GREEN}Goodbye!${NC}"
         exit 0
     fi
+}
 }
 
 # show_menu displays the available config scripts in a formatted menu.
