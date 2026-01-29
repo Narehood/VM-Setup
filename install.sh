@@ -16,7 +16,7 @@ WHITE='\033[1;37m'
 NC='\033[0m'
 
 UI_WIDTH=86
-SCRIPT_VERSION="3.6.2"
+SCRIPT_VERSION="3.6.3"
 CHECKSUM_FILE="$SCRIPT_DIR/Installers/.checksums.sha256"
 EXIT_APP_CODE=42
 
@@ -698,7 +698,6 @@ parse_script_metadata() {
 }
 
 # verify_script_checksum Verifies a script's sha256 checksum from CHECKSUM_FILE and prompts the user on missing or mismatched entries.
-# If CHECKSUM_FILE is missing or `sha256sum` is not available the check is skipped. Prompts the user to continue when no checksum is found or when the computed checksum differs; returns 0 on success or after user confirmation, returns 1 if the user declines to proceed.
 verify_script_checksum() {
     local script_path="$1"
     local script_name
@@ -741,8 +740,6 @@ verify_script_checksum() {
 }
 
 # generate_checksums generates SHA-256 checksums for all scripts in Installers/ and writes them to CHECKSUM_FILE.
-# It requires the `sha256sum` utility and returns non-zero if the Installers directory is missing, `sha256sum` is unavailable, or no installer scripts are found.
-# On success it overwrites any existing checksum file with one entry per script and returns 0.
 generate_checksums() {
     local silent="${1:-}"
     local installers_dir="$SCRIPT_DIR/Installers"
@@ -781,7 +778,7 @@ generate_checksums() {
     return 0
 }
 
-# execute_script executes an installer from Installers/, verifying existence/readability and file type, validating checksum, ensuring executability, honoring REQUIRES_ROOT (prompting to run with sudo, continue without root, or cancel), printing an optional DESCRIPTION, running the script, and reporting its exit code.
+# execute_script executes an installer from Installers/, verifying existence/readability and file type, validating checksum, ensuring executability, honoring REQUIRES_ROOT, printing an optional DESCRIPTION, running the script, and checking for exit code 42 to exit the entire application.
 execute_script() {
     set +e
 
@@ -865,15 +862,15 @@ execute_script() {
                 print_status "Executing with sudo..."
                 echo -e "${GREEN}>>> Executing: $script_name (as root)${NC}"
                 sleep 0.5
-                bash "$full_path"
+                sudo bash "$full_path"
                 local script_exit=$?
-                 if [[ $script_exit -eq $EXIT_APP_CODE ]]; then
-                     echo -e "\n${GREEN}Goodbye!${NC}"
-                 exit 0
-                 fi
-                 pause
-                 set -e
-                 return 0
+                if [[ $script_exit -eq $EXIT_APP_CODE ]]; then
+                    echo -e "\n${GREEN}Goodbye!${NC}"
+                    exit 0
+                fi
+                pause
+                set -e
+                return 0
                 ;;
             2)
                 print_warn "Running without root - some operations may fail."
@@ -895,10 +892,10 @@ execute_script() {
     sleep 0.5
     bash "$full_path"
     local script_exit=$?
-     if [[ $script_exit -eq $EXIT_APP_CODE ]]; then
-       echo -e "\n${GREEN}Goodbye!${NC}"
-     exit 0
-     fi
+    if [[ $script_exit -eq $EXIT_APP_CODE ]]; then
+        echo -e "\n${GREEN}Goodbye!${NC}"
+        exit 0
+    fi
     pause
     set -e
     return 0
