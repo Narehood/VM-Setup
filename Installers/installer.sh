@@ -291,7 +291,7 @@ while true; do
             fi
             ;;
         0|b|back)
-            continue
+            exit 0
             ;;
         q|qq|exit)
             echo -e "\n${GREEN}Goodbye!${NC}"
