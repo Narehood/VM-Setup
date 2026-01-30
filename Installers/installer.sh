@@ -277,7 +277,7 @@ while true; do
     show_stats
     show_menu
 
-    read -rp "  Enter selection [0-$TOTAL_OPTIONS, q]: " choice
+    read -rp "  Enter selection [0-$TOTAL_OPTIONS, b, q]: " choice
 
     case "$choice" in
         [1-6])
