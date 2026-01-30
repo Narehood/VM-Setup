@@ -291,8 +291,7 @@ while true; do
             fi
             ;;
         0|b|back)
-            echo -e "\n${GREEN}Returning to Main Menu...${NC}"
-            exit 0
+            continue
             ;;
         q|qq|exit)
             echo -e "\n${GREEN}Goodbye!${NC}"
