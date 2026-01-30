@@ -16,11 +16,10 @@ WHITE='\033[1;37m'
 NC='\033[0m'
 
 UI_WIDTH=86
+EXIT_APP_CODE=42
 
-# Handle Ctrl+C gracefully
-trap 'echo -e "\n${GREEN}Goodbye!${NC}"; exit 0' INT
+trap 'echo -e "\n${GREEN}Goodbye!${NC}"; exit $EXIT_APP_CODE' INT
 
-# print_centered centers the given text within UI_WIDTH and prints it, using the optional ANSI color escape sequence provided as the second argument.
 print_centered() {
     local text="$1"
     local color="${2:-$NC}"
@@ -29,29 +28,22 @@ print_centered() {
     printf "${color}%${padding}s%s${NC}\n" "" "$text"
 }
 
-# print_line draws a horizontal line of length UI_WIDTH using the specified character (default '=') and color (default BLUE).
 print_line() {
     local char="${1:-=}"
     local color="${2:-$BLUE}"
     printf "${color}%${UI_WIDTH}s${NC}\n" "" | sed "s/ /${char}/g"
 }
 
-# print_status prints an informational message prefixed with a cyan "[INFO]" tag.
 print_status() { echo -e "${CYAN}[INFO]${NC} $1"; }
-# print_success prints a success message prefixed with [OK] in green and echoes the provided message.
 print_success() { echo -e "${GREEN}[OK]${NC} $1"; }
-# print_warn prints a warning message prefixed with [WARN] in yellow to standard output.
 print_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
-# print_error prints MESSAGE prefixed with a red "[ERROR]" tag.
 print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
-# pause prompts the user to press Enter to return to the menu.
 pause() {
     echo ""
     read -rp "Press [Enter] to return to the menu..."
 }
 
-# truncate_string shortens a string to a maximum length, appending ".." when truncation occurs.
 truncate_string() {
     local str="$1"
     local max_len="$2"
@@ -62,12 +54,10 @@ truncate_string() {
     fi
 }
 
-# get_current_branch prints the current Git branch name or "unknown" if unavailable.
 get_current_branch() {
     git branch --show-current 2>/dev/null || echo "unknown"
 }
 
-# show_header clears the terminal and prints the ASCII art banner with the centered "QUICK APP INSTALLER  |  LIBRARY" title and a colored horizontal separator.
 show_header() {
     clear
     echo -e "${BLUE}███████╗██╗   ██╗███████╗████████╗███████╗███╗   ███╗    ███████╗███████╗████████╗██╗   ██╗██████╗ ${NC}"
@@ -80,9 +70,7 @@ show_header() {
     print_line "=" "$BLUE"
 }
 
-# show_stats displays a formatted system information grid including OS, kernel, hostname, load average, memory and disk usage, network details, uptime, and current Git branch.
 show_stats() {
-    # OS Detection
     local distro="Unknown"
     if [ -f /etc/os-release ]; then
         . /etc/os-release
@@ -94,11 +82,9 @@ show_stats() {
     fi
     distro=$(truncate_string "$distro" 32)
 
-    # Kernel
     local kernel
     kernel=$(truncate_string "$(uname -r)" 32)
 
-    # Uptime
     local uptime_str="N/A"
     if [ -f /proc/uptime ]; then
         local uptime_secs
@@ -115,13 +101,11 @@ show_stats() {
         fi
     fi
 
-    # Load average
     local cpu_load="N/A"
     if [ -f /proc/loadavg ]; then
         cpu_load=$(LC_ALL=C awk '{printf "%.2f (1m)", $1}' /proc/loadavg)
     fi
 
-    # Memory from /proc/meminfo
     local mem_usage="N/A"
     if [ -f /proc/meminfo ]; then
         local mem_total mem_avail mem_used mem_pct
@@ -134,7 +118,6 @@ show_stats() {
         fi
     fi
 
-    # Disk usage
     local disk_usage="N/A"
     if command -v df >/dev/null 2>&1; then
         local disk_info
@@ -156,7 +139,6 @@ show_stats() {
         fi
     fi
 
-    # Network
     local hostname_str ip_addr="N/A" subnet="N/A" gateway="N/A"
     hostname_str=$(truncate_string "$(hostname)" 30)
 
@@ -171,11 +153,9 @@ show_stats() {
         gateway=$(truncate_string "${gateway:-N/A}" 20)
     fi
 
-    # Current branch
     local current_branch
     current_branch=$(truncate_string "$(get_current_branch)" 30)
 
-    # DISPLAY GRID
     echo -e "${WHITE}SYSTEM INFORMATION${NC}"
     printf "  ${YELLOW}%-11s${NC} : %-30s ${YELLOW}%-11s${NC} : %s\n" "OS" "$distro" "IP Address" "$ip_addr"
     printf "  ${YELLOW}%-11s${NC} : %-30s ${YELLOW}%-11s${NC} : %s\n" "Kernel" "$kernel" "Subnet" "$subnet"
@@ -188,7 +168,6 @@ show_stats() {
     print_line "=" "$BLUE"
 }
 
-# Define installers as an associative array for easy management
 declare -A INSTALLERS=(
     [1]="WordPress.sh:WordPress"
     [2]="XenOrchestra.sh:Xen Orchestra"
@@ -198,7 +177,8 @@ declare -A INSTALLERS=(
     [6]="Newt.sh:Newt VPN Node"
 )
 
-# execute_installer validates a script's existence/readability, offers to fix its executable bit, runs the script, reports a non-zero exit code, and prompts the user to return to the menu or exit.
+TOTAL_OPTIONS=${#INSTALLERS[@]}
+
 execute_installer() {
     local script_name="$1"
     local display_name="$2"
@@ -215,7 +195,6 @@ execute_installer() {
         return 1
     fi
 
-    # Check if executable, offer to fix
     if [ ! -x "$script_name" ]; then
         print_warn "Script is not executable."
         read -rp "  Make it executable? (Y/n): " response
@@ -233,8 +212,10 @@ execute_installer() {
     print_line "-" "$BLUE"
     sleep 0.5
 
+    set +e
     bash "$script_name"
     local exit_code=$?
+    set -e
 
     echo ""
     print_line "-" "$BLUE"
@@ -243,18 +224,23 @@ execute_installer() {
         print_warn "Script exited with code: $exit_code"
     fi
 
-    read -rp "Press [Enter] to return to menu or type 'exit': " next_action
-    if [ "$next_action" = "exit" ]; then
-        echo -e "\n${GREEN}Goodbye!${NC}"
-        exit 0
-    fi
+    echo ""
+    read -rp "Press [Enter] to continue, [b] for main menu, [q] to quit: " next_action
+    case "$next_action" in
+        b|B)
+            echo -e "\n${GREEN}Returning to Main Menu...${NC}"
+            exit 0
+            ;;
+        q|Q)
+            echo -e "\n${GREEN}Goodbye!${NC}"
+            exit $EXIT_APP_CODE
+            ;;
+    esac
 }
 
-# show_menu displays the available installers in a two-column, numbered menu and adds a "0. Return to Main Menu" option.
 show_menu() {
     echo -e "${WHITE}AVAILABLE INSTALLERS${NC}"
 
-    # Display in two columns
     local left_keys=(1 2 3)
     local right_keys=(4 5 6)
 
@@ -266,18 +252,18 @@ show_menu() {
         printf "  ${CYAN}%d.${NC} %-43s ${CYAN}%d.${NC} %s\n" "$lk" "$left_name" "$rk" "$right_name"
     done
 
-    printf "  ${CYAN}0.${NC} ${RED}%s${NC}\n" "Return to Main Menu"
+    echo ""
+    printf "  ${CYAN}0.${NC} %-38s ${CYAN}q.${NC} ${RED}%s${NC}\n" "Return to Main Menu" "Exit"
     echo ""
     print_line "-" "$BLUE"
 }
 
-# MAIN LOOP
 while true; do
     show_header
     show_stats
     show_menu
 
-    read -rp "  Enter selection [0-6]: " choice
+    read -rp "  Enter selection [0-$TOTAL_OPTIONS, q]: " choice
 
     case "$choice" in
         [1-6])
@@ -290,9 +276,13 @@ while true; do
                 sleep 1
             fi
             ;;
-        0|q|exit)
+        0|b|back)
             echo -e "\n${GREEN}Returning to Main Menu...${NC}"
             exit 0
+            ;;
+        q|qq|exit)
+            echo -e "\n${GREEN}Goodbye!${NC}"
+            exit $EXIT_APP_CODE
             ;;
         "")
             ;;
