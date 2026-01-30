@@ -16,8 +16,9 @@ WHITE='\033[1;37m'
 NC='\033[0m'
 
 UI_WIDTH=86
-SCRIPT_VERSION="3.6.1"
+SCRIPT_VERSION="3.6.3"
 CHECKSUM_FILE="$SCRIPT_DIR/Installers/.checksums.sha256"
+EXIT_APP_CODE=42
 
 # --- 3. SETTINGS & CONFIGURATION ---
 SETTINGS_FILE="$SCRIPT_DIR/settings.conf"
@@ -696,8 +697,7 @@ parse_script_metadata() {
     head -n 20 "$script_path" 2>/dev/null | grep -i "^# *${key}:" | head -n 1 | sed "s/^# *${key}: *//i" || echo ""
 }
 
-# verify_script_checksum Verifies a script's sha256 checksum from CHECKSUM_FILE and prompts the user on missing or mismatched entries.
-# If CHECKSUM_FILE is missing or `sha256sum` is not available the check is skipped. Prompts the user to continue when no checksum is found or when the computed checksum differs; returns 0 on success or after user confirmation, returns 1 if the user declines to proceed.
+# verify_script_checksum Verifies a script's SHA-256 checksum against CHECKSUM_FILE, prompts the user if the checksum is missing or does not match, and returns 0 if verification is accepted (or skipped) or 1 if the user declines to continue.
 verify_script_checksum() {
     local script_path="$1"
     local script_name
@@ -739,9 +739,7 @@ verify_script_checksum() {
     return 0
 }
 
-# generate_checksums generates SHA-256 checksums for all scripts in Installers/ and writes them to CHECKSUM_FILE.
-# It requires the `sha256sum` utility and returns non-zero if the Installers directory is missing, `sha256sum` is unavailable, or no installer scripts are found.
-# On success it overwrites any existing checksum file with one entry per script and returns 0.
+# generate_checksums generates SHA-256 checksums for all shell scripts in Installers/ and writes them to CHECKSUM_FILE; accepts an optional "silent" argument to suppress output and returns 0 on success or a non-zero status if the Installers directory is missing, sha256sum is unavailable, or no scripts were found.
 generate_checksums() {
     local silent="${1:-}"
     local installers_dir="$SCRIPT_DIR/Installers"
@@ -780,7 +778,7 @@ generate_checksums() {
     return 0
 }
 
-# execute_script executes an installer from Installers/, verifying existence/readability and file type, validating checksum, ensuring executability, honoring REQUIRES_ROOT (prompting to run with sudo, continue without root, or cancel), printing an optional DESCRIPTION, running the script, and reporting its exit code.
+# execute_script executes an installer script from Installers/, verifying existence, readability, and file type; validating its SHA-256 checksum; ensuring it is executable; honoring a REQUIRES_ROOT metadata flag (prompting to run with sudo, run anyway, or cancel) and detecting common root-requiring commands; printing DESCRIPTION metadata when present; running the script; and if the script exits with code 42, printing a goodbye message and terminating the entire application.
 execute_script() {
     set +e
 
@@ -865,6 +863,11 @@ execute_script() {
                 echo -e "${GREEN}>>> Executing: $script_name (as root)${NC}"
                 sleep 0.5
                 sudo bash "$full_path"
+                local script_exit=$?
+                if [[ $script_exit -eq $EXIT_APP_CODE ]]; then
+                    echo -e "\n${GREEN}Goodbye!${NC}"
+                    exit 0
+                fi
                 pause
                 set -e
                 return 0
@@ -887,8 +890,12 @@ execute_script() {
 
     echo -e "${GREEN}>>> Executing: $script_name${NC}"
     sleep 0.5
-
     bash "$full_path"
+    local script_exit=$?
+    if [[ $script_exit -eq $EXIT_APP_CODE ]]; then
+        echo -e "\n${GREEN}Goodbye!${NC}"
+        exit 0
+    fi
     pause
     set -e
     return 0

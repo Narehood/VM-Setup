@@ -16,11 +16,11 @@ WHITE='\033[1;37m'
 NC='\033[0m'
 
 UI_WIDTH=86
+EXIT_APP_CODE=42
 
-# Handle Ctrl+C gracefully
-trap 'echo -e "\n${GREEN}Goodbye!${NC}"; exit 0' INT
+trap 'echo -e "\n${GREEN}Goodbye!${NC}"; exit $EXIT_APP_CODE' INT
 
-# print_centered centers the given text within UI_WIDTH and prints it, using the optional ANSI color escape sequence provided as the second argument.
+# print_centered centers the given text within UI_WIDTH and prints it using the optional ANSI color (defaults to no color).
 print_centered() {
     local text="$1"
     local color="${2:-$NC}"
@@ -29,29 +29,29 @@ print_centered() {
     printf "${color}%${padding}s%s${NC}\n" "" "$text"
 }
 
-# print_line draws a horizontal line of length UI_WIDTH using the specified character (default '=') and color (default BLUE).
+# print_line prints a horizontal line of length $UI_WIDTH composed of the given character (default `=`) using the specified color (default `$BLUE`).
 print_line() {
     local char="${1:-=}"
     local color="${2:-$BLUE}"
     printf "${color}%${UI_WIDTH}s${NC}\n" "" | sed "s/ /${char}/g"
 }
 
-# print_status prints an informational message prefixed with a cyan "[INFO]" tag.
+# print_status prints a message prefixed with `[INFO]` in cyan color.
 print_status() { echo -e "${CYAN}[INFO]${NC} $1"; }
-# print_success prints a success message prefixed with [OK] in green and echoes the provided message.
+# print_success prints a green "[OK]" status tag followed by the given message.
 print_success() { echo -e "${GREEN}[OK]${NC} $1"; }
-# print_warn prints a warning message prefixed with [WARN] in yellow to standard output.
+# print_warn prints a warning message prefixed with "[WARN]" in yellow followed by the provided message to stdout.
 print_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
-# print_error prints MESSAGE prefixed with a red "[ERROR]" tag.
+# print_error prints an "[ERROR]" label in red followed by the provided message.
 print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
-# pause prompts the user to press Enter to return to the menu.
+# pause prompts the user to press Enter to return to the menu and waits for input.
 pause() {
     echo ""
     read -rp "Press [Enter] to return to the menu..."
 }
 
-# truncate_string shortens a string to a maximum length, appending ".." when truncation occurs.
+# truncate_string truncates a string to a maximum length and appends ".." when the original exceeds that length.
 truncate_string() {
     local str="$1"
     local max_len="$2"
@@ -62,12 +62,12 @@ truncate_string() {
     fi
 }
 
-# get_current_branch prints the current Git branch name or "unknown" if unavailable.
+# get_current_branch returns the current Git branch name or "unknown" if it cannot be determined.
 get_current_branch() {
     git branch --show-current 2>/dev/null || echo "unknown"
 }
 
-# show_header clears the terminal and prints the ASCII art banner with the centered title and a colored horizontal separator.
+# show_header clears the terminal and prints a stylized "SERVER CONFIGURATION" banner with a centered subtitle and a separator line.
 show_header() {
     clear
     echo -e "${BLUE}███████╗██╗   ██╗███████╗████████╗███████╗███╗   ███╗    ███████╗███████╗████████╗██╗   ██╗██████╗ ${NC}"
@@ -80,7 +80,7 @@ show_header() {
     print_line "=" "$BLUE"
 }
 
-# show_stats displays a formatted system information grid including OS, kernel, hostname, load average, memory and disk usage, network details, uptime, and current Git branch.
+# show_stats displays a formatted SYSTEM INFORMATION block including OS, kernel, hostname, load average, memory and disk usage, uptime, IP/subnet/gateway, and current git branch.
 show_stats() {
     local distro="Unknown"
     if [ -f /etc/os-release ]; then
@@ -179,15 +179,13 @@ show_stats() {
     print_line "=" "$BLUE"
 }
 
-# Config scripts: format is "script.sh:Display Name"
 declare -A CONFIG_SCRIPTS=(
     [1]="mtu-fix.sh:MTU Configuration"
 )
 
-# Get total number of options for menu display
 TOTAL_OPTIONS=${#CONFIG_SCRIPTS[@]}
 
-# execute_config validates a script's existence/readability, offers to fix its executable bit, runs the script, reports a non-zero exit code, and prompts the user to return to the menu or exit.
+# execute_config validates and runs a configuration script (making it executable on request), captures its exit code, and prompts the user to continue, return to the main menu, or quit.
 execute_config() {
     local script_name="$1"
     local display_name="$2"
@@ -226,6 +224,11 @@ execute_config() {
     local exit_code=$?
     set -e
 
+    if [ $exit_code -eq $EXIT_APP_CODE ]; then
+       echo -e "\n${GREEN}Goodbye!${NC}"
+       exit $EXIT_APP_CODE
+    fi
+
     echo ""
     print_line "-" "$BLUE"
 
@@ -233,57 +236,61 @@ execute_config() {
         print_warn "Script exited with code: $exit_code"
     fi
 
-    read -rp "Press [Enter] to return to menu or type 'exit': " next_action
-    if [ "$next_action" = "exit" ]; then
-        echo -e "\n${GREEN}Goodbye!${NC}"
-        exit 0
-    fi
+    echo ""
+    read -rp "Press [Enter] to continue, [b] for main menu, [q] to quit: " next_action
+    case "$next_action" in
+        b|B)
+            echo -e "\n${GREEN}Returning to Main Menu...${NC}"
+            exit 0
+            ;;
+        q|Q)
+            echo -e "\n${GREEN}Goodbye!${NC}"
+            exit $EXIT_APP_CODE
+            ;;
+    esac
 }
 
-# show_menu displays the available config scripts in a formatted menu.
+# show_menu prints the configuration options menu, listing each entry from CONFIG_SCRIPTS with numbered options and showing a "Return to Main Menu" (0) and "Exit" (q) choice.
 show_menu() {
     echo -e "${WHITE}CONFIGURATION OPTIONS${NC}"
 
-    # Single column for now, can expand to two columns as more options are added
     for key in $(echo "${!CONFIG_SCRIPTS[@]}" | tr ' ' '\n' | sort -n); do
         local name="${CONFIG_SCRIPTS[$key]#*:}"
         printf "  ${CYAN}%d.${NC} %s\n" "$key" "$name"
     done
 
     echo ""
-    printf "  ${CYAN}0.${NC} ${RED}%s${NC}\n" "Return to Main Menu"
+    printf "  ${CYAN}0.${NC} %-38s ${CYAN}q.${NC} ${RED}%s${NC}\n" "Return to Main Menu" "Exit"
     echo ""
     print_line "-" "$BLUE"
 }
 
-# MAIN LOOP
 while true; do
     show_header
     show_stats
     show_menu
 
-    read -rp "  Enter selection [0-$TOTAL_OPTIONS]: " choice
+    read -rp "  Enter selection [0-$TOTAL_OPTIONS, b, q]: " choice
 
-    case "$choice" in
-        [1-9])
-            if [ -n "${CONFIG_SCRIPTS[$choice]:-}" ]; then
-                script="${CONFIG_SCRIPTS[$choice]%%:*}"
-                name="${CONFIG_SCRIPTS[$choice]#*:}"
-                execute_config "$script" "$name"
-            else
-                print_error "Invalid option."
-                sleep 1
-            fi
-            ;;
-        0|q|exit)
-            echo -e "\n${GREEN}Returning to Main Menu...${NC}"
-            exit 0
-            ;;
-        "")
-            ;;
-        *)
+    if [[ -z "$choice" ]]; then
+        continue
+    elif [[ "$choice" =~ ^(0|b|back)$ ]]; then
+        echo -e "\n${GREEN}Returning to Main Menu...${NC}"
+        exit 0
+    elif [[ "$choice" =~ ^(q|qq|exit)$ ]]; then
+        echo -e "\n${GREEN}Goodbye!${NC}"
+        exit $EXIT_APP_CODE
+    elif [[ "$choice" =~ ^[1-9][0-9]*$ ]]; then
+        if [ -n "${CONFIG_SCRIPTS[$choice]:-}" ]; then
+            script="${CONFIG_SCRIPTS[$choice]%%:*}"
+            name="${CONFIG_SCRIPTS[$choice]#*:}"
+            execute_config "$script" "$name"
+        else
             print_error "Invalid option: $choice"
             sleep 1
-            ;;
-    esac
+        fi
+    else
+        print_error "Invalid option: $choice"
+        sleep 1
+    fi
 done
