@@ -20,6 +20,7 @@ EXIT_APP_CODE=42
 
 trap 'echo -e "\n${GREEN}Goodbye!${NC}"; exit $EXIT_APP_CODE' INT
 
+# print_centered centers the given text within UI_WIDTH and prints it using the optional ANSI color (defaults to no color).
 print_centered() {
     local text="$1"
     local color="${2:-$NC}"
@@ -28,22 +29,29 @@ print_centered() {
     printf "${color}%${padding}s%s${NC}\n" "" "$text"
 }
 
+# print_line prints a horizontal line of length $UI_WIDTH composed of the given character (default `=`) using the specified color (default `$BLUE`).
 print_line() {
     local char="${1:-=}"
     local color="${2:-$BLUE}"
     printf "${color}%${UI_WIDTH}s${NC}\n" "" | sed "s/ /${char}/g"
 }
 
+# print_status prints a message prefixed with `[INFO]` in cyan color.
 print_status() { echo -e "${CYAN}[INFO]${NC} $1"; }
+# print_success prints a green "[OK]" status tag followed by the given message.
 print_success() { echo -e "${GREEN}[OK]${NC} $1"; }
+# print_warn prints a warning message prefixed with "[WARN]" in yellow followed by the provided message to stdout.
 print_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+# print_error prints an "[ERROR]" label in red followed by the provided message.
 print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
+# pause prompts the user to press Enter to return to the menu and waits for input.
 pause() {
     echo ""
     read -rp "Press [Enter] to return to the menu..."
 }
 
+# truncate_string truncates a string to a maximum length and appends ".." when the original exceeds that length.
 truncate_string() {
     local str="$1"
     local max_len="$2"
@@ -54,10 +62,12 @@ truncate_string() {
     fi
 }
 
+# get_current_branch returns the current Git branch name or "unknown" if it cannot be determined.
 get_current_branch() {
     git branch --show-current 2>/dev/null || echo "unknown"
 }
 
+# show_header clears the terminal and prints a stylized "SERVER CONFIGURATION" banner with a centered subtitle and a separator line.
 show_header() {
     clear
     echo -e "${BLUE}███████╗██╗   ██╗███████╗████████╗███████╗███╗   ███╗    ███████╗███████╗████████╗██╗   ██╗██████╗ ${NC}"
@@ -70,6 +80,7 @@ show_header() {
     print_line "=" "$BLUE"
 }
 
+# show_stats displays a formatted SYSTEM INFORMATION block including OS, kernel, hostname, load average, memory and disk usage, uptime, IP/subnet/gateway, and current git branch.
 show_stats() {
     local distro="Unknown"
     if [ -f /etc/os-release ]; then
@@ -174,6 +185,7 @@ declare -A CONFIG_SCRIPTS=(
 
 TOTAL_OPTIONS=${#CONFIG_SCRIPTS[@]}
 
+# execute_config validates and runs a configuration script (making it executable on request), captures its exit code, and prompts the user to continue, return to the main menu, or quit.
 execute_config() {
     local script_name="$1"
     local display_name="$2"
@@ -233,6 +245,7 @@ execute_config() {
     esac
 }
 
+# show_menu prints the configuration options menu, listing each entry from CONFIG_SCRIPTS with numbered options and showing a "Return to Main Menu" (0) and "Exit" (q) choice.
 show_menu() {
     echo -e "${WHITE}CONFIGURATION OPTIONS${NC}"
 
