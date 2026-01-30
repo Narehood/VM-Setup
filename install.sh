@@ -697,7 +697,7 @@ parse_script_metadata() {
     head -n 20 "$script_path" 2>/dev/null | grep -i "^# *${key}:" | head -n 1 | sed "s/^# *${key}: *//i" || echo ""
 }
 
-# verify_script_checksum Verifies a script's sha256 checksum from CHECKSUM_FILE and prompts the user on missing or mismatched entries.
+# verify_script_checksum Verifies a script's SHA-256 checksum against CHECKSUM_FILE, prompts the user if the checksum is missing or does not match, and returns 0 if verification is accepted (or skipped) or 1 if the user declines to continue.
 verify_script_checksum() {
     local script_path="$1"
     local script_name
@@ -739,7 +739,7 @@ verify_script_checksum() {
     return 0
 }
 
-# generate_checksums generates SHA-256 checksums for all scripts in Installers/ and writes them to CHECKSUM_FILE.
+# generate_checksums generates SHA-256 checksums for all shell scripts in Installers/ and writes them to CHECKSUM_FILE; accepts an optional "silent" argument to suppress output and returns 0 on success or a non-zero status if the Installers directory is missing, sha256sum is unavailable, or no scripts were found.
 generate_checksums() {
     local silent="${1:-}"
     local installers_dir="$SCRIPT_DIR/Installers"
@@ -778,7 +778,7 @@ generate_checksums() {
     return 0
 }
 
-# execute_script executes an installer from Installers/, verifying existence/readability and file type, validating checksum, ensuring executability, honoring REQUIRES_ROOT, printing an optional DESCRIPTION, running the script, and checking for exit code 42 to exit the entire application.
+# execute_script executes an installer script from Installers/, verifying existence, readability, and file type; validating its SHA-256 checksum; ensuring it is executable; honoring a REQUIRES_ROOT metadata flag (prompting to run with sudo, run anyway, or cancel) and detecting common root-requiring commands; printing DESCRIPTION metadata when present; running the script; and if the script exits with code 42, printing a goodbye message and terminating the entire application.
 execute_script() {
     set +e
 

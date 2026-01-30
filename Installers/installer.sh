@@ -20,6 +20,7 @@ EXIT_APP_CODE=42
 
 trap 'echo -e "\n${GREEN}Goodbye!${NC}"; exit $EXIT_APP_CODE' INT
 
+# print_centered centers the given text within UI_WIDTH using an optional color and prints a single padded line.
 print_centered() {
     local text="$1"
     local color="${2:-$NC}"
@@ -28,22 +29,29 @@ print_centered() {
     printf "${color}%${padding}s%s${NC}\n" "" "$text"
 }
 
+# print_line prints a horizontal line of length UI_WIDTH using the specified character (default '=') and color (default $BLUE).
 print_line() {
     local char="${1:-=}"
     local color="${2:-$BLUE}"
     printf "${color}%${UI_WIDTH}s${NC}\n" "" | sed "s/ /${char}/g"
 }
 
+# print_status prints an informational message prefixed with a cyan "[INFO]" tag.
 print_status() { echo -e "${CYAN}[INFO]${NC} $1"; }
+# print_success prints the given message prefixed with a green `[OK]` tag to stdout.
 print_success() { echo -e "${GREEN}[OK]${NC} $1"; }
+# print_warn prints a warning message prefixed with a yellow "[WARN]" tag.
 print_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+# print_error prints MESSAGE to stdout prefixed with a red '[ERROR]' tag.
 print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
+# pause prints a blank line and waits for the user to press Enter to return to the menu.
 pause() {
     echo ""
     read -rp "Press [Enter] to return to the menu..."
 }
 
+# truncate_string truncates a string to max_len characters (including a trailing '..' when truncated) and echoes the result.
 truncate_string() {
     local str="$1"
     local max_len="$2"
@@ -54,10 +62,12 @@ truncate_string() {
     fi
 }
 
+# get_current_branch prints the current Git branch name or "unknown" if the branch cannot be determined.
 get_current_branch() {
     git branch --show-current 2>/dev/null || echo "unknown"
 }
 
+# show_header clears the screen and prints the stylized ASCII art header, a centered title, and a decorative line.
 show_header() {
     clear
     echo -e "${BLUE}███████╗██╗   ██╗███████╗████████╗███████╗███╗   ███╗    ███████╗███████╗████████╗██╗   ██╗██████╗ ${NC}"
@@ -70,6 +80,8 @@ show_header() {
     print_line "=" "$BLUE"
 }
 
+# show_stats prints a formatted system information panel to stdout.
+# It displays OS, kernel, hostname, IP/subnet/gateway, load average, memory and disk usage, uptime, and the current Git branch.
 show_stats() {
     local distro="Unknown"
     if [ -f /etc/os-release ]; then
@@ -179,6 +191,7 @@ declare -A INSTALLERS=(
 
 TOTAL_OPTIONS=${#INSTALLERS[@]}
 
+# execute_installer validates and runs an installer script (first arg: script path, second arg: display name), reports non-zero exit codes, and prompts the user to continue, return to the main menu, or quit.
 execute_installer() {
     local script_name="$1"
     local display_name="$2"
@@ -238,6 +251,7 @@ execute_installer() {
     esac
 }
 
+# show_menu displays the available installers in two columns (keys 1–6) and prints options to return to the main menu (0) or exit (q).
 show_menu() {
     echo -e "${WHITE}AVAILABLE INSTALLERS${NC}"
 
