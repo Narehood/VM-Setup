@@ -61,7 +61,7 @@ bash install.sh
 | **Docker Prep** | Full Docker Engine installation + user group configuration |
 | **App Installers** | One-click install for UniFi Controller, Xen Orchestra, and Pterodactyl |
 | **Security** | Enable automated unattended security upgrades |
-| **Maintenance** | System update helper and self-updating menu |
+| **Server Config** | Manage System Level Settings |
 | **LinUtil** | Integrated launcher for Chris Titus's Linux Utility |
 | **Persistent Settings** | User preferences stored locally and respected on each run |
 
@@ -78,7 +78,7 @@ The script provides an interactive dashboard with the following modules:
 | **Docker Host Preparation** | Engine setup & permissions |
 | **Auto Security Patches** | Configure cron/systemd timers for updates |
 | **Run System Updates** | Smart wrapper for apt/dnf/pacman/apk |
-| **Update This Menu** | Pulls latest changes from GitHub |
+| **Server Config** | Manage System Level Settings |
 | **Launch LinUtil** | External utility integration |
 | **Switch Branch** | Change to dev/testing branches |
 | **Settings** | Manage user preferences and behavior |
@@ -139,3 +139,4 @@ This project utilizes and wraps several excellent community scripts:
 *Bug reports are welcome, but fixes are not guaranteed.*
 
 </div>
+
