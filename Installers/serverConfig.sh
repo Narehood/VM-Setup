@@ -273,8 +273,8 @@ while true; do
     read -rp "  Enter selection [0-$TOTAL_OPTIONS, b, q]: " choice
 
     case "$choice" in
-        [1-9])
-            if [ -n "${CONFIG_SCRIPTS[$choice]:-}" ]; then
+        [0-9])
+            if [[ "$choice" =~ ^[1-9][0-9]*$ ]] && [ -n "${CONFIG_SCRIPTS[$choice]:-}" ]; then
                 script="${CONFIG_SCRIPTS[$choice]%%:*}"
                 name="${CONFIG_SCRIPTS[$choice]#*:}"
                 execute_config "$script" "$name"
