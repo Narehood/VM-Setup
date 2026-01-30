@@ -16,7 +16,7 @@ WHITE='\033[1;37m'
 NC='\033[0m'
 
 UI_WIDTH=86
-SCRIPT_VERSION="3.6.3"
+SCRIPT_VERSION="3.6.4"
 CHECKSUM_FILE="$SCRIPT_DIR/Installers/.checksums.sha256"
 EXIT_APP_CODE=42
 
@@ -868,7 +868,9 @@ execute_script() {
                     echo -e "\n${GREEN}Goodbye!${NC}"
                     exit 0
                 fi
-                pause
+                if [[ $script_exit -ne 0 ]]; then
+                    pause
+                fi
                 set -e
                 return 0
                 ;;
@@ -896,7 +898,9 @@ execute_script() {
         echo -e "\n${GREEN}Goodbye!${NC}"
         exit 0
     fi
-    pause
+    if [[ $script_exit -ne 0 ]]; then
+        pause
+    fi
     set -e
     return 0
 }
