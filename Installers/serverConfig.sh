@@ -272,30 +272,25 @@ while true; do
 
     read -rp "  Enter selection [0-$TOTAL_OPTIONS, b, q]: " choice
 
-    case "$choice" in
-        [0-9])
-            if [[ "$choice" =~ ^[1-9][0-9]*$ ]] && [ -n "${CONFIG_SCRIPTS[$choice]:-}" ]; then
-                script="${CONFIG_SCRIPTS[$choice]%%:*}"
-                name="${CONFIG_SCRIPTS[$choice]#*:}"
-                execute_config "$script" "$name"
-            else
-                print_error "Invalid option."
-                sleep 1
-            fi
-            ;;
-        0|b|back)
-            echo -e "\n${GREEN}Returning to Main Menu...${NC}"
-            exit 0
-            ;;
-        q|qq|exit)
-            echo -e "\n${GREEN}Goodbye!${NC}"
-            exit $EXIT_APP_CODE
-            ;;
-        "")
-            ;;
-        *)
+    if [[ -z "$choice" ]]; then
+        continue
+    elif [[ "$choice" =~ ^(0|b|back)$ ]]; then
+        echo -e "\n${GREEN}Returning to Main Menu...${NC}"
+        exit 0
+    elif [[ "$choice" =~ ^(q|qq|exit)$ ]]; then
+        echo -e "\n${GREEN}Goodbye!${NC}"
+        exit $EXIT_APP_CODE
+    elif [[ "$choice" =~ ^[1-9][0-9]*$ ]]; then
+        if [ -n "${CONFIG_SCRIPTS[$choice]:-}" ]; then
+            script="${CONFIG_SCRIPTS[$choice]%%:*}"
+            name="${CONFIG_SCRIPTS[$choice]#*:}"
+            execute_config "$script" "$name"
+        else
             print_error "Invalid option: $choice"
             sleep 1
-            ;;
-    esac
+        fi
+    else
+        print_error "Invalid option: $choice"
+        sleep 1
+    fi
 done
