@@ -1,5 +1,5 @@
 #!/bin/bash
-set -uo pipefail
+set -euo pipefail
 
 # --- 1. CRITICAL SETUP & RESTART FIX ---
 SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
@@ -7,21 +7,41 @@ SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 cd "$SCRIPT_DIR" || { echo "Failed to change directory to $SCRIPT_DIR"; exit 1; }
 
 # --- 2. VISUAL STYLING ---
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-YELLOW='\033[1;33m'
-WHITE='\033[1;37m'
-NC='\033[0m'
+readonly RED='\033[0;31m'
+readonly GREEN='\033[0;32m'
+readonly BLUE='\033[0;34m'
+readonly CYAN='\033[0;36m'
+readonly YELLOW='\033[1;33m'
+readonly WHITE='\033[1;37m'
+readonly NC='\033[0m'
 
-UI_WIDTH=86
-SCRIPT_VERSION="3.6.4"
-CHECKSUM_FILE="$SCRIPT_DIR/Installers/.checksums.sha256"
-EXIT_APP_CODE=42
+readonly UI_WIDTH=86
+readonly SCRIPT_VERSION="3.6.5"
+readonly CHECKSUM_FILE="$SCRIPT_DIR/Installers/.checksums.sha256"
+readonly EXIT_APP_CODE=42
 
-# --- 3. SETTINGS & CONFIGURATION ---
+# --- 3. COMMAND AVAILABILITY CACHE ---
+HAS_GIT=$(command -v git &>/dev/null && echo 1 || echo 0)
+HAS_SHA256SUM=$(command -v sha256sum &>/dev/null && echo 1 || echo 0)
+HAS_FILE=$(command -v file &>/dev/null && echo 1 || echo 0)
+HAS_SUDO=$(command -v sudo &>/dev/null && echo 1 || echo 0)
+
+# --- 4. CLEANUP TRAP ---
+cleanup() {
+    tput cnorm 2>/dev/null || true
+}
+trap cleanup EXIT
+
+# --- 5. SETTINGS & CONFIGURATION ---
 SETTINGS_FILE="$SCRIPT_DIR/settings.conf"
+
+# trim_whitespace removes leading and trailing whitespace from a string using parameter expansion.
+trim_whitespace() {
+    local str="$1"
+    str="${str#"${str%%[![:space:]]*}"}"
+    str="${str%"${str##*[![:space:]]}"}"
+    printf '%s' "$str"
+}
 
 # load_settings loads AUTO_UPDATE_CHECK and CONFIRM_UPDATES_ON_STARTUP from SETTINGS_FILE, initializing defaults, creating the file if missing, normalizing its permissions to 600 when possible, and applying only valid `true`/`false` values.
 load_settings() {
@@ -35,7 +55,7 @@ load_settings() {
     
     local file_perms
     file_perms=$(stat -c %a "$SETTINGS_FILE" 2>/dev/null || stat -f %OLp "$SETTINGS_FILE" 2>/dev/null)
-    if [[ -n "$file_perms" ]] && [[ "$file_perms" != "600" ]]; then
+    if [[ -n "$file_perms" && "$file_perms" != "600" ]]; then
         chmod 600 "$SETTINGS_FILE" 2>/dev/null || true
     fi
     
@@ -46,8 +66,8 @@ load_settings() {
         key="${line%%=*}"
         value="${line#*=}"
         
-        key=$(echo "$key" | xargs)
-        value=$(echo "$value" | xargs)
+        key=$(trim_whitespace "$key")
+        value=$(trim_whitespace "$value")
         
         value="${value#\"}"
         value="${value%\"}"
@@ -83,7 +103,7 @@ print_centered() {
     local text="$1"
     local color="${2:-$NC}"
     local padding=$(( (UI_WIDTH - ${#text}) / 2 ))
-    [[ "$padding" -lt 0 ]] && padding=0
+    ((padding < 0)) && padding=0
     printf "${color}%${padding}s%s${NC}\n" "" "$text"
 }
 
@@ -126,21 +146,25 @@ confirm_prompt() {
 truncate_string() {
     local str="$1"
     local max_len="$2"
-    if [[ ${#str} -gt "$max_len" ]]; then
-        echo "${str:0:$((max_len - 2))}.."
+    if ((${#str} > max_len)); then
+        printf '%s..' "${str:0:$((max_len - 2))}"
     else
-        echo "$str"
+        printf '%s' "$str"
     fi
 }
 
 # get_current_branch prints the current Git branch name or "unknown" if not in a Git repository or Git cannot determine the branch.
 get_current_branch() {
-    git branch --show-current 2>/dev/null || echo "unknown"
+    if ((HAS_GIT)); then
+        git branch --show-current 2>/dev/null || echo "unknown"
+    else
+        echo "unknown"
+    fi
 }
 
 # is_root determines whether the effective user ID is 0 (root).
 is_root() {
-    [[ "$EUID" -eq 0 ]]
+    ((EUID == 0))
 }
 
 # fix_permissions ensures all Installers/*.sh files are executable; pass "silent" as the first argument to suppress per-file messages and summary.
@@ -169,7 +193,7 @@ fix_permissions() {
 
     if [[ "$silent" != "silent" ]]; then
         echo ""
-        if [[ $fixed -eq 0 ]]; then
+        if ((fixed == 0)); then
             print_success "All $total scripts already have correct permissions."
         else
             print_success "Fixed permissions on $fixed of $total scripts."
@@ -192,36 +216,57 @@ show_header() {
     print_line "=" "$BLUE"
 }
 
+# get_os_info retrieves OS ID and pretty name from /etc/os-release without polluting the global namespace.
+get_os_info() {
+    local info_type="$1"
+    if [[ -f /etc/os-release ]]; then
+        case "$info_type" in
+            id)
+                grep -Po '(?<=^ID=).+' /etc/os-release 2>/dev/null | tr -d '"' || echo ""
+                ;;
+            version_id)
+                grep -Po '(?<=^VERSION_ID=).+' /etc/os-release 2>/dev/null | tr -d '"' || echo ""
+                ;;
+            pretty_name)
+                grep -Po '(?<=^PRETTY_NAME=).+' /etc/os-release 2>/dev/null | tr -d '"' || echo ""
+                ;;
+        esac
+    fi
+}
+
 # show_stats prints a concise system information panel (OS, kernel, hostname, IP, subnet, gateway, load average, memory and disk usage, uptime, and current Git branch), truncating long values and handling missing files/commands gracefully.
 show_stats() {
     local distro="Unknown"
     local os_id=""
+    local version_id=""
 
-    if [[ -f /etc/os-release ]]; then
-        source /etc/os-release
-        os_id="${ID:-}"
+    os_id=$(get_os_info "id")
+    version_id=$(get_os_info "version_id")
 
+    if [[ -n "$os_id" ]]; then
         case "$os_id" in
             alpine)
-                distro="Alpine ${VERSION_ID:-}"
+                distro="Alpine ${version_id}"
                 ;;
             pop)
-                distro="Pop!_OS ${VERSION_ID:-}"
+                distro="Pop!_OS ${version_id}"
                 ;;
             endeavouros)
                 distro="EndeavourOS"
                 ;;
             manjaro)
-                distro="Manjaro ${VERSION_ID:-}"
+                distro="Manjaro ${version_id}"
                 ;;
             arch)
                 distro="Arch Linux"
                 ;;
             ubuntu|debian|fedora|rocky|almalinux|centos|rhel|opensuse*|suse|sles|linuxmint|kali)
-                distro="${PRETTY_NAME:-$ID}"
+                distro=$(get_os_info "pretty_name")
+                [[ -z "$distro" ]] && distro="$os_id"
                 ;;
             *)
-                distro="${PRETTY_NAME:-$ID}"
+                distro=$(get_os_info "pretty_name")
+                [[ -z "$distro" ]] && distro="$os_id"
                 ;;
         esac
     fi
@@ -237,9 +282,9 @@ show_stats() {
         local days=$((uptime_secs / 86400))
         local hours=$(( (uptime_secs % 86400) / 3600 ))
         local mins=$(( (uptime_secs % 3600) / 60 ))
-        if [[ "$days" -gt 0 ]]; then
+        if ((days > 0)); then
             uptime_str="${days}d ${hours}h ${mins}m"
-        elif [[ "$hours" -gt 0 ]]; then
+        elif ((hours > 0)); then
             uptime_str="${hours}h ${mins}m"
         else
             uptime_str="${mins}m"
@@ -256,7 +301,7 @@ show_stats() {
         local mem_total mem_avail mem_used mem_pct
         mem_total=$(LC_ALL=C awk '/^MemTotal:/ {print int($2/1024)}' /proc/meminfo)
         mem_avail=$(LC_ALL=C awk '/^MemAvailable:/ {print int($2/1024)}' /proc/meminfo)
-        if [[ -n "$mem_total" ]] && [[ -n "$mem_avail" ]] && [[ "$mem_total" -gt 0 ]]; then
+        if [[ -n "$mem_total" && -n "$mem_avail" && "$mem_total" -gt 0 ]]; then
             mem_used=$((mem_total - mem_avail))
             mem_pct=$((mem_used * 100 / mem_total))
             mem_usage="${mem_used}/${mem_total}MB (${mem_pct}%)"
@@ -270,9 +315,9 @@ show_stats() {
         if [[ -n "$disk_info" ]]; then
             local used total pct
             read -r used total pct <<< "$disk_info"
-            if [[ -n "$used" ]] && [[ -n "$total" ]] && [[ -n "$pct" ]]; then
+            if [[ -n "$used" && -n "$total" && -n "$pct" ]]; then
                 local used_h total_h
-                if [[ "$total" -ge 1048576 ]]; then
+                if ((total >= 1048576)); then
                     used_h="$((used / 1048576))G"
                     total_h="$((total / 1048576))G"
                 else
@@ -322,7 +367,7 @@ check_for_updates() {
     echo ""
     print_status "Checking for updates..."
 
-    if ! command -v git &>/dev/null; then
+    if ((! HAS_GIT)); then
         print_error "Git is not installed. Cannot check for updates."
         sleep 2
         return 1
@@ -390,7 +435,7 @@ check_for_updates_interactive() {
     echo ""
     print_status "Checking for updates..."
 
-    if ! command -v git &>/dev/null; then
+    if ((! HAS_GIT)); then
         print_error "Git is not installed. Cannot check for updates."
         sleep 2
         return 1
@@ -498,7 +543,7 @@ switch_branch() {
     print_line "=" "$BLUE"
     echo ""
 
-    if ! command -v git &>/dev/null; then
+    if ((! HAS_GIT)); then
         print_error "Git is not installed."
         pause
         return 1
@@ -518,7 +563,7 @@ switch_branch() {
     local current_branch
     current_branch=$(get_current_branch)
 
-    if [[ -z "$current_branch" ]] || [[ "$current_branch" = "unknown" ]]; then
+    if [[ -z "$current_branch" || "$current_branch" = "unknown" ]]; then
         print_warn "Currently in detached HEAD state."
         current_branch="(detached)"
     fi
@@ -545,7 +590,7 @@ switch_branch() {
     while IFS= read -r branch; do
         branch="${branch// /}"
         branch="${branch#origin/}"
-        if [[ -n "$branch" ]] && [[ "$branch" != "HEAD" ]]; then
+        if [[ -n "$branch" && "$branch" != "HEAD" ]]; then
             local is_local="false"
             for local_branch in "${branches[@]}"; do
                 if [[ "$local_branch" = "$branch" ]]; then
@@ -580,13 +625,13 @@ switch_branch() {
 
     read -rp "  Select branch [0-$((${#branches[@]}))] : " selection
 
-    if [[ "$selection" = "0" ]] || [[ -z "$selection" ]]; then
+    if [[ "$selection" = "0" || -z "$selection" ]]; then
         print_status "Cancelled."
         sleep 1
         return 0
     fi
 
-    if ! [[ "$selection" =~ ^[0-9]+$ ]] || [[ "$selection" -lt 1 ]] || [[ "$selection" -gt ${#branches[@]} ]]; then
+    if ! [[ "$selection" =~ ^[0-9]+$ ]] || ((selection < 1)) || ((selection > ${#branches[@]})); then
         print_error "Invalid selection."
         sleep 1
         return 1
@@ -660,7 +705,7 @@ switch_branch() {
     fi
 
     local checkout_status=$?
-    if [[ $checkout_status -ne 0 ]]; then
+    if ((checkout_status != 0)); then
         print_error "Failed to switch branch."
         echo -e "  ${RED}Details:${NC} $checkout_output"
         pause
@@ -705,7 +750,7 @@ verify_script_checksum() {
 
     [[ ! -f "$CHECKSUM_FILE" ]] && return 0
 
-    if ! command -v sha256sum &>/dev/null; then
+    if ((! HAS_SHA256SUM)); then
         print_warn "sha256sum not available, skipping integrity check."
         return 0
     fi
@@ -749,7 +794,7 @@ generate_checksums() {
         return 1
     fi
 
-    if ! command -v sha256sum &>/dev/null; then
+    if ((! HAS_SHA256SUM)); then
         [[ "$silent" != "silent" ]] && print_error "sha256sum not available."
         return 1
     fi
@@ -768,7 +813,7 @@ generate_checksums() {
         fi
     done < <(find "$installers_dir" -maxdepth 1 -name "*.sh" -type f -print0) || true
 
-    if [[ $count -eq 0 ]]; then
+    if ((count == 0)); then
         [[ "$silent" != "silent" ]] && print_warn "No scripts found to checksum."
         rm -f "$CHECKSUM_FILE"
         return 1
@@ -790,24 +835,21 @@ execute_script() {
     if [[ ! -f "$full_path" ]]; then
         print_error "Script not found: $full_path"
         pause
-        set -e
         return 0
     fi
 
     if [[ ! -r "$full_path" ]]; then
         print_error "Script not readable: $full_path"
         pause
-        set -e
         return 0
     fi
 
     local file_type
-    if command -v file &>/dev/null; then
+    if ((HAS_FILE)); then
         file_type=$(file -b "$full_path" 2>/dev/null || echo "unknown")
-        if [[ "$file_type" != "unknown" ]] && [[ ! "$file_type" =~ (shell|bash|sh|text|ASCII|script) ]]; then
+        if [[ "$file_type" != "unknown" && ! "$file_type" =~ (shell|bash|sh|text|ASCII|script) ]]; then
             print_error "File does not appear to be a shell script: $file_type"
             pause
-            set -e
             return 0
         fi
     else
@@ -817,7 +859,6 @@ execute_script() {
             print_warn "Cannot verify file type (file command not available)"
             if ! confirm_prompt "  Continue anyway? (y/N): " "n"; then
                 pause
-                set -e
                 return 0
             fi
         fi
@@ -826,7 +867,6 @@ execute_script() {
     if ! verify_script_checksum "$full_path"; then
         print_error "Script verification failed. Aborting."
         pause
-        set -e
         return 0
     fi
 
@@ -853,10 +893,9 @@ execute_script() {
 
         case "$root_option" in
             1)
-                if ! command -v sudo &>/dev/null; then
+                if ((! HAS_SUDO)); then
                     print_error "sudo is not installed."
                     pause
-                    set -e
                     return 0
                 fi
                 print_status "Executing with sudo..."
@@ -864,14 +903,13 @@ execute_script() {
                 sleep 0.5
                 sudo bash "$full_path"
                 local script_exit=$?
-                if [[ $script_exit -eq $EXIT_APP_CODE ]]; then
+                if ((script_exit == EXIT_APP_CODE)); then
                     echo -e "\n${GREEN}Goodbye!${NC}"
                     exit 0
                 fi
-                if [[ $script_exit -ne 0 ]]; then
+                if ((script_exit != 0)); then
                     pause
                 fi
-                set -e
                 return 0
                 ;;
             2)
@@ -880,7 +918,6 @@ execute_script() {
             *)
                 print_status "Cancelled."
                 sleep 1
-                set -e
                 return 0
                 ;;
         esac
@@ -894,14 +931,13 @@ execute_script() {
     sleep 0.5
     bash "$full_path"
     local script_exit=$?
-    if [[ $script_exit -eq $EXIT_APP_CODE ]]; then
+    if ((script_exit == EXIT_APP_CODE)); then
         echo -e "\n${GREEN}Goodbye!${NC}"
         exit 0
     fi
-    if [[ $script_exit -ne 0 ]]; then
+    if ((script_exit != 0)); then
         pause
     fi
-    set -e
     return 0
 }
 
