@@ -16,7 +16,7 @@ readonly WHITE='\033[1;37m'
 readonly NC='\033[0m'
 
 readonly UI_WIDTH=86
-readonly SCRIPT_VERSION="3.6.5"
+readonly SCRIPT_VERSION="3.6.6"
 readonly CHECKSUM_FILE="$SCRIPT_DIR/Installers/.checksums.sha256"
 readonly EXIT_APP_CODE=42
 
@@ -25,14 +25,19 @@ HAS_GIT=$(command -v git &>/dev/null && echo 1 || echo 0)
 HAS_SHA256SUM=$(command -v sha256sum &>/dev/null && echo 1 || echo 0)
 HAS_FILE=$(command -v file &>/dev/null && echo 1 || echo 0)
 HAS_SUDO=$(command -v sudo &>/dev/null && echo 1 || echo 0)
+HAS_TIMEOUT=$(command -v timeout &>/dev/null && echo 1 || echo 0)
 
-# --- 4. CLEANUP TRAP ---
+# --- 4. STATIC SYSTEM INFO CACHE ---
+readonly CACHED_HOSTNAME=$(hostname)
+readonly CACHED_KERNEL=$(uname -r)
+
+# --- 5. CLEANUP TRAP ---
 cleanup() {
     tput cnorm 2>/dev/null || true
 }
 trap cleanup EXIT
 
-# --- 5. SETTINGS & CONFIGURATION ---
+# --- 6. SETTINGS & CONFIGURATION ---
 SETTINGS_FILE="$SCRIPT_DIR/settings.conf"
 
 # trim_whitespace removes leading and trailing whitespace from a string using parameter expansion.
@@ -167,6 +172,63 @@ is_root() {
     ((EUID == 0))
 }
 
+# git_fetch performs a git fetch with optional timeout support.
+git_fetch() {
+    local fetch_args="${1:---quiet}"
+    if ((HAS_TIMEOUT)); then
+        timeout 10 git fetch $fetch_args 2>/dev/null
+    else
+        git fetch $fetch_args 2>/dev/null
+    fi
+}
+
+# handle_uncommitted_changes prompts the user to stash, discard, or cancel when uncommitted changes exist. Returns 0 to proceed, 1 to cancel.
+handle_uncommitted_changes() {
+    local context="$1"
+    
+    if git diff --quiet 2>/dev/null && git diff --cached --quiet 2>/dev/null; then
+        return 0
+    fi
+    
+    print_warn "You have uncommitted changes."
+    echo ""
+    echo -e "  ${WHITE}Options:${NC}"
+    echo -e "    ${CYAN}1.${NC} Stash changes (save for later)"
+    echo -e "    ${CYAN}2.${NC} Discard changes (permanent)"
+    echo -e "    ${CYAN}0.${NC} Cancel"
+    echo ""
+    read -rp "  Select option [0-2]: " change_option
+
+    case "$change_option" in
+        1)
+            print_status "Stashing changes..."
+            local stash_msg="Auto-stash $context on $(date '+%Y-%m-%d %H:%M')"
+            if ! git stash push -m "$stash_msg" 2>/dev/null; then
+                print_error "Failed to stash changes."
+                return 1
+            fi
+            print_success "Changes stashed. Use 'git stash pop' to restore."
+            ;;
+        2)
+            if ! confirm_prompt "  Are you sure? This cannot be undone. (y/N): " "n"; then
+                return 1
+            fi
+            print_status "Discarding changes..."
+            if ! git reset --hard HEAD &>/dev/null; then
+                print_error "Failed to reset working directory."
+                return 1
+            fi
+            git clean -fd &>/dev/null || true
+            print_success "Changes discarded."
+            ;;
+        *)
+            print_status "Cancelled."
+            return 1
+            ;;
+    esac
+    return 0
+}
+
 # fix_permissions ensures all Installers/*.sh files are executable; pass "silent" as the first argument to suppress per-file messages and summary.
 fix_permissions() {
     local silent="${1:-}"
@@ -273,7 +335,7 @@ show_stats() {
     distro=$(truncate_string "$distro" 32)
 
     local kernel
-    kernel=$(truncate_string "$(uname -r)" 32)
+    kernel=$(truncate_string "$CACHED_KERNEL" 32)
 
     local uptime_str="N/A"
     if [[ -f /proc/uptime ]]; then
@@ -293,17 +355,16 @@ show_stats() {
 
     local cpu_load="N/A"
     if [[ -f /proc/loadavg ]]; then
-        cpu_load=$(LC_ALL=C awk '{printf "%.2f (1m)", $1}' /proc/loadavg)
+        cpu_load=$(awk '{printf "%.2f (1m)", $1}' /proc/loadavg)
     fi
 
     local mem_usage="N/A"
     if [[ -f /proc/meminfo ]]; then
-        local mem_total mem_avail mem_used mem_pct
-        mem_total=$(LC_ALL=C awk '/^MemTotal:/ {print int($2/1024)}' /proc/meminfo)
-        mem_avail=$(LC_ALL=C awk '/^MemAvailable:/ {print int($2/1024)}' /proc/meminfo)
+        local mem_total mem_avail
+        read -r mem_total mem_avail < <(awk '/^MemTotal:/ {t=int($2/1024)} /^MemAvailable:/ {a=int($2/1024)} END {print t, a}' /proc/meminfo)
         if [[ -n "$mem_total" && -n "$mem_avail" && "$mem_total" -gt 0 ]]; then
-            mem_used=$((mem_total - mem_avail))
-            mem_pct=$((mem_used * 100 / mem_total))
+            local mem_used=$((mem_total - mem_avail))
+            local mem_pct=$((mem_used * 100 / mem_total))
             mem_usage="${mem_used}/${mem_total}MB (${mem_pct}%)"
         fi
     fi
@@ -311,7 +372,7 @@ show_stats() {
     local disk_usage="N/A"
     if command -v df &>/dev/null; then
         local disk_info
-        disk_info=$(LC_ALL=C df -P / 2>/dev/null | awk 'NR==2 {print $3, $2, $5}')
+        disk_info=$(df -P / 2>/dev/null | awk 'NR==2 {print $3, $2, $5}')
         if [[ -n "$disk_info" ]]; then
             local used total pct
             read -r used total pct <<< "$disk_info"
@@ -330,7 +391,7 @@ show_stats() {
     fi
 
     local hostname_str
-    hostname_str=$(truncate_string "$(hostname)" 30)
+    hostname_str=$(truncate_string "$CACHED_HOSTNAME" 30)
 
     local ip_addr="N/A"
     local subnet="N/A"
@@ -338,12 +399,12 @@ show_stats() {
 
     if command -v ip &>/dev/null; then
         local full_ip
-        full_ip=$(LC_ALL=C ip -4 addr show scope global 2>/dev/null | awk '/inet / {print $2; exit}')
+        full_ip=$(ip -4 addr show scope global 2>/dev/null | awk '/inet / {print $2; exit}')
         if [[ -n "$full_ip" ]]; then
             ip_addr="${full_ip%%/*}"
             subnet="/${full_ip##*/}"
         fi
-        gateway=$(LC_ALL=C ip route 2>/dev/null | awk '/default/ {print $3; exit}')
+        gateway=$(ip route 2>/dev/null | awk '/default/ {print $3; exit}')
         gateway=$(truncate_string "${gateway:-N/A}" 20)
     fi
 
@@ -379,7 +440,7 @@ check_for_updates() {
         return 1
     fi
 
-    if ! git fetch --quiet 2>/dev/null; then
+    if ! git_fetch "--quiet"; then
         print_error "Failed to fetch from remote. Check your network connection."
         sleep 2
         return 1
@@ -403,20 +464,9 @@ check_for_updates() {
     print_warn "New version available."
     print_status "Applying updates..."
 
-    local has_changes="false"
-    if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
-        has_changes="true"
-    fi
-
-    if [[ "$has_changes" = "true" ]]; then
-        print_status "Stashing uncommitted changes..."
-        local stash_msg="Auto-stash before update on $(date '+%Y-%m-%d %H:%M')"
-        if ! git stash push -m "$stash_msg" 2>/dev/null; then
-            print_error "Failed to stash changes."
-            sleep 2
-            return 1
-        fi
-        print_success "Changes stashed."
+    if ! handle_uncommitted_changes "before update"; then
+        sleep 2
+        return 1
     fi
 
     if git pull --quiet; then
@@ -447,7 +497,7 @@ check_for_updates_interactive() {
         return 1
     fi
 
-    if ! git fetch --quiet 2>/dev/null; then
+    if ! git_fetch "--quiet"; then
         print_error "Failed to fetch from remote. Check your network connection."
         sleep 2
         return 1
@@ -475,53 +525,9 @@ check_for_updates_interactive() {
         return 0
     fi
 
-    local has_changes="false"
-    if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
-        has_changes="true"
-    fi
-
-    if [[ "$has_changes" = "true" ]]; then
-        print_warn "You have uncommitted local changes."
-        echo ""
-        echo -e "  ${WHITE}Options:${NC}"
-        echo -e "    ${CYAN}1.${NC} Stash changes (save for later)"
-        echo -e "    ${CYAN}2.${NC} Discard changes (permanent)"
-        echo -e "    ${CYAN}0.${NC} Cancel update"
-        echo ""
-        read -rp "  Select option [0-2]: " change_option
-
-        case "$change_option" in
-            1)
-                print_status "Stashing changes..."
-                local stash_msg="Auto-stash before update on $(date '+%Y-%m-%d %H:%M')"
-                if ! git stash push -m "$stash_msg" 2>/dev/null; then
-                    print_error "Failed to stash changes."
-                    sleep 2
-                    return 1
-                fi
-                print_success "Changes stashed. Use 'git stash pop' to restore later."
-                ;;
-            2)
-                if ! confirm_prompt "  Are you sure? This cannot be undone. (y/N): " "n"; then
-                    print_status "Update cancelled."
-                    sleep 1
-                    return 0
-                fi
-                print_status "Discarding changes..."
-                if ! git reset --hard HEAD &>/dev/null; then
-                    print_error "Failed to reset working directory."
-                    sleep 2
-                    return 1
-                fi
-                git clean -fd &>/dev/null || true
-                print_success "Changes discarded."
-                ;;
-            *)
-                print_status "Update cancelled."
-                sleep 1
-                return 0
-                ;;
-        esac
+    if ! handle_uncommitted_changes "before update"; then
+        sleep 1
+        return 0
     fi
 
     if git pull --quiet; then
@@ -556,7 +562,7 @@ switch_branch() {
     fi
 
     print_status "Fetching branch information..."
-    if ! git fetch --all --quiet 2>/dev/null; then
+    if ! git_fetch "--all --quiet"; then
         print_warn "Could not fetch from remote. Showing local branches only."
     fi
 
@@ -571,6 +577,8 @@ switch_branch() {
     echo -e "  Current branch: ${GREEN}$current_branch${NC}"
     echo ""
 
+    # Use associative array for faster local branch lookup
+    declare -A local_branches
     local branches=()
     local branch_display=()
 
@@ -578,6 +586,7 @@ switch_branch() {
         branch="${branch#\* }"
         branch="${branch// /}"
         if [[ -n "$branch" ]]; then
+            local_branches["$branch"]=1
             branches+=("$branch")
             if [[ "$branch" = "$current_branch" ]]; then
                 branch_display+=("$branch (current)")
@@ -591,14 +600,7 @@ switch_branch() {
         branch="${branch// /}"
         branch="${branch#origin/}"
         if [[ -n "$branch" && "$branch" != "HEAD" ]]; then
-            local is_local="false"
-            for local_branch in "${branches[@]}"; do
-                if [[ "$local_branch" = "$branch" ]]; then
-                    is_local="true"
-                    break
-                fi
-            done
-            if [[ "$is_local" = "false" ]]; then
+            if [[ -z "${local_branches[$branch]:-}" ]]; then
                 branches+=("$branch")
                 branch_display+=("$branch (remote)")
             fi
@@ -645,53 +647,9 @@ switch_branch() {
         return 0
     fi
 
-    local has_changes="false"
-    if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
-        has_changes="true"
-    fi
-
-    if [[ "$has_changes" = "true" ]]; then
-        print_warn "You have uncommitted changes."
-        echo ""
-        echo -e "  ${WHITE}Options:${NC}"
-        echo -e "    ${CYAN}1.${NC} Stash changes (save for later)"
-        echo -e "    ${CYAN}2.${NC} Discard changes (permanent)"
-        echo -e "    ${CYAN}0.${NC} Cancel"
-        echo ""
-        read -rp "  Select option [0-2]: " change_option
-
-        case "$change_option" in
-            1)
-                print_status "Stashing changes..."
-                local stash_msg="Auto-stash before switching to $selected_branch"
-                if ! git stash push -m "$stash_msg" 2>/dev/null; then
-                    print_error "Failed to stash changes."
-                    pause
-                    return 1
-                fi
-                print_success "Changes stashed. Use 'git stash pop' to restore."
-                ;;
-            2)
-                if ! confirm_prompt "  Are you sure? This cannot be undone. (y/N): " "n"; then
-                    print_status "Cancelled."
-                    sleep 1
-                    return 0
-                fi
-                print_status "Discarding changes..."
-                if ! git reset --hard HEAD &>/dev/null; then
-                    print_error "Failed to reset working directory."
-                    pause
-                    return 1
-                fi
-                git clean -fd &>/dev/null || true
-                print_success "Changes discarded."
-                ;;
-            *)
-                print_status "Cancelled."
-                sleep 1
-                return 0
-                ;;
-        esac
+    if ! handle_uncommitted_changes "before switching to $selected_branch"; then
+        pause
+        return 1
     fi
 
     echo ""
