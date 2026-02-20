@@ -31,7 +31,7 @@ HAS_TIMEOUT=$(command -v timeout &>/dev/null && echo 1 || echo 0)
 readonly CACHED_HOSTNAME=$(hostname)
 readonly CACHED_KERNEL=$(uname -r)
 
-# --- 5. CLEANUP TRAP ---
+# cleanup restores the terminal cursor to a visible state when the script exits.
 cleanup() {
     tput cnorm 2>/dev/null || true
 }
@@ -40,7 +40,7 @@ trap cleanup EXIT
 # --- 6. SETTINGS & CONFIGURATION ---
 SETTINGS_FILE="$SCRIPT_DIR/settings.conf"
 
-# trim_whitespace removes leading and trailing whitespace from a string using parameter expansion.
+# trim_whitespace removes leading and trailing whitespace from a string and prints the trimmed result to stdout.
 trim_whitespace() {
     local str="$1"
     str="${str#"${str%%[![:space:]]*}"}"
@@ -172,7 +172,7 @@ is_root() {
     ((EUID == 0))
 }
 
-# git_fetch performs a git fetch with optional timeout support.
+# git_fetch performs a git fetch, using a 10-second timeout when the `timeout` command is available, and accepts optional git fetch arguments.
 git_fetch() {
     local fetch_args="${1:---quiet}"
     if ((HAS_TIMEOUT)); then
@@ -182,7 +182,8 @@ git_fetch() {
     fi
 }
 
-# handle_uncommitted_changes prompts the user to stash, discard, or cancel when uncommitted changes exist. Returns 0 to proceed, 1 to cancel.
+# handle_uncommitted_changes prompts to stash, discard, or cancel when uncommitted Git changes exist in the current repository.
+# The optional `context` argument is included in the stash message; returns 0 when changes were handled and the caller may proceed, or 1 if the user cancelled or an operation failed.
 handle_uncommitted_changes() {
     local context="$1"
     
@@ -229,7 +230,8 @@ handle_uncommitted_changes() {
     return 0
 }
 
-# fix_permissions ensures all Installers/*.sh files are executable; pass "silent" as the first argument to suppress per-file messages and summary.
+# fix_permissions ensures all Installers/*.sh files are executable.
+# When the first argument is "silent" it suppresses per-file messages and the summary; when the Installers directory is missing it prints an error unless run in silent mode.
 fix_permissions() {
     local silent="${1:-}"
     local installers_dir="$SCRIPT_DIR/Installers"
@@ -278,7 +280,7 @@ show_header() {
     print_line "=" "$BLUE"
 }
 
-# get_os_info retrieves OS ID and pretty name from /etc/os-release without polluting the global namespace.
+# get_os_info retrieves an OS field from /etc/os-release; accepts `id`, `version_id`, or `pretty_name` and echoes the corresponding value (quotes stripped) or an empty string if unavailable.
 get_os_info() {
     local info_type="$1"
     if [[ -f /etc/os-release ]]; then
@@ -296,7 +298,7 @@ get_os_info() {
     fi
 }
 
-# show_stats prints a concise system information panel (OS, kernel, hostname, IP, subnet, gateway, load average, memory and disk usage, uptime, and current Git branch), truncating long values and handling missing files/commands gracefully.
+# show_stats prints a concise system information panel including OS, kernel, hostname, IP, subnet, gateway, load average, memory and disk usage, uptime, and current Git branch; it truncates long values and handles missing files/commands gracefully.
 show_stats() {
     local distro="Unknown"
     local os_id=""
@@ -480,7 +482,8 @@ check_for_updates() {
     fi
 }
 
-# check_for_updates_interactive is like check_for_updates but prompts the user before downloading and applying updates.
+# check_for_updates_interactive prompts the user to download and apply updates from the script's git remote and restarts the script if updates are applied.
+# Returns non-zero on failure or when update check cannot be performed (e.g., no git, not a repo, or no upstream).
 check_for_updates_interactive() {
     echo ""
     print_status "Checking for updates..."
@@ -700,7 +703,7 @@ parse_script_metadata() {
     head -n 20 "$script_path" 2>/dev/null | grep -i "^# *${key}:" | head -n 1 | sed "s/^# *${key}: *//i" || echo ""
 }
 
-# verify_script_checksum Verifies a script's SHA-256 checksum against CHECKSUM_FILE, prompts the user if the checksum is missing or does not match, and returns 0 if verification is accepted (or skipped) or 1 if the user declines to continue.
+# verify_script_checksum Verifies a script's SHA-256 checksum from CHECKSUM_FILE and prompts the user if the checksum is missing or does not match.
 verify_script_checksum() {
     local script_path="$1"
     local script_name
@@ -781,7 +784,7 @@ generate_checksums() {
     return 0
 }
 
-# execute_script executes an installer script from Installers/, verifying existence, readability, and file type; validating its SHA-256 checksum; ensuring it is executable; honoring a REQUIRES_ROOT metadata flag (prompting to run with sudo, run anyway, or cancel) and detecting common root-requiring commands; printing DESCRIPTION metadata when present; running the script; and if the script exits with code 42, printing a goodbye message and terminating the entire application.
+# execute_script executes an installer from Installers/, validating presence, readability and type, optionally verifying its SHA-256 checksum, honoring REQUIRES_ROOT (prompting to use sudo, run anyway, or cancel), printing DESCRIPTION metadata when present, running the script, and if the script exits with code 42, printing a goodbye message and terminating the application.
 execute_script() {
     set +e
 
