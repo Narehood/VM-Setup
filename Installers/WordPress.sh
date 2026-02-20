@@ -4,7 +4,7 @@ set -euo pipefail
 # REQUIRES_ROOT: true
 # DESCRIPTION: Installs WordPress with Apache, MariaDB/MySQL, PHP, and SSL certificates
 
-VERSION="2.0.2"
+VERSION="2.0.3"
 INSTALL_DIR="/var/www/html"
 CREDS_FILE="/root/.wp-creds"
 LOG_FILE="/var/log/wordpress-install.log"
@@ -88,6 +88,9 @@ cleanup() {
             /usr/bin/mysql -e "DROP DATABASE IF EXISTS \`$DB_NAME\`;" 2>/dev/null || true
             /usr/bin/mysql -e "DROP USER IF EXISTS '$DB_USER'@'localhost';" 2>/dev/null || true
         fi
+        
+        print_info "Removing database credentials..." >&2
+        rm -f /root/.my.cnf 2>/dev/null || true
         
         print_info "Removing temporary files..." >&2
         rm -f /tmp/latest.tar.gz 2>/dev/null || true
@@ -210,15 +213,17 @@ get_available_php_versions() {
     local versions=()
     
     if is_debian_based; then
-        versions+=($(apt-cache search --names-only '^php[0-9]+\.[0-9]+$' 2>/dev/null | awk '{print $1}' | sed 's/php//' | sort -V | tail -7))
+        mapfile -t versions < <(apt-cache search --names-only '^php[0-9]+\.[0-9]+$' 2>/dev/null | awk '{print $1}' | sed 's/php//' | sort -V | tail -7)
     elif is_rhel_based; then
-        versions+=($(dnf module list php 2>/dev/null | grep -E '^\s+php' | awk '{print $1}' | sed 's/php://' | sort -V | tail -7))
+        mapfile -t versions < <(dnf module list php 2>/dev/null | grep -E '^\s+php' | awk '{print $1}' | sed 's/php://' | sort -V | tail -7)
     elif is_arch_based; then
         if pacman -Qs php &>/dev/null; then
             versions+=("$(pacman -Q php 2>/dev/null | awk '{print $2}' | cut -d- -f1)")
         else
-            versions+=("8.5" "8.4" "8.3" "8.2" "8.1")
+            versions=("8.5" "8.4" "8.3" "8.2" "8.1")
         fi
+    elif is_suse_based; then
+        mapfile -t versions < <(zypper search -s 'php[0-9]*' 2>/dev/null | grep -E 'php[0-9]+' | awk '{print $3}' | grep -oE '[0-9]+\.[0-9]+' | sort -uV | tail -7)
     fi
     
     if [[ ${#versions[@]} -eq 0 ]]; then
@@ -374,6 +379,18 @@ get_php_packages() {
             "php-curl"
             "php-intl"
         )
+    elif is_suse_based; then
+        packages=(
+            "php${version//./}"
+            "php${version//./}-bz2"
+            "php${version//./}-mysql"
+            "php${version//./}-curl"
+            "php${version//./}-gd"
+            "php${version//./}-intl"
+            "php${version//./}-mbstring"
+            "php${version//./}-xmlreader"
+            "php${version//./}-xmlwriter"
+        )
     fi
     
     printf '%s\n' "${packages[@]}"
@@ -407,6 +424,13 @@ configure_web_server() {
         APACHE_CONF="/etc/httpd/conf/httpd.conf"
         SITES_AVAILABLE="/etc/httpd/conf.d"
         SSL_DIR="/etc/httpd/ssl"
+        mkdir -p "$SITES_AVAILABLE"
+    elif is_suse_based; then
+        WEB_SERVICE="apache2"
+        WEB_USER="wwwrun"
+        APACHE_CONF="/etc/apache2/httpd.conf"
+        SITES_AVAILABLE="/etc/apache2/vhosts.d"
+        SSL_DIR="/etc/apache2/ssl"
         mkdir -p "$SITES_AVAILABLE"
     fi
     
@@ -490,6 +514,14 @@ elif is_arch_based; then
         "curl"
         "wget"
     )
+elif is_suse_based; then
+    base_packages=(
+        "apache2"
+        "mariadb"
+        "openssl"
+        "curl"
+        "wget"
+    )
 fi
 
 for pkg in "${base_packages[@]}"; do
@@ -530,6 +562,10 @@ elif is_rhel_based || is_arch_based; then
     sed -i 's/^#LoadModule rewrite_module/LoadModule rewrite_module/' "$APACHE_CONF" 2>/dev/null || true
     sed -i 's/^#LoadModule ssl_module/LoadModule ssl_module/' "$APACHE_CONF" 2>/dev/null || true
     sed -i 's/^#LoadModule proxy_fcgi_module/LoadModule proxy_fcgi_module/' "$APACHE_CONF" 2>/dev/null || true
+elif is_suse_based; then
+    a2enmod rewrite >/dev/null 2>&1 || true
+    a2enmod ssl >/dev/null 2>&1 || true
+    a2enmod php"${PHP_VERSION//./}" >/dev/null 2>&1 || true
 fi
 
 print_success "Web server modules enabled."
@@ -567,7 +603,7 @@ if [[ -f /tmp/latest.tar.gz ]]; then
     print_info "WordPress package already downloaded."
 else
     print_info "Downloading latest WordPress..."
-    if ! cd /tmp && wget -q "https://wordpress.org/latest.tar.gz"; then
+    if ! wget -q -O /tmp/latest.tar.gz "https://wordpress.org/latest.tar.gz"; then
         print_error "Failed to download WordPress"
         exit 1
     fi
@@ -693,6 +729,44 @@ EOF
     VHOST_FILES+=("$WORDPRESS_SSL_VHOST" "$WORDPRESS_HTTP_VHOST")
     a2ensite wordpress-ssl.conf >/dev/null 2>&1
     a2ensite wordpress-http.conf >/dev/null 2>&1
+
+elif is_suse_based; then
+    WORDPRESS_VHOST="$SITES_AVAILABLE/wordpress.conf"
+    
+    cat > "$WORDPRESS_VHOST" << EOF
+<VirtualHost *:443>
+    ServerName $DOMAIN_NAME
+    ServerAdmin admin@$DOMAIN_NAME
+    DocumentRoot $INSTALL_DIR
+
+    SSLEngine on
+    SSLCertificateFile $SSL_DIR/apache-selfsigned.crt
+    SSLCertificateKeyFile $SSL_DIR/apache-selfsigned.key
+
+    <Directory $INSTALL_DIR>
+        AllowOverride All
+        Require all granted
+    </Directory>
+
+    ErrorLog /var/log/apache2/wordpress-error.log
+    CustomLog /var/log/apache2/wordpress-access.log combined
+</VirtualHost>
+
+<VirtualHost *:80>
+    ServerName $DOMAIN_NAME
+    ServerAdmin admin@$DOMAIN_NAME
+    DocumentRoot $INSTALL_DIR
+
+    RewriteEngine On
+    RewriteCond %{HTTPS} off
+    RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+    ErrorLog /var/log/apache2/wordpress-error.log
+    CustomLog /var/log/apache2/wordpress-access.log combined
+</VirtualHost>
+EOF
+
+    VHOST_FILES+=("$WORDPRESS_VHOST")
 
 else
     WORDPRESS_VHOST="$SITES_AVAILABLE/wordpress.conf"
