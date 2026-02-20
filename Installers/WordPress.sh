@@ -311,7 +311,7 @@ validate_domain() {
 
 # generate_password generates a 16-character random password from a cryptographically secure source.
 generate_password() {
-    openssl rand -base64 32 | tr -d '=' | cut -c1-16
+    openssl rand -base64 48 | tr -dc 'A-Za-z0-9' | cut -c1-16
 }
 
 # get_database_version prints the MySQL/MariaDB server version string to stdout, or `unknown` if the version cannot be determined.
