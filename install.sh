@@ -284,13 +284,13 @@ get_os_info() {
     if [[ -f /etc/os-release ]]; then
         case "$info_type" in
             id)
-                grep -Po '(?<=^ID=).+' /etc/os-release 2>/dev/null | tr -d '"' || echo ""
+                sed -n 's/^ID=//p' /etc/os-release 2>/dev/null | tr -d '"' || echo ""
                 ;;
             version_id)
-                grep -Po '(?<=^VERSION_ID=).+' /etc/os-release 2>/dev/null | tr -d '"' || echo ""
+                sed -n 's/^VERSION_ID=//p' /etc/os-release 2>/dev/null | tr -d '"' || echo ""
                 ;;
             pretty_name)
-                grep -Po '(?<=^PRETTY_NAME=).+' /etc/os-release 2>/dev/null | tr -d '"' || echo ""
+                sed -n 's/^PRETTY_NAME=//p' /etc/os-release 2>/dev/null | tr -d '"' || echo ""
                 ;;
         esac
     fi
