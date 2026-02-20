@@ -4,7 +4,7 @@ set -euo pipefail
 # REQUIRES_ROOT: true
 # DESCRIPTION: Installs WordPress with Apache, MariaDB/MySQL, PHP, and SSL certificates
 
-VERSION="2.0.1"
+VERSION="2.0.2"
 INSTALL_DIR="/var/www/html"
 CREDS_FILE="/root/.wp-creds"
 LOG_FILE="/var/log/wordpress-install.log"
@@ -210,19 +210,19 @@ get_available_php_versions() {
     local versions=()
     
     if is_debian_based; then
-        versions+=($(apt-cache search --names-only '^php[0-9]+$' 2>/dev/null | awk '{print $1}' | sed 's/php//' | sort -V | tail -5))
+        versions+=($(apt-cache search --names-only '^php[0-9]+\.[0-9]+$' 2>/dev/null | awk '{print $1}' | sed 's/php//' | sort -V | tail -7))
     elif is_rhel_based; then
-        versions+=($(dnf module list php 2>/dev/null | grep -E '^\s+php' | awk '{print $1}' | sed 's/php://' | sort -V | tail -5))
+        versions+=($(dnf module list php 2>/dev/null | grep -E '^\s+php' | awk '{print $1}' | sed 's/php://' | sort -V | tail -7))
     elif is_arch_based; then
         if pacman -Qs php &>/dev/null; then
             versions+=("$(pacman -Q php 2>/dev/null | awk '{print $2}' | cut -d- -f1)")
         else
-            versions+=("8.3" "8.2" "8.1")
+            versions+=("8.5" "8.4" "8.3" "8.2" "8.1")
         fi
     fi
     
     if [[ ${#versions[@]} -eq 0 ]]; then
-        versions=("8.3" "8.2" "8.1" "8.0" "7.4")
+        versions=("8.5" "8.4" "8.3" "8.2" "8.1" "8.0" "7.4")
     fi
     
     printf '%s\n' "${versions[@]}"
