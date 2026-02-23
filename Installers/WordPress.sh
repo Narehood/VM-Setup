@@ -599,8 +599,8 @@ elif is_rhel_based || is_arch_based; then
     sed -i 's/^#LoadModule proxy_fcgi_module/LoadModule proxy_fcgi_module/' "$APACHE_CONF" 2>/dev/null || true
 elif is_suse_based; then
     a2enmod rewrite >/dev/null 2>&1 || true
-    a2enmod ssl >/dev/null 2>&1 || true
-    a2enmod php"${PHP_VERSION//./}" >/dev/null 2>&1 || true
+    a2enmod ssl    >/dev/null 2>&1 || true
+    a2enmod php8   >/dev/null 2>&1 || true
 fi
 
 print_success "Web server modules enabled."
