@@ -4,7 +4,7 @@ set -euo pipefail
 # REQUIRES_ROOT: true
 # DESCRIPTION: Installs WordPress with Apache, MariaDB/MySQL, PHP, and SSL certificates
 
-VERSION="2.0.0"
+VERSION="2.0.3"
 INSTALL_DIR="/var/www/html"
 CREDS_FILE="/root/.wp-creds"
 LOG_FILE="/var/log/wordpress-install.log"
@@ -33,32 +33,32 @@ PHP_VERSION=""
 VHOST_FILES=()
 PACKAGES_INSTALLED=()
 
-# print_step prints a step message prefixed with `[STEP]` (blue) and appends it to the log file.
+# print_step prints a STEP header with the given message to stdout and appends it to the log file.
 print_step() {
     echo -e "\n${BLUE}[STEP]${NC} $1" | tee -a "$LOG_FILE"
 }
 
-# print_success prints a green "[OK]" tagged success message to stdout, appends the same line to the log file, and takes the message text as its first argument.
+# print_success echoes a green "[OK]"-prefixed success message to stdout and appends the same line to the log file.
 print_success() {
     echo -e "${GREEN}[OK]${NC} $1" | tee -a "$LOG_FILE"
 }
 
-# print_warn prints a warning message prefixed with "[WARN]" in yellow, echoes it to stdout, and appends it to the log file.
+# print_warn logs a warning message prefixed with `[WARN]` to stdout and appends it to the file specified by `LOG_FILE`.
 print_warn() {
     echo -e "${YELLOW}[WARN]${NC} $1" | tee -a "$LOG_FILE"
 }
 
-# print_error prints an error message prefixed with `[ERROR]` in red and appends it to the configured log file.
+# print_error prints an error message prefixed with `[ERROR]` in red to stdout and appends the same message to the log file.
 print_error() {
     echo -e "${RED}[ERROR]${NC} $1" | tee -a "$LOG_FILE"
 }
 
-# print_info prints an informational message prefixed with "[INFO]" and appends it to the log file.
+# print_info prints an informational message prefixed with `[INFO]` (colored cyan) and appends it to the log file.
 print_info() {
     echo -e "${CYAN}[INFO]${NC} $1" | tee -a "$LOG_FILE"
 }
 
-# show_header clears the terminal and displays the script header banner with the current VERSION.
+# show_header clears the terminal and prints the script header banner including the current version.
 show_header() {
     clear
     echo -e "${BLUE}========================================${NC}"
@@ -68,7 +68,8 @@ show_header() {
     echo ""
 }
 
-# cleanup rolls back a failed installation when INSTALLATION_FAILED is non-zero by stopping services, removing WordPress files and vhost configs, dropping the created database and user, and deleting temporary files and credentials.
+# cleanup performs a rollback when INSTALLATION_FAILED is non-zero.
+# It stops/disables web and DB services, removes WordPress files and virtual host configs, drops the created database and user if present, removes database credentials and temporary files, and logs rollback completion.
 cleanup() {
     if [[ $INSTALLATION_FAILED -ne 0 ]]; then
         print_error "Installation failed. Rolling back changes..." >&2
@@ -96,6 +97,9 @@ cleanup() {
             /usr/bin/mysql -e "DROP USER IF EXISTS '$DB_USER'@'localhost';" 2>/dev/null || true
         fi
         
+        print_info "Removing database credentials..." >&2
+        rm -f /root/.my.cnf 2>/dev/null || true
+        
         print_info "Removing temporary files..." >&2
         rm -f /tmp/latest.tar.gz 2>/dev/null || true
         rm -f "$CREDS_FILE" 2>/dev/null || true
@@ -106,7 +110,7 @@ cleanup() {
 
 trap cleanup EXIT
 
-# check_root verifies the script is running as the root user and exits with status 1 after printing an error if not.
+# check_root ensures the script is running as root and exits with status 1 if it is not.
 check_root() {
     if [[ $EUID -ne 0 ]]; then
         print_error "This script requires root privileges."
@@ -114,7 +118,7 @@ check_root() {
     fi
 }
 
-# check_existing_wordpress checks for an existing WordPress installation at INSTALL_DIR and exits with status 1 after printing an error if wp-config.php is present.
+# check_existing_wordpress aborts the script if a WordPress installation (wp-config.php) already exists at INSTALL_DIR and instructs the user to back up and remove existing files.
 check_existing_wordpress() {
     if [[ -f "$INSTALL_DIR/wp-config.php" ]]; then
         print_error "WordPress appears to already be installed at $INSTALL_DIR"
@@ -123,7 +127,7 @@ check_existing_wordpress() {
     fi
 }
 
-# detect_os detects the operating system and sets the global variables `OS` and `VERSION_ID` from /etc/os-release or sensible fallback files, then logs the detected values.
+# detect_os detects the operating system and version identifier, setting the global `OS` and `VERSION_ID` variables.
 detect_os() {
     print_info "Detecting Operating System..."
     if [[ -f /etc/os-release ]]; then
@@ -143,28 +147,27 @@ detect_os() {
     print_success "Detected: $OS ($VERSION_ID)"
 }
 
-# is_debian_based determines whether the detected OS is a Debian-based distribution (debian, ubuntu, pop, linuxmint, kali).
-# is_debian_based checks whether the global $OS variable indicates a Debian-based distribution (debian, ubuntu, pop, linuxmint, kali) and returns 0 if it does, non-zero otherwise.
+# is_debian_based checks whether the detected OS is Debian or a Debian-derived distribution (debian, ubuntu, pop, linuxmint, kali).
 is_debian_based() {
     [[ "$OS" =~ ^(debian|ubuntu|pop|linuxmint|kali)$ ]]
 }
 
-# is_rhel_based indicates whether the detected OS is a RHEL-family distribution (fedora, redhat, centos, rocky, almalinux).
+# is_rhel_based tests whether the detected OS is a Red Hat Enterprise Linux family distribution (fedora, redhat, centos, rocky, almalinux).
 is_rhel_based() {
     [[ "$OS" =~ ^(fedora|redhat|centos|rocky|almalinux)$ ]]
 }
 
-# is_arch_based returns true if $OS identifies an Arch Linux family (arch, endeavouros, or manjaro).
+# is_arch_based checks whether the global OS variable identifies an Arch-based distribution (arch, endeavouros, or manjaro).
 is_arch_based() {
     [[ "$OS" =~ ^(arch|endeavouros|manjaro)$ ]]
 }
 
-# is_suse_based determines if the detected OS is SUSE, openSUSE, or SLES.
+# is_suse_based checks whether the detected OS is SUSE, openSUSE, or SLES and returns success (exit code 0) if so.
 is_suse_based() {
     [[ "$OS" =~ ^(suse|opensuse.*|sles)$ ]]
 }
 
-# update_repos updates package repositories for the detected OS and sets PKG_MANAGER_UPDATED="true"; returns a non-zero status if the OS is not supported.
+# update_repos updates the system package repository metadata for the detected OS if not already updated.
 update_repos() {
     if [[ "$PKG_MANAGER_UPDATED" == "true" ]]; then
         return
@@ -191,9 +194,7 @@ update_repos() {
     print_success "Repositories updated."
 }
 
-# install_pkg installs one or more packages using the detected OS package manager and appends successfully installed package names to PACKAGES_INSTALLED.
-# install_pkg installs one or more packages using the detected OS package manager and, on success, records the package names in PACKAGES_INSTALLED.
-# Returns 0 if all requested packages were installed; returns non-zero if installation fails, no packages were provided, or the OS is unsupported.
+# install_pkg installs the specified packages using the detected OS package manager and appends successfully installed package names to PACKAGES_INSTALLED.
 install_pkg() {
     if [[ $# -eq 0 ]]; then
         return 1
@@ -225,32 +226,32 @@ install_pkg() {
     return $result
 }
 
-# get_available_php_versions prints candidate PHP versions for the current system, one per line.
-# get_available_php_versions prints a prioritized list of available PHP major.minor versions for the host OS, querying the system package manager when possible (Debian, RHEL, Arch) and falling back to a sensible default set if detection fails.
-# Each version is emitted on its own line.
+# get_available_php_versions prints up to seven candidate PHP minor versions available from the system package sources, falling back to a curated default list when no candidates are detected.
 get_available_php_versions() {
     local versions=()
     
     if is_debian_based; then
-        versions+=($(apt-cache search --names-only '^php[0-9]+$' 2>/dev/null | awk '{print $1}' | sed 's/php//' | sort -V | tail -5))
+        mapfile -t versions < <(apt-cache search --names-only '^php[0-9]+\.[0-9]+$' 2>/dev/null | awk '{print $1}' | sed 's/php//' | sort -V | tail -7)
     elif is_rhel_based; then
-        versions+=($(dnf module list php 2>/dev/null | grep -E '^\s+php' | awk '{print $1}' | sed 's/php://' | sort -V | tail -5))
+        mapfile -t versions < <(dnf module list php 2>/dev/null | grep -E '^\s+php' | awk '{print $1}' | sed 's/php://' | sort -V | tail -7)
     elif is_arch_based; then
         if pacman -Qs php &>/dev/null; then
             versions+=("$(pacman -Q php 2>/dev/null | awk '{print $2}' | cut -d- -f1)")
         else
-            versions+=("8.3" "8.2" "8.1")
+            versions=("8.5" "8.4" "8.3" "8.2" "8.1")
         fi
+    elif is_suse_based; then
+        mapfile -t versions < <(zypper search -s 'php[0-9]*' 2>/dev/null | grep -E 'php[0-9]+' | awk '{print $3}' | grep -oE '[0-9]+\.[0-9]+' | sort -uV | tail -7)
     fi
     
     if [[ ${#versions[@]} -eq 0 ]]; then
-        versions=("8.3" "8.2" "8.1" "8.0" "7.4")
+        versions=("8.5" "8.4" "8.3" "8.2" "8.1" "8.0" "7.4")
     fi
     
     printf '%s\n' "${versions[@]}"
 }
 
-# get_active_php_version prints the active PHP version (major.minor) to stdout; prints "none" if PHP is not installed, or "unknown" if PHP is installed but the version cannot be determined.
+# get_active_php_version returns the currently active PHP minor version (e.g. `8.1`), `unknown` if PHP is installed but the version cannot be determined, and `none` if PHP is not installed.
 get_active_php_version() {
     if command -v php &>/dev/null; then
         php -v 2>/dev/null | head -n1 | grep -oP 'PHP\s+\K[0-9]+\.[0-9]+' || echo "unknown"
@@ -259,7 +260,7 @@ get_active_php_version() {
     fi
 }
 
-# select_php_version selects a PHP version from available candidates, prompts the user when running interactively (defaults to the first option in non-interactive mode), validates the choice, and sets the global `PHP_VERSION` variable.
+# select_php_version lists available PHP versions, shows the currently active version, prompts the user (or uses the first available version in non-interactive mode) to choose one, validates the choice, and sets the global `PHP_VERSION` variable.
 select_php_version() {
     print_step "PHP Version Selection"
     
@@ -302,24 +303,27 @@ select_php_version() {
     print_success "Selected PHP version: $PHP_VERSION"
 }
 
-# validate_domain checks whether the provided domain is a valid fully qualified domain name (FQDN) or "localhost".
+# validate_domain validates that the given string is a valid fully-qualified domain name (FQDN) or `localhost`.
 validate_domain() {
     local domain="$1"
     [[ "$domain" =~ ^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$ ]] || [[ "$domain" =~ ^localhost$ ]]
 }
 
-# generate_password generates a 16-character random password using OpenSSL's RNG; the result contains base64 characters with any padding removed.
+# generate_password generates a 16-character random password from a cryptographically secure source.
 generate_password() {
-    openssl rand -base64 32 | tr -d '=' | cut -c1-16
+    openssl rand -base64 48 | tr -dc 'A-Za-z0-9' | cut -c1-16
 }
 
-# get_database_version gets the installed MySQL/MariaDB server version string or echoes "unknown" if it cannot be determined.
+# get_database_version prints the MySQL/MariaDB server version string to stdout, or `unknown` if the version cannot be determined.
 get_database_version() {
     /usr/bin/mysql -N -B -e "SELECT VERSION();" 2>/dev/null | head -n1 || echo "unknown"
 }
 
-# set_database_root_password sets the MariaDB/MySQL root account password to the provided value, choosing the appropriate SQL syntax (ALTER USER or legacy SET PASSWORD) based on the detected database version.
-# password: the new root password to apply.
+# set_database_root_password sets the MySQL/MariaDB root password to the provided value using a syntax compatible with the detected database version.
+# It accepts one argument: the new root password.
+# On modern MySQL/MariaDB versions it uses `ALTER USER 'root'@'localhost' IDENTIFIED BY '<password>';`,
+# falling back to `SET PASSWORD FOR 'root'@'localhost' = PASSWORD('<password>');` for older releases or when detection fails.
+# Returns 0 on success, 1 on failure.
 set_database_root_password() {
     local password="$1"
     local db_version
@@ -368,7 +372,8 @@ set_database_root_password() {
     return 0
 }
 
-# get_php_packages outputs newline-separated package names required to install PHP for the detected OS; the optional `version` argument (e.g. "8.1") is used to construct distribution-specific package names when applicable.
+# get_php_packages lists PHP package names required for the given PHP version, adapted to the detected OS.
+# It prints each package name on its own line to stdout; names differ by OS family (Debian, RHEL, Arch, SUSE).
 get_php_packages() {
     local version="$1"
     local packages=()
@@ -404,13 +409,24 @@ get_php_packages() {
             "php-curl"
             "php-intl"
         )
+    elif is_suse_based; then
+        packages=(
+            "php${version//./}"
+            "php${version//./}-bz2"
+            "php${version//./}-mysql"
+            "php${version//./}-curl"
+            "php${version//./}-gd"
+            "php${version//./}-intl"
+            "php${version//./}-mbstring"
+            "php${version//./}-xmlreader"
+            "php${version//./}-xmlwriter"
+        )
     fi
     
     printf '%s\n' "${packages[@]}"
 }
 
-# enable_php_apache enables the Apache PHP module matching $PHP_VERSION and ensures the prefork MPM is active on Debian-based systems.
-# enable_php_apache enables the PHP Apache module for the selected PHP version and ensures the prefork MPM is active on Debian-based systems; does nothing on non-Debian systems.
+# enable_php_apache enables the PHP Apache module for the selected PHP_VERSION and ensures the `mpm_prefork` module is enabled on Debian-based systems.
 enable_php_apache() {
     if is_debian_based; then
         a2enmod "php${PHP_VERSION}" >/dev/null 2>&1 || true
@@ -419,10 +435,8 @@ enable_php_apache() {
     fi
 }
 
-# configure_web_server sets distribution-specific web server, user, config, and SSL directory variables after OS detection.
-# For Debian: apache2, www-data, /etc/apache2/*, /etc/apache2/ssl
-# For RHEL: httpd, apache, /etc/httpd/*, /etc/pki/tls/certs (standard RHEL cert location)
-# configure_web_server sets WEB_SERVICE, WEB_USER, APACHE_CONF, SITES_AVAILABLE, and SSL_DIR according to the detected OS and creates the sites-available directory when required.
+# configure_web_server sets WEB_SERVICE, WEB_USER, APACHE_CONF, SITES_AVAILABLE, and SSL_DIR according to the detected OS and creates the sites-available directory on systems that require it.
+# It also logs the selected web service, web user, and SSL directory via print_info.
 configure_web_server() {
     if is_debian_based; then
         WEB_SERVICE="apache2"
@@ -444,6 +458,13 @@ configure_web_server() {
         SITES_AVAILABLE="/etc/httpd/conf.d"
         SSL_DIR="/etc/httpd/ssl"
         mkdir -p "$SITES_AVAILABLE"
+    elif is_suse_based; then
+        WEB_SERVICE="apache2"
+        WEB_USER="wwwrun"
+        APACHE_CONF="/etc/apache2/httpd.conf"
+        SITES_AVAILABLE="/etc/apache2/vhosts.d"
+        SSL_DIR="/etc/apache2/ssl"
+        mkdir -p "$SITES_AVAILABLE"
     fi
     
     print_info "Web server: $WEB_SERVICE"
@@ -451,7 +472,8 @@ configure_web_server() {
     print_info "SSL directory: $SSL_DIR"
 }
 
-# select_domain determines the domain used for the SSL certificate, preferring the `DOMAIN_NAME` environment variable, prompting the user when interactive, or defaulting to "localhost", and sets the global DOMAIN_NAME variable.
+# select_domain selects and validates the domain to use for the SSL certificate and stores the result in the global `DOMAIN_NAME`.
+# It prefers the `DOMAIN_NAME` environment variable, falls back to an interactive prompt when a TTY is available, and uses `localhost` in non-interactive mode or if validation fails.
 select_domain() {
     print_step "Domain Configuration"
     
@@ -527,6 +549,14 @@ elif is_arch_based; then
         "curl"
         "wget"
     )
+elif is_suse_based; then
+    base_packages=(
+        "apache2"
+        "mariadb"
+        "openssl"
+        "curl"
+        "wget"
+    )
 fi
 
 for pkg in "${base_packages[@]}"; do
@@ -567,6 +597,10 @@ elif is_rhel_based || is_arch_based; then
     sed -i 's/^#LoadModule rewrite_module/LoadModule rewrite_module/' "$APACHE_CONF" 2>/dev/null || true
     sed -i 's/^#LoadModule ssl_module/LoadModule ssl_module/' "$APACHE_CONF" 2>/dev/null || true
     sed -i 's/^#LoadModule proxy_fcgi_module/LoadModule proxy_fcgi_module/' "$APACHE_CONF" 2>/dev/null || true
+elif is_suse_based; then
+    a2enmod rewrite >/dev/null 2>&1 || true
+    a2enmod ssl    >/dev/null 2>&1 || true
+    a2enmod php8   >/dev/null 2>&1 || true
 fi
 
 print_success "Web server modules enabled."
@@ -604,7 +638,7 @@ if [[ -f /tmp/latest.tar.gz ]]; then
     print_info "WordPress package already downloaded."
 else
     print_info "Downloading latest WordPress..."
-    if ! cd /tmp && wget -q "https://wordpress.org/latest.tar.gz"; then
+    if ! wget -q -O /tmp/latest.tar.gz "https://wordpress.org/latest.tar.gz"; then
         print_error "Failed to download WordPress"
         exit 1
     fi
@@ -619,6 +653,7 @@ if [[ -f "$INSTALL_DIR/index.php" ]] || [[ -f "$INSTALL_DIR/wp-load.php" ]]; the
     exit 1
 fi
 
+mkdir -p "$INSTALL_DIR"
 /bin/tar -C "$INSTALL_DIR" -zxf /tmp/latest.tar.gz --strip-components=1
 chown -R "$WEB_USER:$WEB_USER" "$INSTALL_DIR"
 print_success "WordPress extracted and permissions set."
@@ -729,6 +764,44 @@ EOF
     VHOST_FILES+=("$WORDPRESS_SSL_VHOST" "$WORDPRESS_HTTP_VHOST")
     a2ensite wordpress-ssl.conf >/dev/null 2>&1
     a2ensite wordpress-http.conf >/dev/null 2>&1
+
+elif is_suse_based; then
+    WORDPRESS_VHOST="$SITES_AVAILABLE/wordpress.conf"
+    
+    cat > "$WORDPRESS_VHOST" << EOF
+<VirtualHost *:443>
+    ServerName $DOMAIN_NAME
+    ServerAdmin admin@$DOMAIN_NAME
+    DocumentRoot $INSTALL_DIR
+
+    SSLEngine on
+    SSLCertificateFile $SSL_DIR/apache-selfsigned.crt
+    SSLCertificateKeyFile $SSL_DIR/apache-selfsigned.key
+
+    <Directory $INSTALL_DIR>
+        AllowOverride All
+        Require all granted
+    </Directory>
+
+    ErrorLog /var/log/apache2/wordpress-error.log
+    CustomLog /var/log/apache2/wordpress-access.log combined
+</VirtualHost>
+
+<VirtualHost *:80>
+    ServerName $DOMAIN_NAME
+    ServerAdmin admin@$DOMAIN_NAME
+    DocumentRoot $INSTALL_DIR
+
+    RewriteEngine On
+    RewriteCond %{HTTPS} off
+    RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+    ErrorLog /var/log/apache2/wordpress-error.log
+    CustomLog /var/log/apache2/wordpress-access.log combined
+</VirtualHost>
+EOF
+
+    VHOST_FILES+=("$WORDPRESS_VHOST")
 
 else
     WORDPRESS_VHOST="$SITES_AVAILABLE/wordpress.conf"
