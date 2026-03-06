@@ -70,14 +70,15 @@
 #                       | Kali Linux ( rolling )
 #                       | Trisquel ( Toutatis | Belenos | Flidas | Etiona | Nabia | Aramo | Ecne )
 #                       | Netrunner ( Shockworm | Vapour | Tiger | Xenon )
+#                       | Pardus ( Yirmibes | Yirmiuc )
 
 ###################################################################################################################################################################################################
 
 # Script                | UniFi Network/OS Easy Installation Script
 # Version               | 9.0.2
-# Script Version        | 9.0.2
-# Application version   | 10.0.156
-# Debian Repo version   | 10.0.156-32034-1
+# Script Version        | 9.0.9
+# Application version   | 9.5.21
+# Debian Repo version   | 10.1.85-32713-1
 # UOS Server version    | 5.0.6
 # Author                | Glenn Rietveld
 # Email                 | glennrietveld8@hotmail.nl
@@ -426,7 +427,7 @@ check_docker_setup() {
 }
 
 check_lxc_setup() {
-  if grep -sqa "lxc" /proc/1/environ /proc/self/mountinfo /proc/1/environ; then lxc_setup="true"; container_system="true"; else lxc_setup="false"; fi
+  if grep -sqE '(/lxc/|/lxd/)' /proc/1/cgroup 2>/dev/null || tr '\0' '\n' </proc/1/environ 2>/dev/null | grep -sqE '^container=(lxc|lxd)$'; then lxc_setup="true"; container_system="true"; else lxc_setup="false"; fi
   if [[ -n "$(command -v jq)" && -e "${eus_dir}/db/db.json" ]]; then
     if [[ "$(dpkg-query --showformat='${version}' --show jq 2> /dev/null | sed -e 's/.*://' -e 's/-.*//g' -e 's/[^0-9.]//g' -e 's/\.//g' | sort -V | tail -n1)" -ge "16" ]]; then
       jq '."database" += {"lxc-container": "'"${lxc_setup}"'"}' "${eus_dir}/db/db.json" > "${eus_dir}/db/db.json.tmp" 2>> "${eus_dir}/logs/eus-database-management.log"
@@ -624,7 +625,6 @@ support_file() {
     process_with_pid_1="$(ps -p 1 -o comm=)"
     cpu_cores="$(grep -ic processor /proc/cpuinfo)"
     cpu_usage="$(awk '{u=$2+$4; t=$2+$4+$5; if (NR==1){u1=u; t1=t;} else print ($2+$4-u1) * 100 / (t-t1) "%"; }' <(grep 'cpu ' /proc/stat) <(sleep 1;grep 'cpu ' /proc/stat))"
-    cpu_cores="$(grep -ic processor /proc/cpuinfo)"
     cpu_architecture="$("$(which dpkg)" --print-architecture)"
     cpu_type="$(uname -p)"
     mem_total="$(grep "^MemTotal:" /proc/meminfo | awk '{print $2}')"
@@ -784,7 +784,7 @@ support_file() {
     if grep -sqE 'mongo\.password|mongo\.uri' "/tmp/EUS/support/unifi.system.properties"; then sed -i -e '/mongo.password/d' -e '/mongo.uri/d' "/tmp/EUS/support/unifi.system.properties"; echo "# Removed mongo.password and mongo.uri for privacy reasons" >> "/tmp/EUS/support/unifi.system.properties"; fi
   fi
   if [[ "${unifi_core_system}" != 'true' && -n "$(apt-cache search debsums | awk '/debsums/{print$1}')" ]]; then
-    if ! [[ "$(command -v debsums)" ]]; then DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install debsums &>> "${eus_dir}/logs/apt.log"; fi
+    if ! [[ "$(command -v debsums)" ]]; then "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install debsums &>> "${eus_dir}/logs/apt.log"; fi
     if [[ "$(command -v debsums)" ]]; then debsums -c &> "/tmp/EUS/support/debsums-check-results"; fi
   fi
   support_file_time="$(date +%Y%m%d-%H%M-%S%N)"
@@ -1139,7 +1139,8 @@ help_script() {
                                             --intermediate-certificate /tmp/INTERMEDIATE.cer
     --own-certificate                       Requirement if you want to import your own paid certificates
                                             with the use of --skip.
-    --run-easy-encrypt                      Run the UniFi Easy Encrypt script if an FQDN is specified via --fqdn.\\n\\n"
+    --run-easy-encrypt                      Run the UniFi Easy Encrypt script if an FQDN is specified via --fqdn.
+    --support-file                          Generate a support file for debugging by Glenn R.\\n\\n"
   exit 0
 }
 
@@ -1719,13 +1720,83 @@ cleanup_conflicting_repositories() {
   fi
 }
 
+eus_apt_sha1_needed() {
+  grep -qsiE 'SHA1 is not considered secure|Policy rejected|second pre-image resistance|sqv returned an error code' /tmp/EUS/apt/apt-update.log
+}
+
+eus_apt_sha1_enable() {
+  [[ -n "$EUS_APT_SHA1_POLICY_FILE" ]] && return 0
+  echo -e "$(date +%F-%T.%6N) | Enabling SHA-1 workaround for apt." &>> "${eus_dir}/logs/apt-sha1-workaround.log"
+  if [[ "${silent_run_apt_get_update}" != "true" ]]; then
+    echo -e "${GRAY_R}#${RESET} Enabling SHA-1 workaround for apt..."
+  fi
+  EUS_APT_SHA1_POLICY_FILE="$(mktemp)" || {
+    echo -e "$(date +%F-%T.%6N) | Failed to enable the SHA-1 workaround (mktemp)." &>> "${eus_dir}/logs/apt-sha1-workaround.log"
+    return 1
+  }
+  printf '%s\n' '[hash_algorithms]' 'sha1 = "always"' > "$EUS_APT_SHA1_POLICY_FILE" || {
+    echo -e "$(date +%F-%T.%6N) | Failed to enable the SHA-1 workaround (write policy)." &>> "${eus_dir}/logs/apt-sha1-workaround.log"
+    return 1
+  }
+  chmod 0644 "$EUS_APT_SHA1_POLICY_FILE" 2>/dev/null || true
+  if [[ -r "$EUS_APT_SHA1_POLICY_FILE" ]]; then
+    EUS_APT_ENV=( env APT_SEQUOIA_CRYPTO_POLICY="$EUS_APT_SHA1_POLICY_FILE" )
+    echo -e "$(date +%F-%T.%6N) | Successfully enabled the SHA-1 workaround." &>> "${eus_dir}/logs/apt-sha1-workaround.log"
+    if [[ "${silent_run_apt_get_update}" != "true" ]]; then
+      echo -e "${GREEN}#${RESET} Successfully enabled the SHA-1 workaround! \\n"
+    fi
+    return 0
+  fi
+  echo -e "$(date +%F-%T.%6N) | Failed to enable the SHA-1 workaround (policy not readable)." &>> "${eus_dir}/logs/apt-sha1-workaround.log"
+  if [[ "${silent_run_apt_get_update}" != "true" ]]; then
+    echo -e "${RED}#${RESET} Failed to enable the SHA-1 workaround... \\n"
+  fi
+  return 1
+}
+
+eus_apt_sha1_disable() {
+  [[ -z "$EUS_APT_SHA1_POLICY_FILE" ]] && return 0
+  echo -e "$(date +%F-%T.%6N) | Disabling the SHA-1 workaround for apt." &>> "${eus_dir}/logs/apt-sha1-workaround.log"
+  if [[ "${silent_run_apt_get_update}" != "true" ]]; then
+    echo -e "${GRAY_R}#${RESET} Disabling the SHA-1 workaround for apt..."
+  fi
+  if rm -f "$EUS_APT_SHA1_POLICY_FILE"; then
+    EUS_APT_SHA1_POLICY_FILE=""
+    EUS_APT_ENV=()
+    echo -e "$(date +%F-%T.%6N) | Successfully disabled the SHA-1 workaround." &>> "${eus_dir}/logs/apt-sha1-workaround.log"
+    if [[ "${silent_run_apt_get_update}" != "true" ]]; then
+      echo -e "${GREEN}#${RESET} Successfully disabled the SHA-1 workaround! \\n"
+    fi
+    return 0
+  fi
+  echo -e "$(date +%F-%T.%6N) | Failed to disable the SHA-1 workaround." &>> "${eus_dir}/logs/apt-sha1-workaround.log"
+  if [[ "${silent_run_apt_get_update}" != "true" ]]; then
+    echo -e "${RED}#${RESET} Failed to disable the SHA-1 workaround... \\n"
+  fi
+  return 1
+}
+
+trap eus_apt_sha1_disable EXIT
+
+run_apt_get_update_with_sha1_fallback() {
+  eus_apt_sha1_disable
+  run_apt_get_update
+  if eus_apt_sha1_needed; then
+    echo -e "$(date +%F-%T.%6N) | SHA-1 signature rejection detected; retrying apt-get update with workaround." &>> "${eus_dir}/logs/apt-sha1-workaround.log"
+    if eus_apt_sha1_enable; then
+      run_apt_get_update
+      eus_apt_sha1_disable
+    fi
+  fi
+}
+
 run_apt_get_update() {
   eus_directory_location="/tmp/EUS"
   eus_create_directories "apt"
   if [[ "${run_with_apt_fix_missing}" == 'true' ]] || [[ -z "${afm_first_run}" ]]; then apt_fix_missing_option="--fix-missing"; afm_first_run="1"; unset run_with_apt_fix_missing; IFS=' ' read -r -a apt_fix_missing <<< "${apt_fix_missing_option}"; fi
   if [[ "${silent_run_apt_get_update}" != "true" ]]; then echo -e "${GRAY_R}#${RESET} Running apt-get update..."; fi
   echo -e "\\n------- $(date +%F-%T.%6N) -------\\n" &>> "${eus_dir}/logs/apt-update.log"
-  if apt-get update "${apt_fix_missing[@]}" 2>&1 | tee -a "${eus_dir}/logs/apt-update.log" > /tmp/EUS/apt/apt-update.log; then
+  if "${EUS_APT_ENV[@]}" apt-get update "${apt_fix_missing[@]}" 2>&1 | tee -a "${eus_dir}/logs/apt-update.log" > /tmp/EUS/apt/apt-update.log; then
     if [[ "${PIPESTATUS[0]}" -eq "0" ]]; then
       if [[ "${silent_run_apt_get_update}" != "true" ]]; then echo -e "${GREEN}#${RESET} Successfully ran apt-get update! \\n"; fi
     else
@@ -1794,7 +1865,7 @@ run_apt_get_update() {
       if [[ "${silent_run_apt_get_update}" != "true" ]]; then echo -e "${GRAY_R}#${RESET} Keys appear to be missing..."; fi; sleep 1
       if [[ "${silent_run_apt_get_update}" != "true" ]]; then echo -e "${YELLOW}#${RESET} Required package dirmngr is missing... cannot recover keys... \\n"; fi
     fi
-    apt-get update &> /tmp/EUS/apt/apt-update.log
+    "${EUS_APT_ENV[@]}" apt-get update &> /tmp/EUS/apt/apt-update.log
     if "$(which dpkg)" -l dirmngr 2> /dev/null | awk '{print $1}' | grep -iq "^ii\\|^hi\\|^ri\\|^pi\\|^ui"; then if grep -qo 'NO_PUBKEY.*' /tmp/EUS/apt/apt-update.log; then run_apt_get_update; fi; fi
   fi
   check_package_cache_file_corruption
@@ -1805,7 +1876,7 @@ run_apt_get_update() {
   cleanup_duplicated_repositories
   cleanup_unavailable_repositories
   cleanup_conflicting_repositories
-  if [[ "${repository_changes_applied}" == 'true' ]]; then unset repository_changes_applied; run_apt_get_update; fi
+  if [[ "${repository_changes_applied}" == 'true' ]]; then unset repository_changes_applied; run_apt_get_update_with_sha1_fallback; fi
   unset silent_run_apt_get_update
 }
 
@@ -1916,7 +1987,7 @@ add_glennr_mongod_repo() {
       echo -e "${GREEN}#${RESET} Successfully added the Glenn R. APT repository for mongod ${mongod_version_major_minor}${try_http_glennr_mongod_repo_text_2}!\\n"
       glennr_mongod_repository_check
       if [[ "${mongodb_key_update}" != 'true' ]]; then
-        run_apt_get_update
+        run_apt_get_update_with_sha1_fallback
         mongod_upgrade_to_version_with_dot="$(apt-cache policy "${gr_mongod_name}" | grep -i "${mongo_version_max_with_dot}" | grep -i Candidate | sed -e 's/ //g' -e 's/*//g' | cut -d':' -f2)"
         if [[ -z "${mongod_upgrade_to_version_with_dot}" ]]; then mongod_upgrade_to_version_with_dot="$(apt-cache policy "${gr_mongod_name}" | grep -i "${mongo_version_max_with_dot}" | sed -e 's/500//g' -e 's/-1//g' -e 's/100//g' -e 's/ //g' -e '/http/d' -e 's/*//g' | cut -d':' -f2 | sed '/mongod/d' | sed 's/*//g' | sort -r -V | head -n 1)"; fi
         if [[ -z "${mongod_upgrade_to_version_with_dot}" && "${try_http_glennr_mongod_repo}" != "true" ]]; then try_http_glennr_mongod_repo="true"; add_glennr_mongod_repo; return; fi
@@ -2444,7 +2515,7 @@ add_mongodb_repo() {
     if echo -e "${mongodb_repo_entry}" &> "/etc/apt/sources.list.d/mongodb-org-${mongodb_version_major_minor}.${source_file_format}"; then
       echo -e "${GREEN}#${RESET} Successfully added the ${try_different_mongodb_repo_test_2}MongoDB ${mongodb_version_major_minor} repository!\\n" && sleep 2
       if [[ "${mongodb_key_update}" != 'true' ]]; then
-        run_apt_get_update
+        run_apt_get_update_with_sha1_fallback
         mongodb_org_upgrade_to_version_with_dot="$(apt-cache policy mongodb-org-server | grep -i "${mongo_version_max_with_dot}" | grep -i Candidate | sed -e 's/ //g' -e 's/*//g' | cut -d':' -f2)"
         if [[ -z "${mongodb_org_upgrade_to_version_with_dot}" ]]; then mongodb_org_upgrade_to_version_with_dot="$(apt-cache policy mongodb-org-server | grep -i "${mongo_version_max_with_dot}" | sed -e 's/500//g' -e 's/-1//g' -e 's/100//g' -e 's/ //g' -e '/http/d' -e 's/*//g' | cut -d':' -f2 | sed '/mongodb/d' | sort -r -V | head -n 1)"; fi
         if [[ "${mongodb_downgrade_process}" == "true" && -n "${previous_mongodb_version_with_dot}" ]]; then
@@ -2491,7 +2562,7 @@ unifi_native_unsupported_check() {
   if [[ "${unifi_native_system}" != 'true' ]] && "$(which dpkg)" -l unifi-native 2> /dev/null; then
     check_dpkg_lock
     echo -e "${GRAY_R}#${RESET} Removing the UniFi Network Native Application..."
-    if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' purge unifi-native &>> "${eus_dir}/logs/unifi-native-uninstall.log"; then
+    if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' purge unifi-native &>> "${eus_dir}/logs/unifi-native-uninstall.log"; then
       echo -e "${GREEN}#${RESET} Successfully purged the UniFi Network Native Application! \\n"
     else
       if "$(which dpkg)" --remove --force-remove-reinstreq unifi-native &>> "${eus_dir}/logs/unifi-native-uninstall.log"; then
@@ -2518,6 +2589,8 @@ network_install_file_name_check() {
 }
 
 cancel_script() {
+  silent_run_apt_get_update="true"
+  eus_apt_sha1_disable
   if [[ "${set_lc_all}" == 'true' ]]; then if [[ -n "${original_lang}" ]]; then export LANG="${original_lang}"; else unset LANG; fi; if [[ -n "${original_lcall}" ]]; then export LC_ALL="${original_lcall}"; else unset LC_ALL; fi; fi
   if [[ "${stopped_unattended_upgrade}" == 'true' ]]; then systemctl start unattended-upgrades &>> "${eus_dir}/logs/unattended-upgrades.log"; unset stopped_unattended_upgrade; fi
   if [[ "${script_option_skip}" == 'true' ]]; then
@@ -2580,6 +2653,8 @@ christmass_new_year() {
 }
 
 author() {
+  silent_run_apt_get_update="true"
+  eus_apt_sha1_disable
   eus_tmp_directory_cleanup="true"; eus_tmp_directory_check
   check_apt_listbugs
   update_eus_db
@@ -2662,8 +2737,8 @@ get_distro() {
     elif [[ "${os_codename}" =~ ^(stretch|continuum|helium|cindy|tyche|ascii)$ ]]; then repo_codename="stretch"; os_codename="stretch"; os_id="debian"
     elif [[ "${os_codename}" =~ ^(buster|debbie|parrot|engywuck-backports|engywuck|deepin|lithium|beowulf|po-tolo|nibiru|amber|eagle)$ ]]; then repo_codename="buster"; os_codename="buster"; os_id="debian"
     elif [[ "${os_codename}" =~ ^(bullseye|kali-rolling|elsie|ara|beryllium|chimaera|orion-belt|byzantium|xenon|tiger)$ ]]; then repo_codename="bullseye"; os_codename="bullseye"; os_id="debian"
-    elif [[ "${os_codename}" =~ ^(bookworm|lory|faye|boron|beige|preslee|daedalus|crimson|vapour|shockworm)$ ]]; then repo_codename="bookworm"; os_codename="bookworm"; os_id="debian"
-    elif [[ "${os_codename}" =~ ^(trixie|excalibur|seven-sisters|gigi)$ ]]; then repo_codename="trixie"; os_codename="trixie"; os_id="debian"
+    elif [[ "${os_codename}" =~ ^(bookworm|lory|faye|boron|beige|preslee|daedalus|crimson|vapour|shockworm|yirmiuc)$ ]]; then repo_codename="bookworm"; os_codename="bookworm"; os_id="debian"
+    elif [[ "${os_codename}" =~ ^(trixie|excalibur|seven-sisters|gigi|yirmibes)$ ]]; then repo_codename="trixie"; os_codename="trixie"; os_id="debian"
     elif [[ "${os_codename}" =~ ^(forky|freia|tiamat)$ ]]; then repo_codename="forky"; os_codename="forky"; os_id="debian"
     elif [[ "${os_codename}" =~ ^(unstable|rolling|nest)$ ]]; then repo_codename="unstable"; os_codename="unstable"; os_id="debian"
     else
@@ -2957,11 +3032,11 @@ get_uos_server_status() {
   local host="${1:-localhost}"  # default to localhost if no arg is passed
   local url="https://${host}:${uos_server_web_port}/api/system"
   if [[ -n "$(command -v jq)" ]]; then
-    application_up="$(curl --silent --insecure "${url}" | jq -r '.isSetup' 2> /dev/null)"
-    if [[ -z "${application_up}" ]]; then application_up="$(curl "${noproxy_curl_argument[@]}" --silent --insecure --connect-timeout 1 "${url}" | jq -r '.isSetup' 2> /dev/null)"; fi
+    application_up="$(curl --silent --insecure "${url}" | jq -r ''.deviceState // .isSetup'' 2> /dev/null)"
+    if [[ -z "${application_up}" ]]; then application_up="$(curl "${noproxy_curl_argument[@]}" --silent --insecure --connect-timeout 1 "${url}" | jq -r ''.deviceState // .isSetup'' 2> /dev/null)"; fi
   else
-    application_up="$(curl --silent --insecure --connect-timeout 1 "${url}" | grep -o '"isSetup":[^,]*' | awk -F ':' '{print $2}')"
-    if [[ -z "${application_up}" ]]; then application_up="$(curl "${noproxy_curl_argument[@]}" --silent --insecure --connect-timeout 1 "${url}" | grep -o '"isSetup":[^,]*' | awk -F ':' '{print $2}')"; fi
+    application_up="$(curl --silent --insecure --connect-timeout 1 "${url}" | grep -oE '"(deviceState|isSetup)":[^,]*' | awk -F ':' '{print $2}')"
+    if [[ -z "${application_up}" ]]; then application_up="$(curl "${noproxy_curl_argument[@]}" --silent --insecure --connect-timeout 1 "${url}" | grep -oE '"(deviceState|isSetup)":[^,]*' | awk -F ':' '{print $2}')"; fi
   fi
   if [[ -n "${application_up}" ]]; then application_up="true"; fi
 }
@@ -3186,7 +3261,7 @@ broken_packages_check() {
   broken_packages="$(apt-get check 2>&1 | grep -iV "you might" | grep -i "Broken" | awk '{print $2}')"
   if [[ -n "${broken_packages}" ]] || tail -n5 "${eus_dir}/logs/"* | grep -iq "Try 'sudo apt --fix-broken install' with no packages\\|Try 'apt --fix-broken install' with no packages"; then
     echo -e "${GRAY_R}#${RESET} Broken packages found: ${broken_packages}. Attempting to fix..." | tee -a "${eus_dir}/logs/broken-packages.log"
-    if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install --fix-broken &>> "${eus_dir}/logs/broken-packages.log"; then
+    if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install --fix-broken &>> "${eus_dir}/logs/broken-packages.log"; then
       echo -e "${GREEN}#${RESET} Successfully fixed the broken packages! \\n" | tee -a "${eus_dir}/logs/broken-packages.log"
     else
       echo -e "${RED}#${RESET} Failed to fix the broken packages! \\n" | tee -a "${eus_dir}/logs/broken-packages.log"
@@ -3232,7 +3307,7 @@ attempt_recover_broken_packages() {
       if ! dpkg -l | awk '{print $2}' | grep -iq "${broken_package}"; then echo -e "Failed to locate ${broken_package} in dpkg list..." &>> "${eus_dir}/logs/attempt-recover-broken-packages.log"; continue; fi
       echo -e "${GRAY_R}#${RESET} Attempting to recover broken packages..."
       check_dpkg_lock
-      if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install -f &>> "${eus_dir}/logs/attempt-recover-broken-packages.log"; then
+      if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install -f &>> "${eus_dir}/logs/attempt-recover-broken-packages.log"; then
         echo -e "${GREEN}#${RESET} Successfully attempted to recover broken packages! \\n"
       else
         echo -e "${RED}#${RESET} Failed to attempt to recover broken packages...\\n"
@@ -3282,7 +3357,7 @@ check_unmet_dependencies() {
         if echo "${dependency}" | grep -ioq ">="; then dependency_to_install="${dependency_no_version}"; else dependency_to_install="${dependency}"; fi
         if [[ -n "${dependency_to_install}" ]]; then
           echo -e "Attempting to install unmet dependency: ${dependency_to_install} \\n" &>> "${eus_dir}/logs/unmet-dependency.log"
-          if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${dependency_to_install}" &>> "${eus_dir}/logs/unmet-dependency.log"; then
+          if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${dependency_to_install}" &>> "${eus_dir}/logs/unmet-dependency.log"; then
             sed -i "s/Depends: ${dependency_no_version}/Depends (completed): ${dependency_no_version}/g" "${log_file}" 2>> "${eus_dir}/logs/unmet-dependency-sed.log"
           else
             if [[ -n "$(command -v jq)" ]]; then
@@ -3309,8 +3384,8 @@ check_unmet_dependencies() {
                 add_repositories
               fi
               silent_run_apt_get_update="true"
-              run_apt_get_update
-              if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${dependency_to_install}" &>> "${eus_dir}/logs/unmet-dependency.log"; then
+              run_apt_get_update_with_sha1_fallback
+              if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${dependency_to_install}" &>> "${eus_dir}/logs/unmet-dependency.log"; then
                 echo -e "\\nSuccessfully installed ${dependency} after adding the repositories for ${version} \\n" &>> "${eus_dir}/logs/unmet-dependency.log"
                 sed -i "s/Depends: ${dependency_no_version}/Depends (completed): ${dependency_no_version}/g" "${log_file}" 2>> "${eus_dir}/logs/unmet-dependency-sed.log"
                 rm --force "/etc/apt/sources.list.d/glennr-install-script-unmet.${source_file_format}" &> /dev/null
@@ -3654,6 +3729,11 @@ network_install_dummy_packages_check() {
       fi
     fi
   done
+}
+
+is_systemd_unit_present() {
+  local unit="$1"
+  [[ "$(systemctl show -p LoadState --value "$unit" 2>/dev/null)" == "loaded" ]]
 }
 
 already_installed_check() {
@@ -4060,14 +4140,14 @@ free_boot_space_check() {
       while read -r linux_package; do
         if [[ "${free_boot_space_check_header_message}" != 'true' ]]; then header; free_boot_space_check_header_message="true"; fi
         echo -e "${GRAY_R}#${RESET} Trying to install ${linux_package}..."
-        if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${linux_package}" &>> "${eus_dir}/logs/linux-package-install.log"; then
+        if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${linux_package}" &>> "${eus_dir}/logs/linux-package-install.log"; then
           echo -e "${GREEN}#${RESET} Successfully installed ${linux_package}! \\n"
         else
           check_unmet_dependencies
           broken_packages_check
           attempt_recover_broken_packages
           add_apt_option_no_install_recommends="true"; get_apt_options
-          if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${linux_package}" &>> "${eus_dir}/logs/linux-package-install.log"; then
+          if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${linux_package}" &>> "${eus_dir}/logs/linux-package-install.log"; then
             echo -e "${GREEN}#${RESET} Successfully installed ${linux_package}! \\n"
           else
             echo -e "${RED}#${RESET} Failed to install ${linux_package}, most likely because the system only has $(df -B1 /boot | awk 'NR==2{print $4}' | awk '{ split( "B KB MB GB TB PB EB ZB YB" , v ); s=1; while( $1>1024 && s<9 ){ $1/=1024; s++ } printf "%.1f %s", $1, v[s] }') on space available on \"/boot\"... \\n"; abort_function_skip_reason="true"; abort_reason="Failed to install ${linux_package} during the boot partition low disk space check."
@@ -4136,7 +4216,7 @@ install_required_packages() {
   installing_required_package=yes
   header
   echo -e "${GRAY_R}#${RESET} Installing required packages for the script..\\n"
-  run_apt_get_update
+  run_apt_get_update_with_sha1_fallback
   sleep 2
 }
 apt_get_install_package() {
@@ -4145,11 +4225,11 @@ apt_get_install_package() {
   else
     apt_get_install_package_variable="install"; apt_get_install_package_variable_2="installed"
   fi
-  run_apt_get_update
+  run_apt_get_update_with_sha1_fallback
   check_dpkg_lock
   echo -e "\\n------- ${required_package} installation ------- $(date +%F-%T.%6N) -------\\n" &>> "${eus_dir}/logs/apt.log"
   echo -e "${GRAY_R}#${RESET} Trying to ${apt_get_install_package_variable} ${required_package%%:*}..."
-  if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${required_package}" 2>&1 | tee -a "${eus_dir}/logs/apt.log" > /tmp/EUS/apt/apt.log; then
+  if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${required_package}" 2>&1 | tee -a "${eus_dir}/logs/apt.log" > /tmp/EUS/apt/apt.log; then
     if [[ "${PIPESTATUS[0]}" -eq "0" ]]; then
       echo -e "${GREEN}#${RESET} Successfully ${apt_get_install_package_variable_2} ${required_package%%:*}! \\n"; sleep 2
     else
@@ -4159,7 +4239,7 @@ apt_get_install_package() {
       attempt_recover_broken_packages
       add_apt_option_no_install_recommends="true"; get_apt_options
       echo -e "${GRAY_R}#${RESET} Trying to ${apt_get_install_package_variable} ${required_package%%:*}..."
-      if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" "${apt_downgrade_option[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${required_package}" 2>&1 | tee -a "${eus_dir}/logs/apt.log" > /tmp/EUS/apt/apt.log; then
+      if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" "${apt_downgrade_option[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${required_package}" 2>&1 | tee -a "${eus_dir}/logs/apt.log" > /tmp/EUS/apt/apt.log; then
         if [[ "${PIPESTATUS[0]}" -eq "0" ]]; then
           echo -e "${GREEN}#${RESET} Successfully ${apt_get_install_package_variable_2} ${required_package%%:*}! \\n"; sleep 2
         else
@@ -4176,7 +4256,7 @@ if ! "$(which dpkg)" -l curl 2> /dev/null | awk '{print $1}' | grep -iq "^ii\\|^
   if [[ "${installing_required_package}" != 'yes' ]]; then install_required_packages; fi
   check_dpkg_lock
   echo -e "${GRAY_R}#${RESET} Installing curl..."
-  if ! DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install curl &>> "${eus_dir}/logs/required.log"; then
+  if ! "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install curl &>> "${eus_dir}/logs/required.log"; then
     echo -e "${RED}#${RESET} Failed to install curl in the first run...\\n"
     if [[ "${repo_codename}" =~ (precise|trusty|utopic|vivid|wily|yakkety|zesty|artful|xenial|bionic|cosmic|disco|eoan|focal|groovy|hirsute|impish|jammy|kinetic|lunar|mantic|noble|oracular|plucky|questing|resolute) ]]; then
       if [[ "${repo_codename}" =~ (precise|trusty|utopic|vivid|wily|yakkety|zesty|artful|xenial|bionic|cosmic) ]]; then repo_codename_argument="-security"; repo_component="main"; fi
@@ -4201,7 +4281,7 @@ if ! "$(which dpkg)" -l sudo 2> /dev/null | awk '{print $1}' | grep -iq "^ii\\|^
   if [[ "${installing_required_package}" != 'yes' ]]; then install_required_packages; fi
   check_dpkg_lock
   echo -e "${GRAY_R}#${RESET} Installing sudo..."
-  if ! DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install sudo &>> "${eus_dir}/logs/required.log"; then
+  if ! "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install sudo &>> "${eus_dir}/logs/required.log"; then
     echo -e "${RED}#${RESET} Failed to install sudo in the first run...\\n"
     repo_component="main"
     add_repositories
@@ -4217,7 +4297,7 @@ if ! "$(which dpkg)" -l jq 2> /dev/null | awk '{print $1}' | grep -iq "^ii\\|^hi
   fi
   check_dpkg_lock
   echo -e "${GRAY_R}#${RESET} Installing jq..."
-  if ! DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install jq &>> "${eus_dir}/logs/required.log"; then
+  if ! "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install jq &>> "${eus_dir}/logs/required.log"; then
     echo -e "${RED}#${RESET} Failed to install jq in the first run...\\n"
     if [[ "${repo_codename}" =~ (precise|trusty|utopic|vivid|wily|yakkety|zesty|artful|xenial|bionic|cosmic|disco|eoan|focal|groovy|hirsute|impish|jammy|kinetic|lunar|mantic|noble|oracular|plucky|questing|resolute) ]]; then
       if [[ "${repo_codename}" =~ (bionic|cosmic|disco|eoan|focal|focal|groovy|hirsute|impish) ]]; then repo_component="main universe"; add_repositories; fi
@@ -4242,7 +4322,7 @@ if ! "$(which dpkg)" -l lsb-release 2> /dev/null | awk '{print $1}' | grep -iq "
   if [[ "${installing_required_package}" != 'yes' ]]; then install_required_packages; fi
   check_dpkg_lock
   echo -e "${GRAY_R}#${RESET} Installing lsb-release..."
-  if ! DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install lsb-release &>> "${eus_dir}/logs/required.log"; then
+  if ! "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install lsb-release &>> "${eus_dir}/logs/required.log"; then
     echo -e "${RED}#${RESET} Failed to install lsb-release in the first run...\\n"
     if [[ "${repo_codename}" =~ (precise|trusty|utopic|vivid|wily|yakkety|zesty|artful|xenial|bionic|cosmic|disco|eoan|focal|groovy|hirsute|impish|jammy|kinetic|lunar|mantic|noble|oracular|plucky|questing|resolute) ]]; then
       repo_component="main universe"
@@ -4260,7 +4340,7 @@ if ! "$(which dpkg)" -l net-tools 2> /dev/null | awk '{print $1}' | grep -iq "^i
   if [[ "${installing_required_package}" != 'yes' ]]; then install_required_packages; fi
   check_dpkg_lock
   echo -e "${GRAY_R}#${RESET} Installing net-tools..."
-  if ! DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install net-tools &>> "${eus_dir}/logs/required.log"; then
+  if ! "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install net-tools &>> "${eus_dir}/logs/required.log"; then
     echo -e "${RED}#${RESET} Failed to install net-tools in the first run...\\n"
     repo_component="main"
     add_repositories
@@ -4277,7 +4357,7 @@ if "$(which dpkg)" -l apt 2> /dev/null | awk '{print $1}' | grep -iq "^ii\\|^hi\
       check_dpkg_lock
       if [[ "${installing_required_package}" != 'yes' ]]; then install_required_packages; fi
       echo -e "${GRAY_R}#${RESET} Installing apt-transport-https..."
-      if ! DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install apt-transport-https &>> "${eus_dir}/logs/required.log"; then
+      if ! "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install apt-transport-https &>> "${eus_dir}/logs/required.log"; then
         echo -e "${RED}#${RESET} Failed to install apt-transport-https in the first run...\\n"
         if [[ "${repo_codename}" =~ (precise|trusty|utopic|vivid|wily|yakkety|zesty|artful|xenial|bionic|cosmic|disco|eoan|focal|groovy|hirsute|impish|jammy|kinetic|lunar|mantic|noble|oracular|plucky|questing|resolute) ]]; then
           if [[ "${repo_codename}" =~ (precise|trusty|utopic|vivid|wily|yakkety|zesty|artful|xenial) ]]; then repo_codename_argument="-security"; repo_component="main"; fi
@@ -4303,7 +4383,7 @@ if ! "$(which dpkg)" -l dirmngr 2> /dev/null | awk '{print $1}' | grep -iq "^ii\
   if [[ "${installing_required_package}" != 'yes' ]]; then install_required_packages; fi
   check_dpkg_lock
   echo -e "${GRAY_R}#${RESET} Installing dirmngr..."
-  if ! DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install dirmngr &>> "${eus_dir}/logs/required.log"; then
+  if ! "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install dirmngr &>> "${eus_dir}/logs/required.log"; then
     echo -e "${RED}#${RESET} Failed to install dirmngr in the first run...\\n"
     if [[ "${repo_codename}" =~ (precise|trusty|utopic|vivid|wily|yakkety|zesty|artful|xenial|bionic|cosmic|disco|eoan|focal|groovy|hirsute|impish|jammy|kinetic|lunar|mantic|noble|oracular|plucky|questing|resolute) ]]; then
       repo_component="universe"
@@ -4325,7 +4405,7 @@ if ! "$(which dpkg)" -l netcat netcat-traditional 2> /dev/null | awk '{print $1}
   netcat_installed_package_name="${required_package}"
   check_dpkg_lock
   echo -e "${GRAY_R}#${RESET} Installing ${required_package}..."
-  if ! DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${required_package}" &>> "${eus_dir}/logs/required.log"; then
+  if ! "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${required_package}" &>> "${eus_dir}/logs/required.log"; then
     echo -e "${RED}#${RESET} Failed to install ${required_package} in the first run...\\n"
     if [[ "${repo_codename}" =~ (precise|trusty|utopic|vivid|wily|yakkety|zesty|artful|xenial|bionic|cosmic|disco|eoan|focal|groovy|hirsute|impish|jammy|kinetic|lunar|mantic|noble|oracular|plucky|questing|resolute) ]]; then
       repo_component="main universe"
@@ -4343,7 +4423,7 @@ if ! "$(which dpkg)" -l psmisc 2> /dev/null | awk '{print $1}' | grep -iq "^ii\\
   if [[ "${installing_required_package}" != 'yes' ]]; then install_required_packages; fi
   check_dpkg_lock
   echo -e "${GRAY_R}#${RESET} Installing psmisc..."
-  if ! DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install psmisc &>> "${eus_dir}/logs/required.log"; then
+  if ! "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install psmisc &>> "${eus_dir}/logs/required.log"; then
     echo -e "${RED}#${RESET} Failed to install psmisc in the first run...\\n"
     if [[ "${repo_codename}" =~ (precise|trusty|utopic|vivid|wily|yakkety|zesty|artful|xenial|bionic|cosmic|disco|eoan|focal|groovy|hirsute|impish|jammy|kinetic|lunar|mantic|noble|oracular|plucky|questing|resolute) ]]; then
       if [[ "${repo_codename}" =~ (precise) ]]; then repo_codename_argument="-updates"; repo_component="main restricted"; fi
@@ -4362,7 +4442,7 @@ if ! "$(which dpkg)" -l gnupg 2> /dev/null | awk '{print $1}' | grep -iq "^ii\\|
   if [[ "${installing_required_package}" != 'yes' ]]; then install_required_packages; fi
   check_dpkg_lock
   echo -e "${GRAY_R}#${RESET} Installing gnupg..."
-  if ! DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install gnupg &>> "${eus_dir}/logs/required.log"; then
+  if ! "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install gnupg &>> "${eus_dir}/logs/required.log"; then
     echo -e "${RED}#${RESET} Failed to install gnupg in the first run...\\n"
     if [[ "${repo_codename}" =~ (precise|trusty|utopic|vivid|wily|yakkety|zesty|artful|xenial|bionic|cosmic|disco|eoan|focal|groovy|hirsute|impish|jammy|kinetic|lunar|mantic|noble|oracular|plucky|questing|resolute) ]]; then
       if [[ "${repo_codename}" =~ (precise|trusty|utopic|vivid|wily|yakkety|zesty|artful|xenial) ]]; then repo_codename_argument="-security"; repo_component="main"; fi
@@ -4382,7 +4462,7 @@ else
     gnupg_segfault_packages=("gnupg" "gnupg2" "libc6" "libreadline8" "libreadline-dev" "libslang2" "zlib1g" "libbz2-1.0" "libgcrypt20" "libsqlite3-0" "libassuan0" "libgpg-error0" "libm6" "libpthread-stubs0-dev" "libtinfo6")
     reinstall_gnupg_segfault_packages=()
     for gnupg_segfault_package in "${gnupg_segfault_packages[@]}"; do if "$(which dpkg)" -l "${gnupg_segfault_package}" &> /dev/null; then reinstall_gnupg_segfault_packages+=("${gnupg_segfault_package}"); fi; done
-    if [[ "${#reinstall_gnupg_segfault_packages[@]}" -gt '0' ]]; then echo -e "\\n------- $(date +%F-%T.%6N) -------\\n" &>> "${eus_dir}/logs/gnupg-segfault-reinstall.log"; DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install --reinstall "${reinstall_gnupg_segfault_packages[@]}" &>> "${eus_dir}/logs/gnupg-segfault-reinstall.log"; fi
+    if [[ "${#reinstall_gnupg_segfault_packages[@]}" -gt '0' ]]; then echo -e "\\n------- $(date +%F-%T.%6N) -------\\n" &>> "${eus_dir}/logs/gnupg-segfault-reinstall.log"; "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install --reinstall "${reinstall_gnupg_segfault_packages[@]}" &>> "${eus_dir}/logs/gnupg-segfault-reinstall.log"; fi
   fi
 fi
 if ! "$(which dpkg)" -l perl 2> /dev/null | awk '{print $1}' | grep -iq "^ii\\|^hi\\|^ri\\|^pi\\|^ui"; then
@@ -4391,7 +4471,7 @@ if ! "$(which dpkg)" -l perl 2> /dev/null | awk '{print $1}' | grep -iq "^ii\\|^
   fi
   check_dpkg_lock
   echo -e "${GRAY_R}#${RESET} Installing perl..."
-  if ! DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install perl &>> "${eus_dir}/logs/required.log"; then
+  if ! "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install perl &>> "${eus_dir}/logs/required.log"; then
     echo -e "${RED}#${RESET} Failed to install perl in the first run...\\n"
     if [[ "${repo_codename}" =~ (precise|trusty|utopic|vivid|wily|yakkety|zesty|artful|xenial|bionic|cosmic|disco|eoan|focal|groovy|hirsute|impish|jammy|kinetic|lunar|mantic|noble|oracular|plucky|questing|resolute) ]]; then
       if [[ "${repo_codename}" =~ (precise|trusty|utopic|vivid|wily|yakkety|zesty|artful|xenial|bionic|cosmic) ]]; then repo_codename_argument="-security"; repo_component="main"; fi
@@ -4414,7 +4494,7 @@ if [[ "${fqdn_specified}" == 'true' ]]; then
     if [[ "${installing_required_package}" != 'yes' ]]; then install_required_packages; fi
   check_dpkg_lock
     echo -e "${GRAY_R}#${RESET} Installing dnsutils..."
-    if ! DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install dnsutils &>> "${eus_dir}/logs/required.log"; then
+    if ! "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install dnsutils &>> "${eus_dir}/logs/required.log"; then
       echo -e "${RED}#${RESET} Failed to install dnsutils in the first run...\\n"
       if [[ "${repo_codename}" =~ (precise|trusty|utopic|vivid|wily|yakkety|zesty|artful|xenial|bionic|cosmic|disco|eoan|focal|groovy|hirsute|impish|jammy|kinetic|lunar|mantic|noble|oracular|plucky|questing|resolute) ]]; then
         if [[ "${repo_codename}" =~ (precise|trusty|utopic|vivid|wily|yakkety|zesty|artful|xenial) ]]; then repo_codename_argument="-security"; repo_component="main"; fi
@@ -4437,7 +4517,7 @@ network_install_required_packages_check() {
     if [[ "${installing_required_package}" != 'yes' ]]; then install_required_packages; fi
     check_dpkg_lock
     echo -e "${GRAY_R}#${RESET} Installing logrotate..."
-    if ! DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install logrotate &>> "${eus_dir}/logs/required.log"; then
+    if ! "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install logrotate &>> "${eus_dir}/logs/required.log"; then
       echo -e "${RED}#${RESET} Failed to install logrotate in the first run...\\n"
       if [[ "${repo_codename}" =~ (precise|trusty|utopic|vivid|wily|yakkety|zesty|artful|xenial|bionic|cosmic|disco|eoan|focal|groovy|hirsute|impish|jammy|kinetic|lunar|mantic|noble|oracular|plucky|questing|resolute) ]]; then
         repo_component="universe"
@@ -4455,7 +4535,7 @@ network_install_required_packages_check() {
     if [[ "${installing_required_package}" != 'yes' ]]; then install_required_packages; fi
     check_dpkg_lock
     echo -e "${GRAY_R}#${RESET} Installing procps..."
-    if ! DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install procps &>> "${eus_dir}/logs/required.log"; then
+    if ! "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install procps &>> "${eus_dir}/logs/required.log"; then
       echo -e "${RED}#${RESET} Failed to install procps in the first run...\\n"
       if [[ "${repo_codename}" =~ (precise|trusty|utopic|vivid|wily|yakkety|zesty|artful|xenial|bionic|cosmic|disco|eoan|focal|groovy|hirsute|impish|jammy|kinetic|lunar|mantic|noble|oracular|plucky|questing|resolute) ]]; then
         if [[ "${repo_codename}" =~ (precise|trusty|utopic|vivid|wily|yakkety|zesty|artful|xenial|bionic|cosmic|disco|eoan|focal|groovy|hirsute|impish|jammy|kinetic|lunar|mantic|noble|oracular|plucky|questing|resolute) ]]; then repo_codename_argument="-security"; repo_component="main"; fi
@@ -4476,7 +4556,7 @@ network_install_required_packages_check() {
     if [[ "${installing_required_package}" != 'yes' ]]; then install_required_packages; fi
     check_dpkg_lock
     echo -e "${GRAY_R}#${RESET} Installing adduser..."
-    if ! DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install adduser &>> "${eus_dir}/logs/required.log"; then
+    if ! "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install adduser &>> "${eus_dir}/logs/required.log"; then
       echo -e "${RED}#${RESET} Failed to install adduser in the first run...\\n"
       if [[ "${repo_codename}" =~ (precise|trusty|utopic|vivid|wily|yakkety|zesty|artful|xenial|bionic|cosmic|disco|eoan|focal|groovy|hirsute|impish|jammy|kinetic|lunar|mantic|noble|oracular|plucky|questing|resolute) ]]; then
         repo_component="universe"
@@ -4497,7 +4577,7 @@ uos_server_install_required_packages_check() {
     if [[ "${installing_required_package}" != 'yes' ]]; then install_required_packages; fi
     check_dpkg_lock
     echo -e "${GRAY_R}#${RESET} Installing podman..."
-    if ! DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install podman &>> "${eus_dir}/logs/required.log"; then
+    if ! "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install podman &>> "${eus_dir}/logs/required.log"; then
       echo -e "${RED}#${RESET} Failed to install podman in the first run...\\n"
       if [[ "${repo_codename}" =~ (noble|oracular|plucky|questing|resolute) ]]; then
         repo_component="main universe"
@@ -4520,7 +4600,7 @@ uos_server_install_required_packages_check() {
       if [[ "${installing_required_package}" != 'yes' ]]; then install_required_packages; fi
       check_dpkg_lock
       echo -e "${GRAY_R}#${RESET} Installing slirp4netns..."
-      if ! DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install slirp4netns &>> "${eus_dir}/logs/required.log"; then
+      if ! "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install slirp4netns &>> "${eus_dir}/logs/required.log"; then
         echo -e "${RED}#${RESET} Failed to install slirp4netns in the first run...\\n"
         if [[ "${repo_codename}" =~ (noble|oracular|plucky|questing|resolute) ]]; then
           repo_component="universe"
@@ -4541,7 +4621,7 @@ uos_server_install_required_packages_check() {
     if [[ "${installing_required_package}" != 'yes' ]]; then install_required_packages; fi
     check_dpkg_lock
     echo -e "${GRAY_R}#${RESET} Installing uidmap..."
-    if ! DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install uidmap &>> "${eus_dir}/logs/required.log"; then
+    if ! "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install uidmap &>> "${eus_dir}/logs/required.log"; then
       echo -e "${RED}#${RESET} Failed to install uidmap in the first run...\\n"
       if [[ "${repo_codename}" =~ (noble|oracular|plucky|questing|resolute) ]]; then
         repo_component="universe"
@@ -4559,7 +4639,7 @@ uos_server_install_required_packages_check() {
     if [[ "${installing_required_package}" != 'yes' ]]; then install_required_packages; fi
     check_dpkg_lock
     echo -e "${GRAY_R}#${RESET} Installing dbus..."
-    if ! DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install dbus &>> "${eus_dir}/logs/required.log"; then
+    if ! "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install dbus &>> "${eus_dir}/logs/required.log"; then
       echo -e "${RED}#${RESET} Failed to install dbus in the first run...\\n"
       if [[ "${repo_codename}" =~ (noble|oracular|plucky|questing|resolute) ]]; then
         repo_component="main"
@@ -4577,7 +4657,7 @@ uos_server_install_required_packages_check() {
     if [[ "${installing_required_package}" != 'yes' ]]; then install_required_packages; fi
     check_dpkg_lock
     echo -e "${GRAY_R}#${RESET} Installing libpam-systemd..."
-    if ! DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install libpam-systemd &>> "${eus_dir}/logs/required.log"; then
+    if ! "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install libpam-systemd &>> "${eus_dir}/logs/required.log"; then
       echo -e "${RED}#${RESET} Failed to install libpam-systemd in the first run...\\n"
       if [[ "${repo_codename}" =~ (noble|oracular|plucky|questing|resolute) ]]; then
         repo_component="main"
@@ -4595,7 +4675,7 @@ uos_server_install_required_packages_check() {
     if [[ "${installing_required_package}" != 'yes' ]]; then install_required_packages; fi
     check_dpkg_lock
     echo -e "${GRAY_R}#${RESET} Installing dbus-user-session..."
-    if ! DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install dbus-user-session &>> "${eus_dir}/logs/required.log"; then
+    if ! "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install dbus-user-session &>> "${eus_dir}/logs/required.log"; then
       echo -e "${RED}#${RESET} Failed to install dbus-user-session in the first run...\\n"
       if [[ "${repo_codename}" =~ (noble|oracular|plucky|questing|resolute) ]]; then
         repo_component="main"
@@ -4715,7 +4795,7 @@ multiple_attempt_to_install_package() {
     else
       echo -e "${GRAY_R}#${RESET} ${multiple_attempt_to_install_package_message_1} ${multiple_attempt_to_install_package_name}..."
     fi
-    if ! DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${multiple_attempt_to_install_package_name}""${multiple_attempt_to_install_package_version_with_equal_sign}" &>> "${eus_dir}/logs/${multiple_attempt_to_install_package_log}.log"; then
+    if ! "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${multiple_attempt_to_install_package_name}""${multiple_attempt_to_install_package_version_with_equal_sign}" &>> "${eus_dir}/logs/${multiple_attempt_to_install_package_log}.log"; then
       if tail -n20 "${eus_dir}/logs/${multiple_attempt_to_install_package_log}.log" | grep -iq "uses unknown compression for member .*zst"; then
         if [[ "${attempt_to_install_package_attempts}" -ge '1' ]]; then
           echo -e "${RED}#${RESET} Failed to $(echo "${multiple_attempt_to_install_package_message_3}"| tr '[:upper:]' '[:lower:]') ${multiple_attempt_to_install_package_name} ${attempt_message_2}...\\n"
@@ -4731,7 +4811,7 @@ multiple_attempt_to_install_package() {
         else
           echo -e "${GRAY_R}#${RESET} ${multiple_attempt_to_install_package_message_1} ${multiple_attempt_to_install_package_name}..."
         fi
-        if ! DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${repackage_deb_file_location}" &>> "${eus_dir}/logs/${multiple_attempt_to_install_package_log}.log"; then
+        if ! "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${repackage_deb_file_location}" &>> "${eus_dir}/logs/${multiple_attempt_to_install_package_log}.log"; then
           if [[ "${attempt_to_install_package_attempts}" -ge '1' ]]; then
             echo -e "${RED}#${RESET} Failed to $(echo "${multiple_attempt_to_install_package_message_3}"| tr '[:upper:]' '[:lower:]') ${multiple_attempt_to_install_package_name} ${attempt_message_2}...\\n"
           else
@@ -4836,6 +4916,7 @@ get_unifi_version() {
 uos_server_install_set_variables() {
   uos_server_web_port="$(grep -sE '^WEB_PORT=' /var/lib/uosserver/server.conf 2> /dev/null | cut -d= -f2)"
   uos_server_web_port="${uos_server_web_port:-11443}"
+  uos_server_https_legacy_port="8443"
   uos_server_http_captive_portal_port="8880"
   uos_server_https_captive_portal_port="8444"
   uos_server_captive_portal_redirector_1_port="8881"
@@ -5218,7 +5299,7 @@ libssl_installation() {
       if [[ "${libssl_download_success_message}" != 'true' ]]; then echo -e "${GREEN}#${RESET} Successfully downloaded libssl! \\n"; libssl_download_success_message="true"; fi
       check_dpkg_lock
       if [[ "${libssl_installing_message}" != 'true' ]]; then echo -e "${GRAY_R}#${RESET} Installing libssl..."; libssl_installing_message="true"; fi
-      if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "$libssl_temp" &>> "${eus_dir}/logs/libssl.log"; then
+      if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "$libssl_temp" &>> "${eus_dir}/logs/libssl.log"; then
         echo -e "${GREEN}#${RESET} Successfully installed libssl! \\n"
         libssl_install_success="true"
         break
@@ -5228,7 +5309,7 @@ libssl_installation() {
         attempt_recover_broken_packages
         add_apt_option_no_install_recommends="true"; get_apt_options
         check_dpkg_lock
-        if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "$libssl_temp" &>> "${eus_dir}/logs/libssl.log"; then
+        if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "$libssl_temp" &>> "${eus_dir}/logs/libssl.log"; then
           echo -e "${GREEN}#${RESET} Successfully installed libssl! \\n"
           libssl_install_success="true"
           break
@@ -5366,7 +5447,7 @@ libssl_installation_check() {
           repo_component="main"
         fi
         add_repositories
-        run_apt_get_update
+        run_apt_get_update_with_sha1_fallback
       fi
     fi
   elif [[ "${required_libssl_version}" == 'libssl1.1' ]]; then
@@ -5407,7 +5488,7 @@ libssl_installation_check() {
           repo_component="main"
         fi
         add_repositories
-        run_apt_get_update
+        run_apt_get_update_with_sha1_fallback
       fi
     fi
   elif [[ "${required_libssl_version}" == 'libssl1.0.0' ]]; then
@@ -5581,7 +5662,7 @@ network_install_mongodb_version_check() {
               if "$(which dpkg)" -l | awk '{print$2}' | grep -iq "^${mongodb_package_purge}$"; then
                 check_dpkg_lock
                 echo -e "${GRAY_R}#${RESET} Purging package ${mongodb_package_purge}..."
-                if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' purge "${mongodb_package_purge}" &>> "${eus_dir}/logs/unsupported-mongodb-uninstall.log"; then
+                if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' purge "${mongodb_package_purge}" &>> "${eus_dir}/logs/unsupported-mongodb-uninstall.log"; then
                   echo -e "${GREEN}#${RESET} Successfully purged ${mongodb_package_purge}! \\n"
                 else
                   echo -e "${RED}#${RESET} Failed to purge ${mongodb_package_purge}... \\n"
@@ -5707,6 +5788,9 @@ uos_server_ports_change_support_check() {
 uos_server_install_ports_check() {
   # Check if UniFi OS Server ports are in use.
   uos_server_ports_used=("${uos_server_web_port}" "${uos_server_http_captive_portal_port}" "${uos_server_https_captive_portal_port}" "${uos_server_captive_portal_redirector_1_port}" "${uos_server_captive_portal_redirector_2_port}" "${uos_server_device_inform_port}" "${uos_server_remote_logger_port}" "${uos_server_stun_port}" "${uos_server_mobile_speedtest_port}" "${uos_server_discovery_1_port}" "${uos_server_discovery_2_port}" "${uos_server_rabbitmq_port}" "${uos_server_identity_hub_port}" "${uos_server_management_wrapper_port}")
+  if ! version_ge "${uos_version}" "5.0.7"; then
+    uos_server_ports_used+=("${uos_server_https_legacy_port}")
+  fi
   uos_server_ports_changeable=()
   uos_server_install_flags=()
   uos_server_ports_change_support_check
@@ -5996,7 +6080,7 @@ while read -r mongodb_repo_version; do
   done < <(grep -sriIl "${mongodb_repo_version} main\\|${mongodb_repo_version} multiverse" /etc/apt/sources.list /etc/apt/sources.list.d/)
   if [[ "${expired_mongodb_check_message_3}" != 'true' ]]; then if [[ "${expired_mongodb_check_message}" == 'true' && "${mongodb_key_update}" != 'true' && "${mongodb_expired_archived}" != 'true' ]]; then echo -e "${GREEN}#${RESET} The script didn't detect any expired MongoDB repository keys! \\n"; expired_mongodb_check_message_3="true"; sleep 3; fi; fi
 done < <(find /etc/apt/ -name "*.list" -type f -print0 | xargs -0 cat | grep mongodb | grep -io "[0-9].[0-9]" | awk '!NF || !seen[$0]++')
-if [[ "${mongodb_key_update}" == 'true' ]]; then run_apt_get_update; unset mongodb_key_update; sleep 3; fi
+if [[ "${mongodb_key_update}" == 'true' ]]; then run_apt_get_update_with_sha1_fallback; unset mongodb_key_update; sleep 3; fi
 
 # Update the MongoDB Check time in the EUS database.
 if [[ "$(jq -r '.database["mongodb-key-last-check"]' "${eus_dir}/db/db.json")" == 'null' ]]; then
@@ -6105,7 +6189,7 @@ adoptium_java() {
     repo_component="main"
     get_repo_url
     add_repositories
-    run_apt_get_update
+    run_apt_get_update_with_sha1_fallback
   else
     { echo "# Could not find \"${os_codename}\" on https://packages.adoptium.net/artifactory/deb/dists/"; echo "# List of what was found:"; curl "${curl_argument[@]}" "https://packages.adoptium.net/artifactory/deb/dists/" | sed -e 's/<[^>]*>//g' -e '/^$/d' -e '/\/\//d' -e '/function/d' -e '/location/d' -e '/}/d' -e 's/\///g' -e '/Name/d' -e '/Index/d' -e '/\.\./d' -e '/Artifactory/d' | awk '{print $1}'; } &>> "${eus_dir}/logs/adoptium.log"
   fi
@@ -6142,7 +6226,7 @@ openjdk_java() {
   elif [[ "${os_codename}" == "jessie" ]]; then
     check_dpkg_lock
     echo -e "${GRAY_R}#${RESET} ${openjdk_variable} ${required_java_version}-jre-headless..."
-    if ! DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install -t jessie-backports "${required_java_version}-jre-headless" &>> "${eus_dir}/logs/apt.log" || [[ "${old_openjdk_version}" == 'true' ]]; then
+    if ! "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install -t jessie-backports "${required_java_version}-jre-headless" &>> "${eus_dir}/logs/apt.log" || [[ "${old_openjdk_version}" == 'true' ]]; then
       echo -e "${RED}#${RESET} Failed to ${openjdk_variable_3} ${required_java_version}-jre-headless in the first run...\\n"
       if [[ "$(find /etc/apt/ -name "*.list" -type f -print0 | xargs -0 cat | grep -P -c "^deb http[s]*://archive.debian.org/debian jessie-backports main")" -eq "0" ]]; then
         echo "deb ${http_or_https}://archive.debian.org/debian jessie-backports main" >>/etc/apt/sources.list.d/glennr-install-script.list || abort
@@ -6161,7 +6245,7 @@ openjdk_java() {
         required_package="${required_java_version}-jre-headless"
         if apt-get update -o Acquire::Check-Valid-Until="false" &> /dev/null; then echo -e "${GREEN}#${RESET} Successfully ran apt-get update! \\n"; else abort_reason="Failed to ran apt-get update."; abort; fi
         echo -e "\\n------- ${required_package} installation ------- $(date +%F-%T.%6N) -------\\n" &>> "${eus_dir}/logs/apt.log"
-        if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install -t jessie-backports "${required_java_version}-jre-headless" &>> "${eus_dir}/logs/apt.log"; then echo -e "${GREEN}#${RESET} Successfully installed ${required_package}! \\n" && sleep 2; else abort_reason="Failed to install ${required_package}."; abort; fi
+        if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install -t jessie-backports "${required_java_version}-jre-headless" &>> "${eus_dir}/logs/apt.log"; then echo -e "${GREEN}#${RESET} Successfully installed ${required_package}! \\n" && sleep 2; else abort_reason="Failed to install ${required_package}."; abort; fi
         sed -i '/jessie-backports/d' /etc/apt/sources.list.d/glennr-install-script.list
         unset required_package
       fi
@@ -6272,7 +6356,7 @@ java_cleanup_not_required_versions() {
             header
             while read -r java_package; do
               echo -e "${GRAY_R}#${RESET} Removing ${java_package}..."
-              if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' remove "${java_package}" &>> "${eus_dir}/logs/java-uninstall.log"; then
+              if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' remove "${java_package}" &>> "${eus_dir}/logs/java-uninstall.log"; then
                 echo -e "${GREEN}#${RESET} Successfully removed ${java_package}! \\n"
               else
                 echo -e "${RED}#${RESET} Successfully removed ${java_package}... \\n"
@@ -6325,7 +6409,7 @@ java_install_check() {
     fi
     openjdk_java
     if [[ "${unifi_core_system}" != 'true' ]]; then adoptium_java; fi
-    run_apt_get_update
+    run_apt_get_update_with_sha1_fallback
     available_java_packages_check
     java_install_attempts="$(apt-cache search --names-only ^"openjdk-${required_java_version_short}-jre-headless|temurin-${required_java_version_short}-jre|temurin-${required_java_version_short}-jdk" | awk '{print $1}' | wc -l)"
     until [[ "${java_install_attempts}" == "0" ]]; do
@@ -6348,7 +6432,7 @@ java_install_check() {
     unset java_install_attempts
     if "$(which dpkg)" -l | grep "^ii\\|^hi" | grep -iq "temurin-${required_java_version_short}-jre" && "$(which dpkg)" -l | grep "^ii\\|^hi" | grep -iq "temurin-${required_java_version_short}-jdk"; then
       echo -e "${GRAY_R}#${RESET} Removing temurin-${required_java_version_short}-jdk..."
-      if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg6::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' remove "temurin-${required_java_version_short}-jdk" &>> "${eus_dir}/logs/temurin-jdk-remove.log"; then
+      if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg6::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' remove "temurin-${required_java_version_short}-jdk" &>> "${eus_dir}/logs/temurin-jdk-remove.log"; then
         echo -e "${GREEN}#${RESET} Successfully removed temurin-${required_java_version_short}-jdk! \\n"
       else
         echo -e "${RED}#${RESET} Failed to remove temurin-${required_java_version_short}-jdk... \\n"
@@ -6534,7 +6618,7 @@ mongodb_upgrade_check() {
         echo -e "${GREEN}#${RESET} Successfully prevented ${mongodb_upgrade_check_package} from upgrading! \\n"
       else
         echo -e "${RED}#${RESET} Failed to prevent ${mongodb_upgrade_check_package} from upgrading...\\n"
-        if [[ "${mongodb_upgrade_check_remove_old_mongo_repo}" != 'true' ]]; then remove_older_mongodb_repositories; mongodb_upgrade_check_remove_old_mongo_repo="true"; run_apt_get_update; fi
+        if [[ "${mongodb_upgrade_check_remove_old_mongo_repo}" != 'true' ]]; then remove_older_mongodb_repositories; mongodb_upgrade_check_remove_old_mongo_repo="true"; run_apt_get_update_with_sha1_fallback; fi
       fi
     fi
   done < <("$(which dpkg)" -l | awk '{print $1,$2}' | awk '/ii.*mongo/ {print $2}' | sed 's/:.*//')
@@ -6546,11 +6630,11 @@ system_upgrade() {
       check_dpkg_lock
       echo -e "\\n------- updating ${package} ------- $(date +%F-%T.%6N) -------\\n" &>> "${eus_dir}/logs/upgrade.log"
       echo -ne "\\r${GRAY_R}#${RESET} Updating package ${package}..."
-      if DEBIAN_FRONTEND='noninteractive' apt-get -y -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' --only-upgrade install "${package}" 2>&1 | tee -a "${eus_dir}/logs/upgrade.log" > /tmp/EUS/apt/install.log; then
+      if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' --only-upgrade install "${package}" 2>&1 | tee -a "${eus_dir}/logs/upgrade.log" > /tmp/EUS/apt/install.log; then
         if [[ "${PIPESTATUS[0]}" -eq "0" ]]; then echo -e "\\r${GREEN}#${RESET} Successfully updated package ${package}!"; fi
       elif tail -n1 /usr/lib/EUS/logs/upgrade.log | grep -ioq "Packages were downgraded and -y was used without --allow-downgrades" "${eus_dir}/logs/upgrade.log"; then
         check_dpkg_lock
-        if DEBIAN_FRONTEND='noninteractive' apt-get -y -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' --only-upgrade --allow-downgrades install "${package}" 2>&1 | tee -a "${eus_dir}/logs/upgrade.log" > /tmp/EUS/apt/install.log; then
+        if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' --only-upgrade --allow-downgrades install "${package}" 2>&1 | tee -a "${eus_dir}/logs/upgrade.log" > /tmp/EUS/apt/install.log; then
           if [[ "${PIPESTATUS[0]}" -eq "0" ]]; then
             echo -e "\\r${GREEN}#${RESET} Successfully updated package ${package}!"
             continue
@@ -6565,15 +6649,15 @@ system_upgrade() {
     done < /tmp/EUS/upgrade/upgrade_list
     echo ""
   fi
-  if ls /tmp/EUS/apt/*.log 1> /dev/null 2>&1; then check_package_cache_file_corruption; check_extended_states_corruption; https_died_unexpectedly_check; check_time_date_for_repositories; cleanup_malformed_repositories; cleanup_duplicated_repositories; cleanup_unavailable_repositories; cleanup_conflicting_repositories; if [[ "${repository_changes_applied}" == 'true' ]]; then unset repository_changes_applied; run_apt_get_update; fi; fi
+  if ls /tmp/EUS/apt/*.log 1> /dev/null 2>&1; then check_package_cache_file_corruption; check_extended_states_corruption; https_died_unexpectedly_check; check_time_date_for_repositories; cleanup_malformed_repositories; cleanup_duplicated_repositories; cleanup_unavailable_repositories; cleanup_conflicting_repositories; if [[ "${repository_changes_applied}" == 'true' ]]; then unset repository_changes_applied; run_apt_get_update_with_sha1_fallback; fi; fi
   check_dpkg_lock
   echo -e "\\n------- apt-get upgrade ------- $(date +%F-%T.%6N) -------\\n" &>> "${eus_dir}/logs/upgrade.log"
   echo -e "${GRAY_R}#${RESET} Running apt-get upgrade..."
-  if DEBIAN_FRONTEND='noninteractive' apt-get -y -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' upgrade 2>&1 | tee -a "${eus_dir}/logs/upgrade.log" > /tmp/EUS/apt/upgrade.log; then if [[ "${PIPESTATUS[0]}" -eq "0" ]]; then echo -e "${GREEN}#${RESET} Successfully ran apt-get upgrade! \\n"; else echo -e "${RED}#${RESET} Failed to run apt-get upgrade... \\n"; fi; fi
+  if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' upgrade 2>&1 | tee -a "${eus_dir}/logs/upgrade.log" > /tmp/EUS/apt/upgrade.log; then if [[ "${PIPESTATUS[0]}" -eq "0" ]]; then echo -e "${GREEN}#${RESET} Successfully ran apt-get upgrade! \\n"; else echo -e "${RED}#${RESET} Failed to run apt-get upgrade... \\n"; fi; fi
   check_dpkg_lock
   echo -e "\\n------- apt-get dist-upgrade ------- $(date +%F-%T.%6N) -------\\n" &>> "${eus_dir}/logs/upgrade.log"
   echo -e "${GRAY_R}#${RESET} Running apt-get dist-upgrade..."
-  if DEBIAN_FRONTEND='noninteractive' apt-get -y -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' dist-upgrade 2>&1 | tee -a "${eus_dir}/logs/upgrade.log" > /tmp/EUS/apt/dist-upgrade.log; then if [[ "${PIPESTATUS[0]}" -eq "0" ]]; then echo -e "${GREEN}#${RESET} Successfully ran apt-get dist-upgrade! \\n"; else echo -e "${RED}#${RESET} Failed to run apt-get dist-upgrade... \\n"; fi; fi
+  if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' dist-upgrade 2>&1 | tee -a "${eus_dir}/logs/upgrade.log" > /tmp/EUS/apt/dist-upgrade.log; then if [[ "${PIPESTATUS[0]}" -eq "0" ]]; then echo -e "${GREEN}#${RESET} Successfully ran apt-get dist-upgrade! \\n"; else echo -e "${RED}#${RESET} Failed to run apt-get dist-upgrade... \\n"; fi; fi
   echo -e "${GRAY_R}#${RESET} Running apt-get autoremove..."
   if apt-get -y autoremove &>> "${eus_dir}/logs/apt-cleanup.log"; then echo -e "${GREEN}#${RESET} Successfully ran apt-get autoremove! \\n"; else echo -e "${RED}#${RESET} Failed to run apt-get autoremove"; fi
   echo -e "${GRAY_R}#${RESET} Running apt-get autoclean..."
@@ -6586,7 +6670,7 @@ system_update_check() {
   cleanup_codename_mismatch_repos
   header
   echo -e "${GRAY_R}#${RESET} Checking if your system is up-to-date...\\n" && sleep 1
-  run_apt_get_update
+  run_apt_get_update_with_sha1_fallback
   mongodb_upgrade_check
   echo -e "${GRAY_R}#${RESET} The package(s) below can be upgraded!"
   echo -e "\\n${GRAY_R}----${RESET}\\n"
@@ -6647,7 +6731,7 @@ mongo_last_attempt() {
         if [[ "${mongo_last_attempt_download_success_message}" != 'true' ]]; then echo -e "${GREEN}#${RESET} Successfully downloaded ${mongo_last_attempt_name}! \\n"; mongo_last_attempt_download_success_message="true"; fi
         echo -e "${GRAY_R}#${RESET} Installing ${mongo_last_attempt_name}..."
         check_dpkg_lock
-        if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "$mongo_last_attempt_temp" &>> "${eus_dir}/logs/unifi-database-required.log"; then
+        if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "$mongo_last_attempt_temp" &>> "${eus_dir}/logs/unifi-database-required.log"; then
           echo -e "${GREEN}#${RESET} Successfully installed ${mongo_last_attempt_name}! \\n"
           mongo_last_attempt_install_success="true"
           break
@@ -6747,7 +6831,7 @@ mongodb_installation() {
         get_repo_url
         repo_component="main"
         add_repositories
-        run_apt_get_update
+        run_apt_get_update_with_sha1_fallback
       fi
     fi
     list_of_glennr_mongod_dependencies="$(apt-cache depends "${gr_mongod_name}" | tr '[:upper:]' '[:lower:]' | grep -i depends | awk '!a[$0]++' | sed -e 's/|//g' -e 's/ //g' -e 's/<//g' -e 's/>//g' -e 's/depends://g' | sort -V | awk '!/^gcc/ || !f++')"
@@ -6780,7 +6864,7 @@ mongodb_installation() {
             repo_component="main"
           fi
           add_repositories
-          run_apt_get_update
+          run_apt_get_update_with_sha1_fallback
         fi
       fi
       if "$(which dpkg)" -l mongodb-mongosh-shared-openssl11 "${glennr_mongod_dependency}" 2> /dev/null | awk '{print $1}' | grep -iq "^ii\\|^hi\\|^ri\\|^pi\\|^ui"; then
@@ -6828,7 +6912,7 @@ mongodb_installation() {
             repo_component="main"
           fi
           add_repositories
-          run_apt_get_update
+          run_apt_get_update_with_sha1_fallback
         fi
         glennr_mongod_dependency_install_version="$(apt-cache policy "${glennr_mongod_dependency}" | tr '[:upper:]' '[:lower:]' | sed '1,/version table/d' | sed -e 's/500//g' -e 's/100//g' -e '/http/d' -e '/var/d' -e 's/*//g' -e 's/ //g' | grep -i "^${glennr_mongod_dependency_version}" | head -n1)"
         if [[ -z "${glennr_mongod_dependency_install_version}" ]]; then
@@ -6836,14 +6920,14 @@ mongodb_installation() {
         fi
         check_dpkg_lock
         echo -e "${GRAY_R}#${RESET} Installing ${glennr_mongod_dependency}..."
-        if ! DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${glennr_mongod_dependency}"="${glennr_mongod_dependency_install_version}" &>> "${eus_dir}/logs/${gr_mongod_name}-dependencies.log"; then
-          if ! DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${glennr_mongod_dependency}" &>> "${eus_dir}/logs/${gr_mongod_name}-dependencies.log"; then
+        if ! "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${glennr_mongod_dependency}"="${glennr_mongod_dependency_install_version}" &>> "${eus_dir}/logs/${gr_mongod_name}-dependencies.log"; then
+          if ! "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${glennr_mongod_dependency}" &>> "${eus_dir}/logs/${gr_mongod_name}-dependencies.log"; then
             check_unmet_dependencies
             broken_packages_check
             attempt_recover_broken_packages
             add_apt_option_no_install_recommends="true"; get_apt_options
             check_dpkg_lock
-            if ! DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${glennr_mongod_dependency}" &>> "${eus_dir}/logs/${gr_mongod_name}-dependencies.log"; then
+            if ! "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${glennr_mongod_dependency}" &>> "${eus_dir}/logs/${gr_mongod_name}-dependencies.log"; then
               abort_reason="Failed to install ${glennr_mongod_dependency}."
               abort
             else
@@ -6874,7 +6958,7 @@ mongodb_installation() {
     if [[ "${#mongodb_tools_extra_dependencies[@]}" -gt 0 ]]; then tools_extra_dependency_extra_packages_message=", $(IFS=,; echo "${mongodb_tools_extra_dependencies[*]}" | sed 's/,/, /g; s/,\([^,]*\)$/ and\1/')"; fi
     check_dpkg_lock
     echo -e "${GRAY_R}#${RESET} Purging package mongodb-org-database-tools-extra${tools_extra_dependency_extra_packages_message}..."
-    if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' purge "mongodb-org-database-tools-extra" "${mongodb_tools_extra_dependencies[@]}" &>> "${eus_dir}/logs/unifi-database-required.log"; then
+    if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' purge "mongodb-org-database-tools-extra" "${mongodb_tools_extra_dependencies[@]}" &>> "${eus_dir}/logs/unifi-database-required.log"; then
       echo -e "${GREEN}#${RESET} Successfully purged mongodb-org-database-tools-extra${tools_extra_dependency_extra_packages_message}! \\n"
     else
       echo -e "${RED}#${RESET} Failed to purge mongodb-org-database-tools-extra${tools_extra_dependency_extra_packages_message}...\\n"
@@ -6884,7 +6968,7 @@ mongodb_installation() {
   if "$(which dpkg)" -l mongo-tools 2> /dev/null | awk '{print $1}' | grep -iq "^ii\\|^hi\\|^ri\\|^pi\\|^ui"; then
     check_dpkg_lock
     echo -e "${GRAY_R}#${RESET} Purging package mongo-tools..."
-    if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' purge "mongo-tools" &>> "${eus_dir}/logs/mongodb-org-install.log"; then
+    if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' purge "mongo-tools" &>> "${eus_dir}/logs/mongodb-org-install.log"; then
       echo -e "${GREEN}#${RESET} Successfully purged mongo-tools! \\n"
     else
       echo -e "${RED}#${RESET} Failed to purge mongo-tools...\\n"
@@ -6900,7 +6984,7 @@ mongodb_installation() {
   fi
   check_dpkg_lock
   echo -e "${GRAY_R}#${RESET} Installing mongodb-org version ${mongo_version_max_with_dot::3}..."
-  if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${mongodb_installation_server_package}" "mongodb-org-shell${install_mongodb_version_with_equality_sign}" "mongodb-org-tools${install_mongodb_version_with_equality_sign}" &>> "${eus_dir}/logs/mongodb-org-install.log"; then
+  if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${mongodb_installation_server_package}" "mongodb-org-shell${install_mongodb_version_with_equality_sign}" "mongodb-org-tools${install_mongodb_version_with_equality_sign}" &>> "${eus_dir}/logs/mongodb-org-install.log"; then
     echo -e "${GREEN}#${RESET} Successfully installed mongodb-org version ${mongo_version_max_with_dot::3}! \\n"
     mongodb_installed="true"
   else
@@ -6912,7 +6996,7 @@ mongodb_installation() {
     libssl_installation_check
     check_dpkg_lock
     echo -e "${GRAY_R}#${RESET} Trying to install mongodb-org version ${mongo_version_max_with_dot::3} in the second run..."
-    if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${mongodb_installation_server_package}" "mongodb-org-shell${install_mongodb_version_with_equality_sign}" "mongodb-org-tools${install_mongodb_version_with_equality_sign}" &>> "${eus_dir}/logs/mongodb-org-install.log"; then
+    if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${mongodb_installation_server_package}" "mongodb-org-shell${install_mongodb_version_with_equality_sign}" "mongodb-org-tools${install_mongodb_version_with_equality_sign}" &>> "${eus_dir}/logs/mongodb-org-install.log"; then
       echo -e "${GREEN}#${RESET} Successfully installed mongodb-org version ${mongo_version_max_with_dot::3} in the second run! \\n"
       mongodb_installed="true"
     else
@@ -6925,7 +7009,7 @@ mongodb_installation() {
       libssl_installation_check
       check_dpkg_lock
       echo -e "${GRAY_R}#${RESET} Trying to install mongodb-org version ${mongo_version_max_with_dot::3} in the third run..."
-      if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${mongodb_installation_server_package}" "mongodb-org-shell${install_mongodb_version_with_equality_sign}" "mongodb-org-tools${install_mongodb_version_with_equality_sign}" &>> "${eus_dir}/logs/mongodb-org-install.log"; then
+      if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${mongodb_installation_server_package}" "mongodb-org-shell${install_mongodb_version_with_equality_sign}" "mongodb-org-tools${install_mongodb_version_with_equality_sign}" &>> "${eus_dir}/logs/mongodb-org-install.log"; then
         echo -e "${GREEN}#${RESET} Successfully installed mongodb-org version ${mongo_version_max_with_dot::3} in the third run! \\n"
         mongodb_installed="true"
       else
@@ -6933,7 +7017,7 @@ mongodb_installation() {
         broken_packages_check
         attempt_recover_broken_packages
         add_apt_option_no_install_recommends="true"; get_apt_options
-        if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${mongodb_installation_server_package}" "mongodb-org-shell${install_mongodb_version_with_equality_sign}" "mongodb-org-tools${install_mongodb_version_with_equality_sign}" &>> "${eus_dir}/logs/mongodb-org-install.log"; then
+        if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${mongodb_installation_server_package}" "mongodb-org-shell${install_mongodb_version_with_equality_sign}" "mongodb-org-tools${install_mongodb_version_with_equality_sign}" &>> "${eus_dir}/logs/mongodb-org-install.log"; then
           echo -e "${GREEN}#${RESET} Successfully installed mongodb-org version ${mongo_version_max_with_dot::3} in the fourth run! \\n"
           mongodb_installed="true"
         else
@@ -6973,12 +7057,12 @@ mongodb_installation() {
       fi
       echo -e "${GRAY_R}#${RESET} Installing ${mongodb_mongosh_install_package_name}..."
       check_dpkg_lock
-      if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${mongodb_mongosh_install_package_name}" &>> "${eus_dir}/logs/mongodb-org-install.log"; then
+      if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${mongodb_mongosh_install_package_name}" &>> "${eus_dir}/logs/mongodb-org-install.log"; then
         echo -e "${GREEN}#${RESET} Successfully installed ${mongodb_mongosh_install_package_name}! \\n"
         if [[ "$(apt-cache policy "${mongodb_mongosh_libssl_version}" | tr '[:upper:]' '[:lower:]' | grep "installed:" | cut -d':' -f2 | sed 's/ //g')" != "$(apt-cache policy "${mongodb_mongosh_libssl_version}" | tr '[:upper:]' '[:lower:]' | grep "candidate:" | cut -d':' -f2 | sed 's/ //g')" ]]; then
           echo -e "${GRAY_R}#${RESET} Updating ${mongodb_mongosh_libssl_version}..."
           check_dpkg_lock
-          if DEBIAN_FRONTEND='noninteractive' apt-get -y -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' --only-upgrade install "${mongodb_mongosh_libssl_version}" &>> "${eus_dir}/logs/libssl.log"; then
+          if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' --only-upgrade install "${mongodb_mongosh_libssl_version}" &>> "${eus_dir}/logs/libssl.log"; then
             echo -e "${GREEN}#${RESET} Successfully updated ${mongodb_mongosh_libssl_version}! \\n"
           else
             echo -e "${RED}#${RESET} Failed to update ${mongodb_mongosh_libssl_version}...\\n"
@@ -6990,12 +7074,12 @@ mongodb_installation() {
         attempt_recover_broken_packages
         add_apt_option_no_install_recommends="true"; get_apt_options
         check_dpkg_lock
-        if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${mongodb_mongosh_install_package_name}" &>> "${eus_dir}/logs/mongodb-org-install.log"; then
+        if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${mongodb_mongosh_install_package_name}" &>> "${eus_dir}/logs/mongodb-org-install.log"; then
           echo -e "${GREEN}#${RESET} Successfully installed ${mongodb_mongosh_install_package_name}! \\n"
           if [[ "$(apt-cache policy "${mongodb_mongosh_libssl_version}" | tr '[:upper:]' '[:lower:]' | grep "installed:" | cut -d':' -f2 | sed 's/ //g')" != "$(apt-cache policy "${mongodb_mongosh_libssl_version}" | tr '[:upper:]' '[:lower:]' | grep "candidate:" | cut -d':' -f2 | sed 's/ //g')" ]]; then
             echo -e "${GRAY_R}#${RESET} Updating ${mongodb_mongosh_libssl_version}..."
             check_dpkg_lock
-            if DEBIAN_FRONTEND='noninteractive' apt-get -y -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' --only-upgrade install "${mongodb_mongosh_libssl_version}" &>> "${eus_dir}/logs/libssl.log"; then
+            if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' --only-upgrade install "${mongodb_mongosh_libssl_version}" &>> "${eus_dir}/logs/libssl.log"; then
               echo -e "${GREEN}#${RESET} Successfully updated ${mongodb_mongosh_libssl_version}! \\n"
             else
               echo -e "${RED}#${RESET} Failed to update ${mongodb_mongosh_libssl_version}...\\n"
@@ -7062,25 +7146,25 @@ mongodb_installation_armhf() {
   fi
   if [[ -f "/etc/apt/sources.list.d/glennr_armhf.list" ]]; then rm --force "/etc/apt/sources.list.d/glennr_armhf.list"; fi
   echo "deb ${signed_by_value_raspbian}${raspbian_repo_url} ${os_codename} main contrib non-free rpi" &> /etc/apt/sources.list.d/glennr-install-script.list
-  run_apt_get_update
+  run_apt_get_update_with_sha1_fallback
   check_dpkg_lock
-  if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install mongodb-server mongodb-clients &>> "${eus_dir}/logs/mongodb-armhf-install.log"; then
+  if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install mongodb-server mongodb-clients &>> "${eus_dir}/logs/mongodb-armhf-install.log"; then
     echo -e "${GREEN}#${RESET} Successfully installed mongodb-server and mongodb-clients! \\n"
   else
     echo -e "${RED}#${RESET} Failed to install mongodb-server and mongodb-clients in the first run... \\n${RED}#${RESET} Trying to save the installation...\\n"
     echo -e "${GRAY_R}#${RESET} Running \"apt-get install -f\"..."
-    if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install -f &>> "${eus_dir}/logs/mongodb-armhf-install.log"; then
+    if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install -f &>> "${eus_dir}/logs/mongodb-armhf-install.log"; then
       echo -e "${GREEN}#${RESET} Successfully ran \"apt-get install -f\"! \\n"
       check_dpkg_lock
       echo -e "${GRAY_R}#${RESET} Trying to install mongodb-server and mongodb-clients again..."
-      if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install mongodb-server mongodb-clients &>> "${eus_dir}/logs/mongodb-armhf-install.log"; then
+      if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install mongodb-server mongodb-clients &>> "${eus_dir}/logs/mongodb-armhf-install.log"; then
         echo -e "${GREEN}#${RESET} Successfully installed mongodb-server and mongodb-clients! \\n"
       else
         check_unmet_dependencies
         broken_packages_check
         attempt_recover_broken_packages
         add_apt_option_no_install_recommends="true"; get_apt_options
-        if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install mongodb-server mongodb-clients &>> "${eus_dir}/logs/mongodb-armhf-install.log"; then
+        if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install mongodb-server mongodb-clients &>> "${eus_dir}/logs/mongodb-armhf-install.log"; then
           echo -e "${GREEN}#${RESET} Successfully installed mongodb-server and mongodb-clients! \\n"
         else
           abort_reason="Failed to install mongodb-server and mongodb-clients... Consider switching to a 64-bit platform and re-run the scripts."
@@ -7099,7 +7183,7 @@ mongodb_server_clients_installation() {
   check_dpkg_lock
   echo -e "\\n------- $(date +%F-%T.%6N) -------\\n" &>> "${eus_dir}/logs/mongodb-server-client-install.log"
   echo -e "${GRAY_R}#${RESET} Installing mongodb-server and mongodb-clients..."
-  if ! DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "mongodb-server${mongodb_server_clients_installation_recovery_version}" "mongodb-clients${mongodb_server_clients_installation_recovery_version}" &>> "${eus_dir}/logs/mongodb-server-client-install.log"; then
+  if ! "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "mongodb-server${mongodb_server_clients_installation_recovery_version}" "mongodb-clients${mongodb_server_clients_installation_recovery_version}" &>> "${eus_dir}/logs/mongodb-server-client-install.log"; then
     echo -e "${RED}#${RESET} Failed to install mongodb-server and mongodb-clients in the first run...\\n"
     if [[ "${os_codename}" =~ (trusty|utopic|vivid|wily|yakkety|zesty|artful|qiana|rebecca|rafaela|rosa|xenial|bionic|cosmic|disco|eoan|focal|groovy|hirsute|impish|jammy|kinetic|lunar|mantic|noble|oracular|plucky|questing|resolute|sarah|serena|sonya|sylvia|tara|tessa|tina|tricia) ]]; then
       repo_component="main universe"
@@ -7110,13 +7194,13 @@ mongodb_server_clients_installation() {
     fi
     get_repo_url
     add_repositories
-    run_apt_get_update
+    run_apt_get_update_with_sha1_fallback
     check_dpkg_lock
     echo -e "${GRAY_R}#${RESET} Trying to install mongodb-server and mongodb-clients for the second time..."
-    if ! DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "mongodb-server${mongodb_server_clients_installation_recovery_version}" "mongodb-clients${mongodb_server_clients_installation_recovery_version}" &>> "${eus_dir}/logs/mongodb-server-client-install.log"; then
+    if ! "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "mongodb-server${mongodb_server_clients_installation_recovery_version}" "mongodb-clients${mongodb_server_clients_installation_recovery_version}" &>> "${eus_dir}/logs/mongodb-server-client-install.log"; then
       echo -e "${RED}#${RESET} Failed to install mongodb-server and mongodb-clients in the second run... \\n${GRAY_R}#${RESET} Trying to save the installation...\\n"
       echo -e "${GRAY_R}#${RESET} Running apt-get install -f..."
-      if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install -f &>> "${eus_dir}/logs/mongodb-server-client-install.log"; then
+      if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install -f &>> "${eus_dir}/logs/mongodb-server-client-install.log"; then
         echo -e "${GREEN}#${RESET} Successfully ran \"apt-get install -f\"! \\n"
       else
         echo -e "${RED}#${RESET} Failed to run \"apt-get install -f\"...\\n"
@@ -7126,7 +7210,7 @@ mongodb_server_clients_installation() {
       broken_packages_check
       attempt_recover_broken_packages
       echo -e "${GRAY_R}#${RESET} Trying to install mongodb-server and mongodb-clients again..."
-      if ! DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "mongodb-server" "mongodb-clients" &>> "${eus_dir}/logs/mongodb-server-client-install.log"; then
+      if ! "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "mongodb-server" "mongodb-clients" &>> "${eus_dir}/logs/mongodb-server-client-install.log"; then
         if [[ "${architecture}" == "armhf" ]]; then
           mongo_last_attempt_type="server"
           mongo_last_attempt
@@ -7359,7 +7443,7 @@ network_install_mongodb_install_process() {
       echo -e "\\n------- $(date +%F-%T.%6N) -------\\n" &>> "${eus_dir}/logs/arm64-purge-mongodb.log"
       while read -r arm64_mongodb_package; do
         check_dpkg_lock
-        if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' purge "${arm64_mongodb_package}" &>> "${eus_dir}/logs/arm64-purge-mongodb.log"; then
+        if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' purge "${arm64_mongodb_package}" &>> "${eus_dir}/logs/arm64-purge-mongodb.log"; then
           echo -e "${GREEN}#${RESET} Successfully purged ${arm64_mongodb_package}! \\n"
         else
           abort_reason="Failed to purge ${arm64_mongodb_package}."
@@ -7530,7 +7614,7 @@ network_install_unsupported_database_version_change_recovery() {
         if "$(which dpkg)" -l | awk '{print $2}' | grep -ioq "${package}$"; then
           echo -e "${GRAY_R}#${RESET} Removing ${package}${mongodb_extra_dependencies_message}..."
           check_dpkg_lock
-          if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' remove "${package}" "${mongodb_extra_dependencies[@]}" &>> "${eus_dir}/logs/mongodb-unsupported-version-change.log"; then
+          if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' remove "${package}" "${mongodb_extra_dependencies[@]}" &>> "${eus_dir}/logs/mongodb-unsupported-version-change.log"; then
             echo -e "${GREEN}#${RESET} Successfully removed ${package}${mongodb_extra_dependencies_message}! \\n"
           else
             abort_reason="Failed to remove ${package}${mongodb_extra_dependencies_message} during the downgrade process."
@@ -7559,7 +7643,7 @@ network_install_unsupported_database_version_change_recovery() {
           echo -e "${GRAY_R}#${RESET} Downgrading ${mongodb_package}..."
           if [[ "${mongodb_package}" =~ (mongod-armv8|mongod-amd64) ]]; then unset mongodb_version_with_equal; else mongodb_version_with_equal="${install_mongodb_version_with_equality_sign}"; fi
           check_dpkg_lock
-          if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${mongodb_package}${mongodb_version_with_equal}" &>> "${eus_dir}/logs/mongodb-unsupported-version-change.log"; then
+          if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${mongodb_package}${mongodb_version_with_equal}" &>> "${eus_dir}/logs/mongodb-unsupported-version-change.log"; then
             echo -e "${GREEN}#${RESET} Successfully downgraded ${mongodb_package} to version ${install_mongodb_version}! \\n"
           else
             check_unmet_dependencies
@@ -7567,21 +7651,21 @@ network_install_unsupported_database_version_change_recovery() {
             attempt_recover_broken_packages
             add_apt_option_no_install_recommends="true"; get_apt_options
             check_dpkg_lock
-            if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${mongodb_package}${mongodb_version_with_equal}" &>> "${eus_dir}/logs/mongodb-unsupported-version-change.log"; then
+            if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${mongodb_package}${mongodb_version_with_equal}" &>> "${eus_dir}/logs/mongodb-unsupported-version-change.log"; then
               echo -e "${GREEN}#${RESET} Successfully downgraded ${mongodb_package} to version ${install_mongodb_version}! \\n"
             else
               try_different_mongodb_repo="true"
               skip_mongodb_org_v="true"
               add_mongodb_repo
               check_dpkg_lock
-              if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${mongodb_package}${mongodb_version_with_equal}" &>> "${eus_dir}/logs/mongodb-unsupported-version-change.log"; then
+              if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${mongodb_package}${mongodb_version_with_equal}" &>> "${eus_dir}/logs/mongodb-unsupported-version-change.log"; then
                 echo -e "${GREEN}#${RESET} Successfully downgraded ${mongodb_package} to version ${install_mongodb_version}! \\n"
               else
                 try_http_mongodb_repo="true"
                 skip_mongodb_org_v="true"
                 add_mongodb_repo
                 check_dpkg_lock
-                if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${mongodb_package}${mongodb_version_with_equal}" &>> "${eus_dir}/logs/mongodb-unsupported-version-change.log"; then
+                if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_downgrade_option[@]}" "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' install "${mongodb_package}${mongodb_version_with_equal}" &>> "${eus_dir}/logs/mongodb-unsupported-version-change.log"; then
                   echo -e "${GREEN}#${RESET} Successfully downgraded ${mongodb_package} to version ${install_mongodb_version}! \\n"
                 else
                   abort_reason="Failed to downgrade ${mongodb_package} from version ${mongodb_org_version} to ${install_mongodb_version}."
@@ -7919,7 +8003,7 @@ network_install_repository_check() {
               fi
               if echo -e "${unifi_repo_entry}" &> "/etc/apt/sources.list.d/100-ubnt-unifi.${source_file_format}"; then
                 echo -e "${GREEN}#${RESET} Successfully added UniFi Network Application source list! \\n"
-                run_apt_get_update
+                run_apt_get_update_with_sha1_fallback
                 echo -ne "\\r${GRAY_R}#${RESET} Checking if the added UniFi Network Application repository is valid..." && sleep 1
                 if grep -sioq "unifi-${first_digit_unifi}.${second_digit_unifi} Release' does not" /tmp/EUS/apt/apt-update.log; then
                   echo -ne "\\r${RED}#${RESET} The added UniFi Repository is not valid/used, the repository list will be removed! \\n"
@@ -8140,7 +8224,7 @@ netcat_uninstall_check() {
     check_dpkg_lock
     echo -e "${GRAY_R}#${RESET} The script installed ${netcat_installed_package_name}, we do not need this anymore.\\n"
     echo -e "${GRAY_R}#${RESET} Purging package ${netcat_installed_package_name}..."
-    if DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' purge "${netcat_installed_package_name}" &>> "${eus_dir}/logs/uninstall-${netcat_installed_package_name}.log"; then
+    if "${EUS_APT_ENV[@]}" env DEBIAN_FRONTEND='noninteractive' apt-get -y "${apt_options[@]}" -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' purge "${netcat_installed_package_name}" &>> "${eus_dir}/logs/uninstall-${netcat_installed_package_name}.log"; then
       echo -e "${GREEN}#${RESET} Successfully purged ${netcat_installed_package_name}! \\n"
     else
       echo -e "${RED}#${RESET} Failed to purge ${netcat_installed_package_name}... \\n"
@@ -8466,44 +8550,114 @@ uos_server_install_process() {
   fi
 }
 
-# UOS Server only supported on Ubuntu Noble/Debian Bookworm and newer.
-if [[ "${os_id}" == "ubuntu" ]]; then
-  if ! [[ "${os_codename}" =~ (noble|oracular|plucky|questing|resolute) ]]; then
-    choice="2"
-    unifi_os_server_unsupported="true"
-  fi
-elif [[ "${os_id}" == "debian" ]]; then
-  if ! [[ "${os_codename}" =~ (bookworm|trixie|forky|unstable) ]]; then
-    choice="2"
-    unifi_os_server_unsupported="true"
-  fi
-else
-  choice="2"
-  unifi_os_server_unsupported="true"
-fi
-
-# UOS Server not supported on anything other than arm64/amd64.
-if ! [[ "${architecture}" =~ (amd64|arm64) ]]; then
-  choice="2"
-  unifi_os_server_unsupported="true"
-fi
-
-if [[ "${limited_functionality}" == 'true' ]]; then
-  choice="2"
-  unifi_os_server_unsupported="true"
-fi
-
-# UOS Server not supported within LXC/Docker Container
-if [[ -n "$(command -v jq)" && -e "${eus_dir}/db/db.json" ]]; then
+support_check_api_payload() {
   check_lxc_setup
   check_docker_setup
   check_wsl_setup
-  if [[ "$(jq -r '.database["lxc-container"]' "${eus_dir}/db/db.json" | sed '/null/d')" == 'true' ]]; then
+  cpu_model="$(lscpu | awk -F: 'BEGIN{IGNORECASE=1} $1 ~ /^model name$/ {sub(/^[ \t]+/, "", $2); print $2; exit}')"
+  if [[ -z "${cpu_model}" ]]; then cpu_model="$(lscpu | sed -n 's/^Model name:[[:space:]]*//Ip' | head -n1)"; fi
+  cpu_cores="$(grep -ic '^processor' /proc/cpuinfo)"
+  total_mem_mb="$(awk '/MemTotal/ {printf "%.0f\n", $2/1024}' /proc/meminfo)"
+  swap_total_mb="$(awk '/SwapTotal/ {printf "%.0f\n", $2/1024}' /proc/meminfo)"
+  kernel_version="$(uname -r)"
+  server_uuid="$(jq -r '.database.uuid // empty' "${eus_dir}/db/db.json" 2>/dev/null)"
+  script_version="$(grep -im1 "# Script Version" "${script_location}" | awk -F'|' '{gsub(/[[:space:]]/, "", $2); print $2}')"
+  payload="$(jq -n \
+    --arg server_uuid "${server_uuid}" \
+    --arg server_os_name "${os_id}" \
+    --arg server_os_codename "${os_codename}" \
+    --arg server_architecture "${architecture}" \
+    --arg server_kernel_version "${kernel_version}" \
+    --arg server_cpu_model "${cpu_model}" \
+    --argjson server_cpu_cores "${cpu_cores}" \
+    --argjson server_total_memory "${total_mem_mb}" \
+    --argjson server_total_swap "${swap_total_mb}" \
+    --arg script_name "${script_name}" \
+    --arg script_version "${script_version}" \
+    --argjson lxc "${lxc_setup}" \
+    --argjson docker "${docker_setup}" \
+    --argjson wsl "${wsl_setup}" \
+    --argjson limited_functionality "${limited_functionality:-false}" \
+    '{
+      server_uuid: $server_uuid,
+      server_os_name: $server_os_name,
+      server_os_codename: $server_os_codename,
+      server_architecture: $server_architecture,
+      server_kernel_version: $server_kernel_version,
+      server_cpu_model: $server_cpu_model,
+      server_cpu_cores: $server_cpu_cores,
+      server_total_memory: $server_total_memory,
+      server_total_swap: $server_total_swap,
+      environment: {
+        lxc: $lxc,
+        docker: $docker,
+        wsl: $wsl,
+        limited_functionality: $limited_functionality
+      },
+      script_name: $script_name,
+      script_version: $script_version
+    }'
+  )"
+}
+
+if [[ "$(command -v jq)" ]]; then support_check_status="$(curl "${curl_proxy_arg[@]}" --silent "https://api.glennr.nl/api/support-check?status" 2> /dev/null | jq -r '.status' 2> /dev/null)"; else support_check_status="$(curl "${curl_proxy_arg[@]}" --silent "https://api.glennr.nl/api/support-check?status" 2> /dev/null | grep -oP '(?<="status":")[^"]+')"; fi
+if [[ "${support_check_status}" == "OK" ]]; then
+  support_check_api_payload
+  support_check_api_results="$(curl -sS -X POST "https://api.glennr.nl/api/support-check" -H "Content-Type: application/json" -d "${payload}")"
+  unifi_os_server_supported="$(echo "${support_check_api_results}" | jq -r '.supported')"
+  if [[ "${unifi_os_server_supported}" != 'true' ]]; then
+    unifi_os_server_unsupported_reason="$(echo "${support_check_api_results}" | jq -r '.unsupported_reason')"
     choice="2"
     unifi_os_server_unsupported="true"
-  elif [[ "$(jq -r '.database["docker-container"]' "${eus_dir}/db/db.json" | sed '/null/d')" == 'true' ]]; then
+    header_red
+    echo -e "${YELLOW}#${RESET} ${unifi_os_server_unsupported_reason} \\n\\n"
+    echo -e "${YELLOW}#${RESET} Continuing with UniFi Network Application installation..."
+    for i in {1..15}; do
+      printf "\r${YELLOW}#${RESET} Switching in %2d seconds... [" "$((16-i))"
+      for ((j=0; j<i; j++)); do printf "#"; done
+      for ((j=i; j<15; j++)); do printf "."; done
+      printf "]"
+      sleep 1
+    done
+    header
+  fi
+else
+  # UOS Server only supported on Ubuntu Noble/Debian Bookworm and newer.
+  if [[ "${os_id}" == "ubuntu" ]]; then
+    if ! [[ "${os_codename}" =~ (noble|oracular|plucky|questing|resolute) ]]; then
+      choice="2"
+      unifi_os_server_unsupported="true"
+    fi
+  elif [[ "${os_id}" == "debian" ]]; then
+    if ! [[ "${os_codename}" =~ (bookworm|trixie|forky|unstable) ]]; then
+      choice="2"
+      unifi_os_server_unsupported="true"
+    fi
+  else
     choice="2"
     unifi_os_server_unsupported="true"
+  fi
+  # UOS Server not supported on anything other than arm64/amd64.
+  if ! [[ "${architecture}" =~ (amd64|arm64) ]]; then
+    choice="2"
+    unifi_os_server_unsupported="true"
+  fi
+  if [[ "${limited_functionality}" == 'true' ]]; then
+    choice="2"
+    unifi_os_server_unsupported="true"
+  fi
+  # UOS Server not supported within LXC/Docker Container
+  if [[ -n "$(command -v jq)" && -e "${eus_dir}/db/db.json" ]]; then
+    check_lxc_setup
+    check_docker_setup
+    check_wsl_setup
+    if [[ "$(jq -r '.database["lxc-container"]' "${eus_dir}/db/db.json" | sed '/null/d')" == 'true' ]]; then
+      choice="2"
+      unifi_os_server_unsupported="true"
+    elif [[ "$(jq -r '.database["docker-container"]' "${eus_dir}/db/db.json" | sed '/null/d')" == 'true' ]]; then
+      choice="2"
+      unifi_os_server_unsupported="true"
+    fi
   fi
 fi
 
@@ -8529,7 +8683,7 @@ while true; do
       sleep 3
       unifi_core_system_check
       uos_server_install_required_packages_check
-      already_installed_check "UniFi OS Server" 'systemctl list-unit-files uosserver.service'
+      if is_systemd_unit_present "uosserver.service"; then already_installed_check "UniFi OS Server" "true"; fi
       uos_server_install_set_variables
       swap_file_check
       uos_server_install_ports_check
@@ -8556,7 +8710,7 @@ while true; do
       network_install_broken_install_recovery
       network_install_dummy_packages_check
       already_installed_check "UniFi Network Application" 'dpkg -l' 'unifi |unifi-native'
-      already_installed_check "UniFi OS Server" 'systemctl list-unit-files uosserver.service'
+      if is_systemd_unit_present "uosserver.service"; then already_installed_check "UniFi OS Server" "true"; fi
       network_install_required_packages_check
       check_mongodb_installed
       network_install_broken_override_check
