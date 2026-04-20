@@ -181,6 +181,7 @@ show_stats() {
 
 declare -A CONFIG_SCRIPTS=(
     [1]="mtu-fix.sh:MTU Configuration"
+    [2]="github-ssh-keys.sh:GitHub SSH Keys"
 )
 
 TOTAL_OPTIONS=${#CONFIG_SCRIPTS[@]}
