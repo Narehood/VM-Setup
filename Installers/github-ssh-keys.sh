@@ -17,6 +17,7 @@ EXIT_APP_CODE=42
 
 trap 'echo -e "\n${GREEN}Goodbye!${NC}"; exit $EXIT_APP_CODE' INT
 
+# print_centered centers a given string within the UI width and prints it using the optional ANSI color.
 print_centered() {
     local text="$1"
     local color="${2:-$NC}"
@@ -25,17 +26,23 @@ print_centered() {
     printf "${color}%${padding}s%s${NC}\n" "" "$text"
 }
 
+# print_line prints a full-width line of a repeated character (default `=`) using an optional color.
 print_line() {
     local char="${1:-=}"
     local color="${2:-$BLUE}"
     printf "${color}%${UI_WIDTH}s${NC}\n" "" | sed "s/ /${char}/g"
 }
 
+# print_status prints an informational message prefixed with a cyan "[INFO]" tag.
 print_status() { echo -e "${CYAN}[INFO]${NC} $1"; }
+# print_success prints a success message prefixed with a green `[OK]` tag.
 print_success() { echo -e "${GREEN}[OK]${NC} $1"; }
+# print_warn prints a warning message prefixed with a yellow "[WARN]" tag.
 print_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+# print_error prints the provided message prefixed with a red `[ERROR]` tag.
 print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
+# trim_whitespace removes leading and trailing whitespace from a string and echoes the trimmed result.
 trim_whitespace() {
     local value="$1"
     value="${value#"${value%%[![:space:]]*}"}"
@@ -43,6 +50,8 @@ trim_whitespace() {
     printf '%s\n' "$value"
 }
 
+# show_header clears the terminal and prints the script title banner centered with colored separator lines.
+# It emits a blank line after the banner.
 show_header() {
     clear
     print_line "=" "$BLUE"
@@ -51,6 +60,7 @@ show_header() {
     echo ""
 }
 
+# resolve_target_user determines the username to operate on, preferring SUDO_USER when set and not "root", otherwise the current login user.
 resolve_target_user() {
     if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
         printf '%s\n' "$SUDO_USER"
@@ -59,6 +69,7 @@ resolve_target_user() {
     fi
 }
 
+# resolve_target_home resolves the home directory for a given username and echoes it, preferring `getent` and falling back to `/etc/passwd`; prints an empty line if the home cannot be determined.
 resolve_target_home() {
     local user="$1"
     local home_dir=""
@@ -74,6 +85,7 @@ resolve_target_home() {
     printf '%s\n' "$home_dir"
 }
 
+# fetch_keys downloads a GitHub user's public SSH keys from https://github.com/<user>.keys into the specified output file using curl or wget; it fails if neither tool is available or the fetch fails.
 fetch_keys() {
     local github_user="$1"
     local output_file="$2"
@@ -90,11 +102,13 @@ fetch_keys() {
     fi
 }
 
+# is_valid_ssh_public_key tests whether a line is a supported SSH public key (accepted types: ssh-rsa, ssh-ed25519, ecdsa-sha2-nistp(256|384|521), sk-ssh-ed25519@openssh.com, sk-ecdsa-sha2-nistp256@openssh.com) and contains a base64 key blob; returns success (0) if it matches and failure (non-zero) otherwise.
 is_valid_ssh_public_key() {
     local key_line="$1"
     [[ "$key_line" =~ ^(ssh-rsa|ssh-ed25519|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com)[[:space:]]+[A-Za-z0-9+/=]+([[:space:]].*)?$ ]]
 }
 
+# validate_key_file verifies that the given file contains at least one valid SSH public key and that every non-empty line matches the expected SSH public key format. It prints an error and returns failure if any non-empty line is invalid or if no valid keys are found.
 validate_key_file() {
     local key_file="$1"
     local valid_count=0
@@ -119,6 +133,7 @@ validate_key_file() {
     return 0
 }
 
+# ensure_ssh_paths creates the SSH directory if missing and ensures the authorized_keys file exists, setting directory permissions to 700 and file permissions to 600.
 ensure_ssh_paths() {
     local ssh_dir="$1"
     local auth_keys="$2"
@@ -132,6 +147,7 @@ ensure_ssh_paths() {
     chmod 600 "$auth_keys"
 }
 
+# create_backup copies the authorized_keys file to the specified backup path and prints a status message.
 create_backup() {
     local auth_keys="$1"
     local backup_file="$2"
@@ -140,6 +156,7 @@ create_backup() {
     print_status "Backup created: $backup_file"
 }
 
+# set_target_ownership sets ownership of the SSH directory and authorized_keys file to the specified user when running as root and prints a warning if ownership cannot be updated.
 set_target_ownership() {
     local target_user="$1"
     local ssh_dir="$2"
@@ -152,6 +169,7 @@ set_target_ownership() {
     fi
 }
 
+# main orchestrates importing a GitHub user's public SSH keys into the resolved target user's ~/.ssh/authorized_keys by fetching and validating keys, merging them without duplicates, creating a timestamped backup if existing keys are modified, and enforcing SSH directory/file permissions and ownership.
 main() {
     local target_user=""
     local target_home=""
