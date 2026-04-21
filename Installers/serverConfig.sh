@@ -181,6 +181,7 @@ show_stats() {
 
 declare -A CONFIG_SCRIPTS=(
     [1]="mtu-fix.sh:MTU Configuration"
+    [2]="github-ssh-keys.sh:GitHub SSH Keys"
 )
 
 TOTAL_OPTIONS=${#CONFIG_SCRIPTS[@]}
@@ -194,6 +195,23 @@ execute_config() {
         print_error "Script '$script_name' not found."
         pause
         return 1
+    fi
+
+    # Checksum validation for specific sensitive scripts
+    if [[ "$script_name" == "github-ssh-keys.sh" ]]; then
+        # Replace the hash below with the actual output of: sha256sum github-ssh-keys.sh
+        local expected_hash="REPLACE_WITH_ACTUAL_SHA256_HASH"
+        local actual_hash
+        actual_hash=$(sha256sum "$script_name" | awk '{print $1}')
+
+        if [[ "$actual_hash" != "$expected_hash" ]]; then
+            print_error "Checksum mismatch for $script_name!"
+            print_error "Expected: $expected_hash"
+            print_error "Actual:   $actual_hash"
+            pause
+            return 1
+        fi
+        print_success "Checksum verified for $script_name."
     fi
 
     if [ ! -r "$script_name" ]; then
