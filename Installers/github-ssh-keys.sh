@@ -2,6 +2,7 @@
 set -euo pipefail
 
 # DESCRIPTION: Import a GitHub user's public SSH keys into the current user's authorized_keys
+# VERSION: 1.1.0
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -78,10 +79,11 @@ fetch_keys() {
     local output_file="$2"
     local url="https://github.com/${github_user}.keys"
 
+    # Added connection and transfer timeouts to prevent hanging
     if command -v curl >/dev/null 2>&1; then
-        curl -fsSL "$url" -o "$output_file"
+        curl -fsSL --connect-timeout 10 --max-time 30 "$url" -o "$output_file"
     elif command -v wget >/dev/null 2>&1; then
-        wget -q -O "$output_file" "$url"
+        wget -q --timeout=30 --tries=3 -O "$output_file" "$url"
     else
         print_error "Neither curl nor wget is installed. Please install one and try again."
         return 1
@@ -224,7 +226,10 @@ main() {
     while IFS= read -r line || [[ -n "$line" ]]; do
         [[ -z "$line" ]] && continue
 
-        if grep -Fqx "$line" "$merged_file"; then
+        # Extract the key type and base64 string to avoid duplicates with different comments
+        key_id=$(echo "$line" | awk '{print $1, $2}')
+
+        if grep -Fq "$key_id" "$merged_file"; then
             skipped_count=$((skipped_count + 1))
             continue
         fi
