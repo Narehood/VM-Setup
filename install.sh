@@ -16,7 +16,7 @@ readonly WHITE='\033[1;37m'
 readonly NC='\033[0m'
 
 readonly UI_WIDTH=86
-readonly SCRIPT_VERSION="3.7.1"
+readonly SCRIPT_VERSION="3.7.2"
 readonly CHECKSUM_FILE="$SCRIPT_DIR/Installers/.checksums.sha256"
 readonly EXIT_APP_CODE=42
 
