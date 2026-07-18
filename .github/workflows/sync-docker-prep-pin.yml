@@ -30,11 +30,14 @@ jobs:
         id: release
         env:
           GH_TOKEN: ${{ github.token }}
+          INPUT_RELEASE_TAG: ${{ github.event.inputs.release_tag }}
+          EVENT_NAME: ${{ github.event_name }}
+          CLIENT_PAYLOAD_TAG: ${{ github.event.client_payload.tag }}
         run: |
           set -euo pipefail
-          tag="${{ github.event.inputs.release_tag }}"
-          if [[ -z "$tag" && "${{ github.event_name }}" == "repository_dispatch" ]]; then
-            tag="${{ github.event.client_payload.tag }}"
+          tag="${INPUT_RELEASE_TAG:-}"
+          if [[ -z "$tag" && "$EVENT_NAME" == "repository_dispatch" ]]; then
+            tag="${CLIENT_PAYLOAD_TAG:-}"
           fi
           if [[ -z "$tag" ]]; then
             tag=$(gh api repos/Narehood/Docker-Prep/releases/latest --jq '.tag_name')
@@ -44,11 +47,12 @@ jobs:
       - name: Update pin and checksums
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y jq
-          bash tools/sync-docker-prep-pin.sh "${{ steps.release.outputs.tag }}"
+          bash tools/sync-docker-prep-pin.sh "$RELEASE_TAG"
 
       - name: Validate repository security checks
         run: |

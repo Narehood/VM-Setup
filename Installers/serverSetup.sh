@@ -261,7 +261,7 @@ install_xcp_tools_iso() {
             print_warn "The guest-tools installer cannot be authenticated by this application."
             if ! prompt_yes_no "Execute installer from trusted media $device?" "n"; then
                 umount /mnt
-                continue
+                return 1
             fi
             print_info "Running installer..."
             if (cd "$(dirname "$script")" && bash "$(basename "$script")"); then

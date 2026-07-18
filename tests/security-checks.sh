@@ -25,13 +25,14 @@ if rg -n '(Pangolin|Newt)' README.md install.sh Installers/installer.sh; then
     exit 1
 fi
 
-if ! grep -q '^AUTO_UPDATE_CHECK="false"$' settings.conf; then
-    echo "Automatic update checks must remain disabled by default." >&2
-    exit 1
-fi
-
-if ! grep -q '^AUTO_APPLY_UPDATES="false"$' settings.conf; then
-    echo "Automatic update apply must remain disabled by default." >&2
+if ! awk '
+    /^load_settings\(\)/ { in_fn=1 }
+    in_fn && /^[[:space:]]*AUTO_UPDATE_CHECK="false"[[:space:]]*$/ { update_default=1 }
+    in_fn && /^[[:space:]]*AUTO_APPLY_UPDATES="false"[[:space:]]*$/ { apply_default=1 }
+    in_fn && /^}/ { exit }
+    END { exit !(update_default && apply_default) }
+' install.sh; then
+    echo "install.sh must default AUTO_UPDATE_CHECK and AUTO_APPLY_UPDATES to false." >&2
     exit 1
 fi
 

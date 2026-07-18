@@ -12,7 +12,7 @@ cleanup() {
 trap cleanup EXIT
 
 for script in "$installers_dir"/*.sh; do
-    sha256sum "$script" | awk -v name="$(basename "$script")" '{ print $1, name }'
+    sha256sum "$script" | awk -v name="$(basename "$script")" '{ printf "%s  %s\n", $1, name }'
 done | sort -k2 > "$temporary"
 
 if [[ ! -s "$temporary" ]]; then
