@@ -8,6 +8,8 @@ for script in install.sh Installers/*.sh tests/*.sh tools/*.sh; do
     bash -n "$script"
 done
 
+bash tests/update-flow.sh
+
 (
     cd Installers
     sha256sum --check --strict .checksums.sha256
@@ -25,6 +27,16 @@ fi
 
 if ! grep -q '^AUTO_UPDATE_CHECK="false"$' settings.conf; then
     echo "Automatic update checks must remain disabled by default." >&2
+    exit 1
+fi
+
+if ! grep -q '^AUTO_APPLY_UPDATES="false"$' settings.conf; then
+    echo "Automatic update apply must remain disabled by default." >&2
+    exit 1
+fi
+
+if ! grep -q '^readonly REPO_VERSION=' Installers/Docker-Prep.sh; then
+    echo "Docker-Prep launcher must expose REPO_VERSION for update summaries." >&2
     exit 1
 fi
 

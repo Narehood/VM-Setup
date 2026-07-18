@@ -16,8 +16,9 @@ readonly WHITE='\033[1;37m'
 readonly NC='\033[0m'
 
 readonly UI_WIDTH=86
-readonly SCRIPT_VERSION="3.7.2"
+readonly SCRIPT_VERSION="3.8.0"
 readonly CHECKSUM_FILE="$SCRIPT_DIR/Installers/.checksums.sha256"
+readonly UPDATE_STATE_FILE="$SCRIPT_DIR/.update-state"
 readonly EXIT_APP_CODE=42
 
 # --- 3. COMMAND AVAILABILITY CACHE ---
@@ -48,9 +49,10 @@ trim_whitespace() {
     printf '%s' "$str"
 }
 
-# load_settings loads AUTO_UPDATE_CHECK from the local, ignored settings file.
+# load_settings loads update preferences from the local, ignored settings file.
 load_settings() {
     AUTO_UPDATE_CHECK="false"
+    AUTO_APPLY_UPDATES="false"
     
     if [[ ! -f "$SETTINGS_FILE" ]]; then
         save_settings
@@ -80,6 +82,9 @@ load_settings() {
             AUTO_UPDATE_CHECK)
                 [[ "$value" =~ ^(true|false)$ ]] && AUTO_UPDATE_CHECK="$value"
                 ;;
+            AUTO_APPLY_UPDATES)
+                [[ "$value" =~ ^(true|false)$ ]] && AUTO_APPLY_UPDATES="$value"
+                ;;
         esac
     done < "$SETTINGS_FILE"
 }
@@ -90,6 +95,9 @@ save_settings() {
 # System Setup Menu - Configuration
 # AUTO_UPDATE_CHECK: Check for updates on startup (true/false)
 AUTO_UPDATE_CHECK="$AUTO_UPDATE_CHECK"
+
+# AUTO_APPLY_UPDATES: Apply fast-forward updates without prompting (true/false)
+AUTO_APPLY_UPDATES="$AUTO_APPLY_UPDATES"
 EOF
     chmod 600 "$SETTINGS_FILE" 2>/dev/null || true
 }
@@ -419,66 +427,240 @@ show_stats() {
     print_line "=" "$BLUE"
 }
 
+# read_launcher_constant prints the value of a readonly assignment from a launcher script.
+read_launcher_constant() {
+    local file_path="$1"
+    local constant_name="$2"
+    awk -F= -v name="$constant_name" '
+        $0 ~ "^readonly[[:space:]]+" name "=" {
+            value=$2
+            gsub(/"/, "", value)
+            print value
+            exit
+        }
+    ' "$file_path" 2>/dev/null || true
+}
+
+# capture_component_snapshot writes version metadata for the current tree into named variables via stdout.
+capture_component_snapshot() {
+    local commit version docker_rev docker_ver linutil_rev
+    commit=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+    version="$SCRIPT_VERSION"
+    docker_rev=$(read_launcher_constant "$SCRIPT_DIR/Installers/Docker-Prep.sh" "REPO_REVISION")
+    docker_ver=$(read_launcher_constant "$SCRIPT_DIR/Installers/Docker-Prep.sh" "REPO_VERSION")
+    linutil_rev=$(read_launcher_constant "$SCRIPT_DIR/Installers/linutil.sh" "LINUTIL_REVISION")
+    printf '%s\n' \
+        "commit=${commit}" \
+        "version=${version}" \
+        "docker_prep_revision=${docker_rev:-unknown}" \
+        "docker_prep_version=${docker_ver:-unknown}" \
+        "linutil_revision=${linutil_rev:-unknown}"
+}
+
+# write_update_state records the before/after snapshot used to announce a completed update after restart.
+write_update_state() {
+    local before_file="$1"
+    local after_file="$2"
+    local mode="$3"
+    local release_url="$4"
+
+    cat > "$UPDATE_STATE_FILE" << EOF
+mode=${mode}
+previous_commit=$(awk -F= '$1=="commit"{print $2}' "$before_file")
+previous_version=$(awk -F= '$1=="version"{print $2}' "$before_file")
+previous_docker_prep_revision=$(awk -F= '$1=="docker_prep_revision"{print $2}' "$before_file")
+previous_docker_prep_version=$(awk -F= '$1=="docker_prep_version"{print $2}' "$before_file")
+previous_linutil_revision=$(awk -F= '$1=="linutil_revision"{print $2}' "$before_file")
+new_commit=$(awk -F= '$1=="commit"{print $2}' "$after_file")
+new_version=$(awk -F= '$1=="version"{print $2}' "$after_file")
+new_docker_prep_revision=$(awk -F= '$1=="docker_prep_revision"{print $2}' "$after_file")
+new_docker_prep_version=$(awk -F= '$1=="docker_prep_version"{print $2}' "$after_file")
+new_linutil_revision=$(awk -F= '$1=="linutil_revision"{print $2}' "$after_file")
+release_url=${release_url}
+EOF
+    chmod 600 "$UPDATE_STATE_FILE" 2>/dev/null || true
+}
+
+# show_pending_update_summary announces a completed update once, then clears the state file.
+show_pending_update_summary() {
+    [[ -f "$UPDATE_STATE_FILE" ]] || return 0
+
+    local mode previous_version new_version previous_commit new_commit
+    local previous_docker_prep_revision new_docker_prep_revision
+    local previous_docker_prep_version new_docker_prep_version
+    local previous_linutil_revision new_linutil_revision release_url
+
+    mode=$(sed -n 's/^mode=//p' "$UPDATE_STATE_FILE")
+    previous_version=$(sed -n 's/^previous_version=//p' "$UPDATE_STATE_FILE")
+    new_version=$(sed -n 's/^new_version=//p' "$UPDATE_STATE_FILE")
+    previous_commit=$(sed -n 's/^previous_commit=//p' "$UPDATE_STATE_FILE")
+    new_commit=$(sed -n 's/^new_commit=//p' "$UPDATE_STATE_FILE")
+    previous_docker_prep_revision=$(sed -n 's/^previous_docker_prep_revision=//p' "$UPDATE_STATE_FILE")
+    new_docker_prep_revision=$(sed -n 's/^new_docker_prep_revision=//p' "$UPDATE_STATE_FILE")
+    previous_docker_prep_version=$(sed -n 's/^previous_docker_prep_version=//p' "$UPDATE_STATE_FILE")
+    new_docker_prep_version=$(sed -n 's/^new_docker_prep_version=//p' "$UPDATE_STATE_FILE")
+    previous_linutil_revision=$(sed -n 's/^previous_linutil_revision=//p' "$UPDATE_STATE_FILE")
+    new_linutil_revision=$(sed -n 's/^new_linutil_revision=//p' "$UPDATE_STATE_FILE")
+    release_url=$(sed -n 's/^release_url=//p' "$UPDATE_STATE_FILE")
+
+    echo ""
+    print_line "=" "$GREEN"
+    print_centered "UPDATE COMPLETE" "$WHITE"
+    print_line "=" "$GREEN"
+    echo ""
+    if [[ "$mode" == "auto" ]]; then
+        print_success "Automatic update applied successfully."
+    else
+        print_success "Update applied successfully."
+    fi
+    echo ""
+    printf "  ${YELLOW}%-14s${NC} %s → %s\n" "VM-Setup" "${previous_version} (${previous_commit:0:12})" "${new_version} (${new_commit:0:12})"
+    printf "  ${YELLOW}%-14s${NC} %s → %s\n" "Docker-Prep" "${previous_docker_prep_version} (${previous_docker_prep_revision:0:12})" "${new_docker_prep_version} (${new_docker_prep_revision:0:12})"
+    printf "  ${YELLOW}%-14s${NC} %s → %s\n" "LinUtil" "${previous_linutil_revision:0:12}" "${new_linutil_revision:0:12}"
+    echo ""
+    if [[ "$previous_docker_prep_revision" != "$new_docker_prep_revision" ]]; then
+        print_status "Docker-Prep pin changed. Review that pin before running Docker Host Preparation."
+    fi
+    if [[ -n "$release_url" ]]; then
+        print_status "Changes: $release_url"
+    fi
+    print_line "-" "$GREEN"
+    pause
+    rm -f -- "$UPDATE_STATE_FILE"
+}
+
+# prepare_update_check verifies git/upstream availability and populates local/remote revisions.
+# Sets UPDATE_LOCAL_REV and UPDATE_REMOTE_REV on success.
+prepare_update_check() {
+    UPDATE_LOCAL_REV=""
+    UPDATE_REMOTE_REV=""
+
+    if ((! HAS_GIT)); then
+        print_error "Git is not installed. Cannot check for updates."
+        return 1
+    fi
+
+    if [[ ! -d "$SCRIPT_DIR/.git" ]]; then
+        print_warn "Not a git repository. Skipping update check."
+        return 1
+    fi
+
+    if ! git_fetch --quiet; then
+        print_error "Failed to fetch from remote. Check your network connection."
+        return 1
+    fi
+
+    UPDATE_LOCAL_REV=$(git rev-parse @ 2>/dev/null || true)
+    if ! UPDATE_REMOTE_REV=$(git rev-parse '@{u}' 2>/dev/null); then
+        print_error "No upstream branch configured. Skipping update check."
+        return 1
+    fi
+
+    return 0
+}
+
+# apply_repository_update applies a fast-forward update, records a summary, and restarts the menu.
+apply_repository_update() {
+    local mode="${1:-manual}"
+    local before_file after_file compare_url new_commit
+
+    if [[ -n "$(git status --porcelain 2>/dev/null)" ]]; then
+        if [[ "$mode" == "auto" ]]; then
+            print_warn "Uncommitted local changes are present; automatic update was skipped."
+            print_status "Resolve or stash changes, then check for updates again."
+            return 1
+        fi
+        if ! handle_uncommitted_changes "before update"; then
+            return 1
+        fi
+    fi
+
+    before_file=$(mktemp)
+    after_file=$(mktemp)
+
+    capture_component_snapshot > "$before_file"
+
+    if ! git pull --ff-only --quiet; then
+        rm -f -- "$before_file" "$after_file"
+        print_error "Update failed. Please try manually with 'git pull --ff-only'."
+        return 1
+    fi
+
+    new_commit=$(git rev-parse HEAD)
+    {
+        echo "commit=${new_commit}"
+        awk -F= '/^readonly SCRIPT_VERSION=/{ gsub(/"/, "", $2); print "version="$2 }' "$SCRIPT_PATH"
+        echo "docker_prep_revision=$(read_launcher_constant "$SCRIPT_DIR/Installers/Docker-Prep.sh" "REPO_REVISION")"
+        echo "docker_prep_version=$(read_launcher_constant "$SCRIPT_DIR/Installers/Docker-Prep.sh" "REPO_VERSION")"
+        echo "linutil_revision=$(read_launcher_constant "$SCRIPT_DIR/Installers/linutil.sh" "LINUTIL_REVISION")"
+    } > "$after_file"
+
+    compare_url="https://github.com/Narehood/VM-Setup/compare/${UPDATE_LOCAL_REV:0:12}...${new_commit:0:12}"
+    write_update_state "$before_file" "$after_file" "$mode" "$compare_url"
+    rm -f -- "$before_file" "$after_file"
+
+    print_success "Updated successfully. Restarting..."
+    sleep 1
+    exec bash "$SCRIPT_PATH"
+}
+
 # check_for_updates_interactive prompts the user to download and apply updates from the script's git remote and restarts the script if updates are applied.
 # Returns non-zero on failure or when update check cannot be performed (e.g., no git, not a repo, or no upstream).
 check_for_updates_interactive() {
     echo ""
     print_status "Checking for updates..."
 
-    if ((! HAS_GIT)); then
-        print_error "Git is not installed. Cannot check for updates."
+    if ! prepare_update_check; then
         sleep 2
         return 1
     fi
 
-    if [[ ! -d "$SCRIPT_DIR/.git" ]]; then
-        print_warn "Not a git repository. Skipping update check."
-        sleep 2
-        return 1
-    fi
-
-    if ! git_fetch "--quiet"; then
-        print_error "Failed to fetch from remote. Check your network connection."
-        sleep 2
-        return 1
-    fi
-
-    local local_rev remote_rev
-    local_rev=$(git rev-parse @ 2>/dev/null)
-
-    if ! remote_rev=$(git rev-parse '@{u}' 2>/dev/null); then
-        print_error "No upstream branch configured. Skipping update check."
-        sleep 2
-        return 1
-    fi
-
-    if [[ "$local_rev" = "$remote_rev" ]]; then
+    if [[ "$UPDATE_LOCAL_REV" = "$UPDATE_REMOTE_REV" ]]; then
         print_success "Menu is up to date."
         sleep 1
         return 0
     fi
 
     print_warn "New version available."
+    print_status "Current: ${UPDATE_LOCAL_REV:0:12}"
+    print_status "Latest:  ${UPDATE_REMOTE_REV:0:12}"
     if ! confirm_prompt "Download and apply updates? (y/N): " "n"; then
         print_status "Update skipped."
         sleep 1
         return 0
     fi
 
-    if ! handle_uncommitted_changes "before update"; then
+    apply_repository_update "manual" || {
+        sleep 1
+        return 1
+    }
+}
+
+# check_for_updates_automatic applies available fast-forward updates when AUTO_APPLY_UPDATES is enabled.
+check_for_updates_automatic() {
+    echo ""
+    print_status "Checking for updates..."
+
+    if ! prepare_update_check; then
+        sleep 2
+        return 1
+    fi
+
+    if [[ "$UPDATE_LOCAL_REV" = "$UPDATE_REMOTE_REV" ]]; then
+        print_success "Menu is up to date."
         sleep 1
         return 0
     fi
 
-    if git pull --ff-only --quiet; then
-        print_success "Updated successfully. Restarting..."
-        sleep 1
-        exec bash "$SCRIPT_PATH"
-    else
-        print_error "Update failed. Please try manually with 'git pull'."
+    print_warn "New version available."
+    print_status "Applying fast-forward update automatically..."
+    print_status "Current: ${UPDATE_LOCAL_REV:0:12}"
+    print_status "Latest:  ${UPDATE_REMOTE_REV:0:12}"
+
+    apply_repository_update "auto" || {
         sleep 2
         return 1
-    fi
+    }
 }
 
 # switch_branch switches the script's Git workspace to a selected local or remote branch, offering to stash or discard uncommitted changes, creating a tracking branch if needed, pulling upstream changes when configured, and restarting the menu on success.
@@ -827,13 +1009,18 @@ show_help() {
     echo -e "    ${CYAN}7${NC} - Launch LinUtil utility"
     echo -e "    ${CYAN}8${NC} - Switch to a different branch (dev/testing)"
     echo -e "    ${CYAN}9${NC} - Display this help screen"
-    echo -e "    ${CYAN}s${NC} - Settings (includes menu updates)"
+    echo -e "    ${CYAN}s${NC} - Settings (update check/apply preferences)"
     echo -e "    ${CYAN}0${NC} - Exit the menu"
     echo ""
     echo -e "  ${YELLOW}Supported Distributions:${NC}"
     echo -e "    Debian, Ubuntu, Pop!_OS, Linux Mint, Kali, Fedora, RHEL,"
     echo -e "    CentOS, Rocky, AlmaLinux, Arch, EndeavourOS, Manjaro,"
     echo -e "    Alpine, openSUSE, SLES"
+    echo ""
+    echo -e "  ${YELLOW}Updates:${NC}"
+    echo -e "    Auto Update Check looks for a newer VM-Setup commit at startup."
+    echo -e "    Auto Apply Updates applies fast-forward updates without prompting."
+    echo -e "    After any applied update, a summary is shown on the next launch."
     echo ""
     echo -e "  ${YELLOW}Script Metadata:${NC}"
     echo -e "    Installer scripts can include metadata headers:"
@@ -851,7 +1038,7 @@ show_help() {
     pause
 }
 
-# manage_settings displays update-check preferences and provides an explicit update action.
+# manage_settings displays update preferences and provides an explicit update action.
 manage_settings() {
     while true; do
         clear
@@ -862,16 +1049,18 @@ manage_settings() {
 
         echo -e "  ${WHITE}Current Settings:${NC}"
         printf "  ${YELLOW}%-35s${NC} : %s\n" "Auto Update Check" "$AUTO_UPDATE_CHECK"
+        printf "  ${YELLOW}%-35s${NC} : %s\n" "Auto Apply Updates" "$AUTO_APPLY_UPDATES"
         echo ""
         print_line "-" "$BLUE"
 
         echo -e "  ${WHITE}Options:${NC}"
         echo -e "    ${CYAN}1.${NC} Toggle Auto Update Check"
-        echo -e "    ${CYAN}2.${NC} Check for Menu Updates"
+        echo -e "    ${CYAN}2.${NC} Toggle Auto Apply Updates"
+        echo -e "    ${CYAN}3.${NC} Check for Menu Updates"
         echo -e "    ${CYAN}0.${NC} Back to Menu"
         echo ""
 
-        read -rp "  Select option [0-2]: " settings_choice
+        read -rp "  Select option [0-3]: " settings_choice
 
         case "$settings_choice" in
             1)
@@ -881,10 +1070,24 @@ manage_settings() {
                     AUTO_UPDATE_CHECK="true"
                 fi
                 save_settings
-                print_success "Setting updated to: $AUTO_UPDATE_CHECK"
+                print_success "Auto Update Check set to: $AUTO_UPDATE_CHECK"
                 sleep 1
                 ;;
             2)
+                if [[ "$AUTO_APPLY_UPDATES" = "true" ]]; then
+                    AUTO_APPLY_UPDATES="false"
+                else
+                    AUTO_APPLY_UPDATES="true"
+                fi
+                save_settings
+                print_success "Auto Apply Updates set to: $AUTO_APPLY_UPDATES"
+                if [[ "$AUTO_APPLY_UPDATES" = "true" && "$AUTO_UPDATE_CHECK" != "true" ]]; then
+                    print_warn "Enable Auto Update Check for automatic apply to run at startup."
+                    sleep 1
+                fi
+                sleep 1
+                ;;
+            3)
                 check_for_updates_interactive || true
                 pause
                 ;;
@@ -902,9 +1105,14 @@ manage_settings() {
 # --- STARTUP TASKS ---
 clear
 fix_permissions silent
+show_pending_update_summary
 
 if [[ "$AUTO_UPDATE_CHECK" = "true" ]]; then
-    check_for_updates_interactive || true
+    if [[ "$AUTO_APPLY_UPDATES" = "true" ]]; then
+        check_for_updates_automatic || true
+    else
+        check_for_updates_interactive || true
+    fi
 fi
 
 # --- MAIN LOOP ---

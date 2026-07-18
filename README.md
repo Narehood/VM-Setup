@@ -94,20 +94,27 @@ written to the ignored `settings.local.conf` with mode `600`.
 
 | Setting | Default | Description |
 | :--- | :---: | :--- |
-| **Auto Update Check** | `false` | Check on startup; applying an update always requires confirmation |
+| **Auto Update Check** | `false` | Check for a newer VM-Setup commit on startup |
+| **Auto Apply Updates** | `false` | When update checks are enabled, apply fast-forward updates without prompting |
 
 Settings are managed through the interactive menu:
 
 1. Launch the menu with `bash install.sh`.
 2. Press `s`.
-3. Toggle the startup check or explicitly check for updates.
+3. Toggle Auto Update Check and optionally Auto Apply Updates.
+4. Or run an explicit update check from the settings menu.
 
-For manual configuration:
+For automatic updates on startup:
 
 ```bash
 # settings.local.conf
-AUTO_UPDATE_CHECK="false"
+AUTO_UPDATE_CHECK="true"
+AUTO_APPLY_UPDATES="true"
 ```
+
+After an update is applied, the next launch shows a summary with the previous and new
+VM-Setup versions, Docker-Prep pin, LinUtil pin, and a compare link. Automatic apply
+skips when the working tree has local changes.
 
 Installer scripts are checked against the committed
 `Installers/.checksums.sha256` manifest before execution. A mismatch is fatal.
@@ -118,8 +125,21 @@ bash tools/generate-checksums.sh
 git diff -- Installers/.checksums.sha256
 ```
 
-Third-party launchers are pinned to Git commit IDs. Updating a pin should be handled
-as a normal code review so upstream changes are visible before execution.
+Third-party launchers are pinned to Git commit IDs. Docker-Prep pin updates are
+automated safely:
+
+1. Publish a GitHub Release in `Narehood/Docker-Prep`.
+2. The `Sync Docker-Prep pin` workflow updates `REPO_REVISION` / `REPO_VERSION`,
+   regenerates checksums, runs security checks, and opens a PR.
+3. After that PR is merged, users with Auto Update Check enabled receive the new pin
+   through a normal VM-Setup update and see it in the post-update summary.
+
+Manual pin sync:
+
+```bash
+bash tools/sync-docker-prep-pin.sh            # latest release
+bash tools/sync-docker-prep-pin.sh v1.2.0    # specific release
+```
 
 ---
 
