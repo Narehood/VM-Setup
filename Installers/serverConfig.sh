@@ -17,6 +17,7 @@ NC='\033[0m'
 
 UI_WIDTH=86
 EXIT_APP_CODE=42
+CHECKSUM_FILE="$SCRIPT_DIR/.checksums.sha256"
 
 trap 'echo -e "\n${GREEN}Goodbye!${NC}"; exit $EXIT_APP_CODE' INT
 
@@ -44,6 +45,34 @@ print_success() { echo -e "${GREEN}[OK]${NC} $1"; }
 print_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 # print_error prints an "[ERROR]" label in red followed by the provided message.
 print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
+# verify_config_script checks a menu-managed script against the committed manifest.
+verify_config_script() {
+    local script_path="$1"
+    local script_name expected actual count
+
+    if [[ -L "$script_path" ]]; then
+        print_error "Refusing to execute symlinked script: $script_path"
+        return 1
+    fi
+    if [[ ! -f "$CHECKSUM_FILE" ]] || ! command -v sha256sum &>/dev/null; then
+        print_error "Checksum verification is unavailable; refusing to execute."
+        return 1
+    fi
+
+    script_name=$(basename "$script_path")
+    count=$(awk -v name="$script_name" '$2 == name { count++ } END { print count+0 }' "$CHECKSUM_FILE")
+    if ((count != 1)); then
+        print_error "Trusted manifest has no unique checksum for $script_name"
+        return 1
+    fi
+    expected=$(awk -v name="$script_name" '$2 == name { print $1 }' "$CHECKSUM_FILE")
+    actual=$(sha256sum "$script_path" | awk '{print $1}')
+    if [[ ! "$expected" =~ ^[[:xdigit:]]{64}$ || "$expected" != "$actual" ]]; then
+        print_error "Checksum verification failed for $script_name"
+        return 1
+    fi
+}
 
 # pause prompts the user to press Enter to return to the menu and waits for input.
 pause() {
@@ -182,6 +211,7 @@ show_stats() {
 declare -A CONFIG_SCRIPTS=(
     [1]="mtu-fix.sh:MTU Configuration"
     [2]="github-ssh-keys.sh:GitHub SSH Keys"
+    [3]="motd-config.sh:MOTD and SSH Banner"
 )
 
 TOTAL_OPTIONS=${#CONFIG_SCRIPTS[@]}
@@ -203,6 +233,11 @@ execute_config() {
         return 1
     fi
 
+    if ! verify_config_script "$script_name"; then
+        pause
+        return 1
+    fi
+
     if [ ! -x "$script_name" ]; then
         print_warn "Script is not executable."
         read -rp "  Make it executable? (Y/n): " response
@@ -220,10 +255,18 @@ execute_config() {
     print_line "-" "$BLUE"
     sleep 0.5
 
-    set +e
-    bash "$script_name"
-    local exit_code=$?
-    set -e
+    local -a command=(bash "$script_name")
+    if head -n 20 "$script_name" | grep -qi '^# *REQUIRES_ROOT: *true' && ((EUID != 0)); then
+        if ! command -v sudo &>/dev/null; then
+            print_error "This script requires root privileges and sudo is unavailable."
+            pause
+            return 1
+        fi
+        command=(sudo bash "$script_name")
+    fi
+
+    local exit_code=0
+    "${command[@]}" || exit_code=$?
 
     if [ $exit_code -eq $EXIT_APP_CODE ]; then
        echo -e "\n${GREEN}Goodbye!${NC}"

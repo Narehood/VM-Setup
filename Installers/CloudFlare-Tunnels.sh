@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# DESCRIPTION: Installs cloudflared and optionally configures a tunnel service
+
 # VISUAL STYLING
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -123,9 +125,12 @@ echo "2. Create a new tunnel (or select existing) and click 'Configure'"
 echo "3. Copy the token (it looks like a long base64 string)"
 echo ""
 
-read -p "Paste your Tunnel Token (or press Enter to skip): " CF_TOKEN
+read -rsp "Paste your Tunnel Token (input hidden, or press Enter to skip): " CF_TOKEN
+echo ""
 
 if [ -n "$CF_TOKEN" ]; then
+    echo -e "${YELLOW}[WARN]${NC} Cloudflare's service installer receives the token as a process argument."
+    echo -e "${YELLOW}[WARN]${NC} Continue only when no untrusted local users are active."
     echo -e "\n${CYAN}[INFO]${NC} Installing system service..."
     
     # Run the service install command

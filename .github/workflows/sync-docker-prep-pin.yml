@@ -1,0 +1,78 @@
+name: Sync Docker-Prep pin
+
+on:
+  schedule:
+    - cron: "0 12 * * 1"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Docker-Prep release tag to pin (defaults to latest)"
+        required: false
+        type: string
+  repository_dispatch:
+    types: [docker-prep-release]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: sync-docker-prep-pin
+  cancel-in-progress: true
+
+jobs:
+  sync-pin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve release tag
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_RELEASE_TAG: ${{ github.event.inputs.release_tag }}
+          EVENT_NAME: ${{ github.event_name }}
+          CLIENT_PAYLOAD_TAG: ${{ github.event.client_payload.tag }}
+        run: |
+          set -euo pipefail
+          tag="${INPUT_RELEASE_TAG:-}"
+          if [[ -z "$tag" && "$EVENT_NAME" == "repository_dispatch" ]]; then
+            tag="${CLIENT_PAYLOAD_TAG:-}"
+          fi
+          if [[ -z "$tag" ]]; then
+            tag=$(gh api repos/Narehood/Docker-Prep/releases/latest --jq '.tag_name')
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Update pin and checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y jq
+          bash tools/sync-docker-prep-pin.sh "$RELEASE_TAG"
+
+      - name: Validate repository security checks
+        run: |
+          set -euo pipefail
+          sudo apt-get install -y shellcheck ripgrep
+          bash tests/security-checks.sh
+          shellcheck --severity=error \
+            install.sh \
+            Installers/*.sh \
+            tests/*.sh \
+            tools/*.sh
+
+      - name: Create or update pull request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "chore: bump Docker-Prep pin to ${{ steps.release.outputs.tag }}"
+          title: "Bump Docker-Prep pin to ${{ steps.release.outputs.tag }}"
+          body-path: .docker-prep-pin-update.md
+          branch: cursor/docker-prep-pin-${{ steps.release.outputs.tag }}
+          delete-branch: true
+          add-paths: |
+            Installers/Docker-Prep.sh
+            Installers/.checksums.sha256

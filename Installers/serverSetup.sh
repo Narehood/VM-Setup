@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-VERSION="1.2.1"
+SCRIPT_VERSION="1.2.1"
 
 # --- UI & FORMATTING FUNCTIONS ---
 
@@ -18,7 +18,7 @@ show_header() {
     clear
     echo -e "${BLUE}==================================================${NC}"
     echo -e "${CYAN}           VM INITIAL CONFIGURATION TOOL          ${NC}"
-    echo -e "${CYAN}                     v${VERSION}                        ${NC}"
+    echo -e "${CYAN}                     v${SCRIPT_VERSION}                        ${NC}"
     echo -e "${BLUE}==================================================${NC}"
     echo ""
 }
@@ -50,7 +50,7 @@ print_info() {
 # show_help prints usage information, supported distributions, and exits the script.
 show_help() {
     cat << EOF
-VM Initial Configuration Tool v${VERSION}
+VM Initial Configuration Tool v${SCRIPT_VERSION}
 
 Usage: $(basename "$0") [OPTIONS]
 
@@ -72,7 +72,7 @@ export PATH=$PATH:/usr/local/sbin:/usr/sbin:/sbin
 
 PKG_MANAGER_UPDATED="false"
 OS=""
-VERSION_ID=""
+OS_VERSION=""
 QUIET="false"
 
 # cleanup unmounts /mnt if it is a mount point.
@@ -98,28 +98,28 @@ detect_os() {
     if [ -f /etc/os-release ]; then
         . /etc/os-release
         OS="$ID"
-        VERSION="${VERSION_ID:-unknown}"
+        OS_VERSION="${VERSION_ID:-unknown}"
     elif [ -f /etc/redhat-release ]; then
         OS="redhat"
         
-        VERSION=$(rpm -q --queryformat '%{VERSION}' centos-release 2>/dev/null)
+        OS_VERSION=$(rpm -q --queryformat '%{VERSION}' centos-release 2>/dev/null)
         
-        if [ -z "$VERSION" ] || [ "$VERSION" == "unknown" ]; then
+        if [ -z "$OS_VERSION" ] || [ "$OS_VERSION" == "unknown" ]; then
             if [ -f /etc/redhat-release ]; then
-                VERSION=$(grep -oP '(?:release\s+)\K[\d.]+' /etc/redhat-release | cut -d. -f1-2)
-                VERSION="${VERSION:-unknown}"
+                OS_VERSION=$(sed -nE 's/.*release[[:space:]]+([0-9]+(\.[0-9]+)?).*/\1/p' /etc/redhat-release | head -n1)
+                OS_VERSION="${OS_VERSION:-unknown}"
             else
-                VERSION="unknown"
+                OS_VERSION="unknown"
             fi
         fi
     elif [ -f /etc/debian_version ]; then
         OS="debian"
-        VERSION=$(cat /etc/debian_version)
+        OS_VERSION=$(cat /etc/debian_version)
     else
         OS=$(uname -s | tr '[:upper:]' '[:lower:]')
-        VERSION=$(uname -r)
+        OS_VERSION=$(uname -r)
     fi
-    print_success "Detected: $OS ($VERSION)"
+    print_success "Detected: $OS ($OS_VERSION)"
 }
 
 # is_debian_based determines whether the detected OS is a Debian-family distribution (debian, ubuntu, pop, linuxmint, kali).
@@ -258,9 +258,19 @@ install_xcp_tools_iso() {
         fi
 
         if [[ -n "$script" ]]; then
+            print_warn "The guest-tools installer cannot be authenticated by this application."
+            if ! prompt_yes_no "Execute installer from trusted media $device?" "n"; then
+                umount /mnt
+                return 1
+            fi
             print_info "Running installer..."
-            (cd "$(dirname "$script")" && bash "$(basename "$script")")
-            print_success "XCP-NG tools installed."
+            if (cd "$(dirname "$script")" && bash "$(basename "$script")"); then
+                print_success "XCP-NG tools installed."
+            else
+                print_error "Guest-tools installer failed."
+                umount /mnt
+                return 1
+            fi
         else
             print_error "install.sh not found on ISO."
         fi
@@ -292,7 +302,7 @@ prompt_yes_no() {
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -h|--help) show_help ;;
-        -v|--version) echo "v${VERSION}"; exit 0 ;;
+        -v|--version) echo "v${SCRIPT_VERSION}"; exit 0 ;;
         -q|--quiet) QUIET="true"; shift ;;
         *) print_error "Unknown option: $1"; exit 1 ;;
     esac
@@ -315,12 +325,11 @@ if prompt_yes_no "Install?" "y"; then
 
     case "$OS" in
         alpine)
-            ALPINE_REPO="https://dl-cdn.alpinelinux.org/alpine/edge/community"
-            if ! grep -qF "$ALPINE_REPO" /etc/apk/repositories 2>/dev/null; then
-                echo "$ALPINE_REPO" >> /etc/apk/repositories
-                apk update >/dev/null 2>&1
+            if ! apk add xe-guest-utilities >/dev/null 2>&1; then
+                print_error "xe-guest-utilities is unavailable in the configured Alpine repositories."
+                print_info "Enable the matching community repository for your Alpine release, then retry."
+                exit 1
             fi
-            apk add xe-guest-utilities >/dev/null 2>&1
             rc-update add xe-guest-utilities default >/dev/null 2>&1
             /etc/init.d/xe-guest-utilities start >/dev/null 2>&1
             print_success "XCP-NG tools installed."

@@ -94,11 +94,9 @@ enable_centos_updates() {
     print_success "Yum Cron enabled."
 }
 
-# enable_arch_updates configures Arch Linux maintenance by updating the system, ensuring pacman-contrib is installed, enabling paccache.timer, and creating a daily pacman-refresh service and timer.
+# enable_arch_updates configures maintenance timers without performing a surprise full upgrade.
 enable_arch_updates() {
     print_status "Configuring Arch Linux maintenance timers..."
-    
-    sudo pacman -Syu --noconfirm
 
     if ! pacman -Q pacman-contrib &>/dev/null; then
         sudo pacman -S --noconfirm pacman-contrib

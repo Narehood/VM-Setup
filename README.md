@@ -16,10 +16,8 @@
 
 **The all-in-one post-installation utility for XCP-NG Virtual Machines.**
 
-Effortlessly configure Docker Hosts, UniFi Controllers, Xen Orchestra, or simply install Guest Tools.<br>
-Includes automated security patching, self-updating capabilities, and persistent user preferences.
-
-<!-- <img src="https://your-image-link-here.png" alt="Dashboard Preview" width="700" /> -->
+Configure Docker hosts, UniFi Controllers, Xen Orchestra, guest tools, security
+updates, and common server settings through an interactive Bash menu.
 
 [Features](#-features) • [Quick Start](#-quick-start) • [Menu Options](#-menu-options) • [Configuration](#-configuration) • [Credits](#-credits--acknowledgements)
 
@@ -32,18 +30,24 @@ Includes automated security patching, self-updating capabilities, and persistent
 <div align="center">
   <img src="https://img.shields.io/badge/Ubuntu-E95420?style=flat-square&logo=ubuntu&logoColor=white" alt="Ubuntu" />
   <img src="https://img.shields.io/badge/Debian-A81D33?style=flat-square&logo=debian&logoColor=white" alt="Debian" />
-  <img src="https://img.shields.io/badge/Alpine_Linux-0D597F?style=flat-square&logo=alpine-linux&logoColor=white" alt="Alpine" />
-  <img src="https://img.shields.io/badge/Arch_Linux-1793D1?style=flat-square&logo=arch-linux&logoColor=white" alt="Arch" />
+  <img src="https://img.shields.io/badge/Alpine_Linux-0D597F?style=flat-square&logo=alpine-linux" alt="Alpine" />
+  <img src="https://img.shields.io/badge/Arch_Linux-1793D1?style=flat-square&logo=arch-linux" alt="Arch" />
   <img src="https://img.shields.io/badge/Fedora-294172?style=flat-square&logo=fedora&logoColor=white" alt="Fedora" />
-  <img src="https://img.shields.io/badge/RHEL/CentOS-262525?style=flat-square&logo=redhat&logoColor=white" alt="RHEL" />
-  <img src="https://img.shields.io/badge/openSUSE-73BA25?style=flat-square&logo=opensuse&logoColor=white" alt="SUSE" />
-  <img src="https://img.shields.io/badge/Pop!_OS-48B9C7?style=flat&logo=Pop!_OS&logoColor=white" alt="Pop OS" />
-  <img src="https://img.shields.io/badge/Gentoo-54487A?style=flat&logo=gentoo&logoColor=white" alt="Gentoo" />
+  <img src="https://img.shields.io/badge/RHEL/CentOS-262525?style=flat-square&logo=redhat" alt="RHEL" />
+  <img src="https://img.shields.io/badge/openSUSE-73BA25?style=flat-square&logo=opensuse" alt="SUSE" />
+  <img src="https://img.shields.io/badge/Pop!_OS-48B9C7?style=flat&logo=Pop!_OS" alt="Pop OS" />
 </div>
+
+Support varies by module. The core menu runs on the distributions above, but each
+installer supports only the package managers and services it explicitly detects.
+Review module prompts before applying changes to a production host.
 
 ---
 
 ## ⚡ Quick Start
+
+Prerequisites: Bash 4+, Git, `sha256sum`, network access, and either root access or
+`sudo` for system-changing modules.
 
 ```bash
 git clone https://github.com/Narehood/VM-Setup
@@ -57,86 +61,102 @@ bash install.sh
 
 | Feature | Description |
 | :--- | :--- |
-| **XCP-NG Tools** | Automatically detects OS and installs correct guest utilities |
-| **Docker Prep** | Full Docker Engine installation + user group configuration |
-| **App Installers** | One-click install for UniFi Controller, Xen Orchestra, and Pterodactyl |
-| **Security** | Enable automated unattended security upgrades |
-| **Server Config** | Manage System Level Settings |
-| **LinUtil** | Integrated launcher for Chris Titus's Linux Utility |
-| **Persistent Settings** | User preferences stored locally and respected on each run |
+| **XCP-NG Tools** | Detect the OS and install available guest utilities |
+| **Docker Prep** | Launch an explicitly pinned Docker-Prep revision |
+| **App Installers** | Guided WordPress, UniFi, Xen Orchestra, and Cloudflare installers |
+| **Security** | Configure unattended security updates |
+| **Server Config** | Manage system-level settings |
+| **LinUtil** | Launch an explicitly pinned LinUtil revision |
+| **Persistent Settings** | Store local preferences outside tracked files |
 
 ---
 
 ## 📋 Menu Options
 
-The script provides an interactive dashboard with the following modules:
-
 | Module | Description |
 | :--- | :--- |
-| **Server Initial Config** | Hostname, Guest Tools, Basic Utilities |
-| **Application Installers** | WordPress, XO, UniFi, Cloudflare Tunnels |
-| **Docker Host Preparation** | Engine setup & permissions |
-| **Auto Security Patches** | Configure cron/systemd timers for updates |
-| **Run System Updates** | Smart wrapper for apt/dnf/pacman/apk |
-| **Server Config** | Manage System Level Settings |
+| **Server Initial Config** | Hostname, guest tools, and basic utilities |
+| **Application Installers** | WordPress, XO, UniFi, and Cloudflare Tunnels |
+| **Docker Host Preparation** | Engine setup and permissions |
+| **Auto Security Patches** | Configure update timers without an implicit full upgrade |
+| **Run System Updates** | Wrapper for apt, dnf, pacman, apk, and other supported managers |
+| **Server Config** | MTU, SSH keys, MOTD, and SSH banner settings |
 | **Launch LinUtil** | External utility integration |
-| **Switch Branch** | Change to dev/testing branches |
-| **Settings** | Manage user preferences and behavior |
+| **Switch Branch** | Change to another repository branch |
+| **Settings** | Update preferences and explicitly check for application updates |
 
 ---
 
-## ⚙️ Configuration
+## ⚙️ Configuration and security
 
-The menu supports persistent user settings stored in `settings.conf`. Access settings by selecting **s** from the main menu.
-
-### Available Settings
+The tracked `settings.conf` contains safe defaults. Persistent preferences are
+written to the ignored `settings.local.conf` with mode `600`.
 
 | Setting | Default | Description |
 | :--- | :---: | :--- |
-| **Auto Update Check** | `true` | Automatically check for menu updates on startup |
-| **Confirm Updates on Startup** | `false` | Prompt before applying updates (if Auto Update Check is enabled) |
+| **Auto Update Check** | `false` | Check for a newer VM-Setup commit on startup |
+| **Auto Apply Updates** | `false` | When update checks are enabled, apply fast-forward updates without prompting |
 
-### Managing Settings
+Settings are managed through the interactive menu:
 
-Settings are managed through the interactive settings menu:
+1. Launch the menu with `bash install.sh`.
+2. Press `s`.
+3. Toggle Auto Update Check and optionally Auto Apply Updates.
+4. Or run an explicit update check from the settings menu.
 
-1. Launch the menu: `bash install.sh`
-2. Press `s` or select **Settings** from the main menu
-3. Toggle any setting with the corresponding number
-4. Changes are saved automatically to `settings.conf`
-
-### Manual Configuration
-
-For advanced users, you can directly edit `settings.conf`:
+For automatic updates on startup:
 
 ```bash
-# settings.conf
+# settings.local.conf
 AUTO_UPDATE_CHECK="true"
-CONFIRM_UPDATES_ON_STARTUP="false"
+AUTO_APPLY_UPDATES="true"
 ```
 
-**Note:** The `settings.conf` file is protected with restrictive permissions (600) for security.
+After an update is applied, the next launch shows a summary with the previous and new
+VM-Setup versions, Docker-Prep pin, LinUtil pin, and a compare link. Automatic apply
+skips when the working tree has local changes.
+
+Installer scripts are checked against the committed
+`Installers/.checksums.sha256` manifest before execution. A mismatch is fatal.
+Maintainers can update the manifest after reviewing installer changes:
+
+```bash
+bash tools/generate-checksums.sh
+git diff -- Installers/.checksums.sha256
+```
+
+Third-party launchers are pinned to Git commit IDs. Docker-Prep pin updates are
+automated safely:
+
+1. Publish a GitHub Release in `Narehood/Docker-Prep`.
+2. The `Sync Docker-Prep pin` workflow updates `REPO_REVISION` / `REPO_VERSION`,
+   regenerates checksums, runs security checks, and opens a PR.
+3. After that PR is merged, users with Auto Update Check enabled receive the new pin
+   through a normal VM-Setup update and see it in the post-update summary.
+
+Manual pin sync:
+
+```bash
+bash tools/sync-docker-prep-pin.sh            # latest release
+bash tools/sync-docker-prep-pin.sh v1.2.0    # specific release
+```
 
 ---
 
 ## 🤝 Credits & Acknowledgements
 
-This project utilizes and wraps several excellent community scripts:
-
 | Project | Author |
 | :--- | :--- |
 | [UniFi Controller](https://glennr.nl/s/unifi-network-controller) | GlennR |
-| [Xen Orchestra](https://github.com/ronivay/XenOrchestraInstallerUpdater) | Ronivay |
+| [Xen Orchestra fork](https://github.com/Narehood/XenOrchestraInstallerUpdater) | Narehood / Ronivay |
 | [LinUtil](https://github.com/ChrisTitusTech/linutil) | Chris Titus Tech |
 
 ---
 
 <div align="center">
 
-
 *Licensed under the [MIT License](https://github.com/Narehood/VM-Setup/blob/main/LICENSE).*<br>
 *You are free to use and modify this script as you wish.*<br>
 *Bug reports are welcome, but fixes are not guaranteed.*
 
 </div>
-

@@ -97,7 +97,7 @@ detect_os() {
         VERSION_ID="${VERSION_ID:-unknown}"
     elif [ -f /etc/redhat-release ]; then
         OS="redhat"
-        VERSION_ID=$(grep -oP '(?:release\s+)\K[\d.]+' /etc/redhat-release | cut -d. -f1-2)
+        VERSION_ID=$(sed -nE 's/.*release[[:space:]]+([0-9]+(\.[0-9]+)?).*/\1/p' /etc/redhat-release | head -n1)
         VERSION_ID="${VERSION_ID:-unknown}"
     elif [ -f /etc/debian_version ]; then
         OS="debian"
@@ -146,7 +146,7 @@ detect_primary_interface() {
     fi
 
     local current_mtu
-    current_mtu=$(ip link show "$PRIMARY_IFACE" | grep -oP 'mtu \K\d+')
+    current_mtu=$(ip link show "$PRIMARY_IFACE" | awk 'match($0, /mtu [0-9]+/) { print substr($0, RSTART + 4, RLENGTH - 4); exit }')
     print_success "Detected: $PRIMARY_IFACE (current MTU: $current_mtu)"
 }
 
@@ -489,7 +489,8 @@ apply_docker_bridges_mtu() {
         fi
 
         local current_mtu
-        current_mtu=$(ip link show "$bridge" 2>/dev/null | grep -oP 'mtu \K\d+' || echo "0")
+        current_mtu=$(ip link show "$bridge" 2>/dev/null | awk 'match($0, /mtu [0-9]+/) { print substr($0, RSTART + 4, RLENGTH - 4); exit }')
+        current_mtu="${current_mtu:-0}"
 
         if [[ "$current_mtu" == "$mtu" ]]; then
             print_info "$bridge already has MTU $mtu"
@@ -642,10 +643,10 @@ show_current_status() {
 
     echo ""
     echo -e "${CYAN}Network Interfaces:${NC}"
-    ip -o link show | grep -vE '^[0-9]+: lo:' || true | while read -r line; do
+    { ip -o link show | grep -vE '^[0-9]+: lo:' || true; } | while IFS= read -r line; do
         local iface mtu
         iface=$(echo "$line" | awk -F': ' '{print $2}' | cut -d'@' -f1)
-        mtu=$(echo "$line" | grep -oP 'mtu \K\d+')
+        mtu=$(echo "$line" | awk 'match($0, /mtu [0-9]+/) { print substr($0, RSTART + 4, RLENGTH - 4); exit }')
         printf "  %-20s MTU: %s\n" "$iface" "$mtu"
     done
     echo ""

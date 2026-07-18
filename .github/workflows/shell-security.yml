@@ -1,0 +1,30 @@
+name: Shell security checks
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install analysis tools
+        run: sudo apt-get update && sudo apt-get install -y shellcheck ripgrep
+
+      - name: Validate syntax and security policy
+        run: bash tests/security-checks.sh
+
+      - name: Run ShellCheck
+        run: |
+          shellcheck --severity=error \
+            install.sh \
+            Installers/*.sh \
+            tests/*.sh \
+            tools/*.sh
