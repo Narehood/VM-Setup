@@ -93,8 +93,8 @@ cleanup() {
         
         if [[ -n "$DB_NAME" ]] && [[ -n "$DB_USER" ]]; then
             print_info "Dropping database and user..." >&2
-            /usr/bin/mysql -e "DROP DATABASE IF EXISTS \`$DB_NAME\`;" 2>/dev/null || true
-            /usr/bin/mysql -e "DROP USER IF EXISTS '$DB_USER'@'localhost';" 2>/dev/null || true
+            run_mysql_sql "DROP DATABASE IF EXISTS \`$DB_NAME\`;" 2>/dev/null || true
+            run_mysql_sql "DROP USER IF EXISTS '$DB_USER'@'localhost';" 2>/dev/null || true
         fi
         
         print_info "Removing database credentials..." >&2
@@ -254,7 +254,7 @@ get_available_php_versions() {
 # get_active_php_version returns the currently active PHP minor version (e.g. `8.1`), `unknown` if PHP is installed but the version cannot be determined, and `none` if PHP is not installed.
 get_active_php_version() {
     if command -v php &>/dev/null; then
-        php -v 2>/dev/null | head -n1 | grep -oP 'PHP\s+\K[0-9]+\.[0-9]+' || echo "unknown"
+        php -v 2>/dev/null | awk 'NR == 1 && match($0, /[0-9]+\.[0-9]+/) { print substr($0, RSTART, RLENGTH); found=1 } END { if (!found) print "unknown" }'
     else
         echo "none"
     fi
@@ -319,6 +319,12 @@ get_database_version() {
     /usr/bin/mysql -N -B -e "SELECT VERSION();" 2>/dev/null | head -n1 || echo "unknown"
 }
 
+# run_mysql_sql supplies SQL over standard input so credentials do not appear in process arguments.
+run_mysql_sql() {
+    local sql="$1"
+    /usr/bin/mysql <<< "$sql"
+}
+
 # set_database_root_password sets the MySQL/MariaDB root password to the provided value using a syntax compatible with the detected database version.
 # It accepts one argument: the new root password.
 # On modern MySQL/MariaDB versions it uses `ALTER USER 'root'@'localhost' IDENTIFIED BY '<password>';`,
@@ -334,9 +340,9 @@ set_database_root_password() {
     
     if [[ "$db_version" == "unknown" ]]; then
         print_warn "Could not detect database version, attempting ALTER USER"
-        /usr/bin/mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '$password';" 2>/dev/null && return 0
+        run_mysql_sql "ALTER USER 'root'@'localhost' IDENTIFIED BY '$password';" 2>/dev/null && return 0
         print_warn "ALTER USER failed, trying legacy method with PASSWORD()"
-        /usr/bin/mysql -e "SET PASSWORD FOR 'root'@'localhost' = PASSWORD('$password');" 2>/dev/null && return 0
+        run_mysql_sql "SET PASSWORD FOR 'root'@'localhost' = PASSWORD('$password');" 2>/dev/null && return 0
         return 1
     fi
     
@@ -347,26 +353,26 @@ set_database_root_password() {
         
         if [[ "$db_version" =~ -MariaDB ]]; then
             print_info "Detected MariaDB - using ALTER USER syntax"
-            /usr/bin/mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '$password';" 2>/dev/null || return 1
+            run_mysql_sql "ALTER USER 'root'@'localhost' IDENTIFIED BY '$password';" 2>/dev/null || return 1
             return 0
         fi
         
         if [[ $major -gt 8 ]]; then
             print_info "MySQL $major.$minor.$patch detected - using ALTER USER"
-            /usr/bin/mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '$password';" 2>/dev/null || return 1
+            run_mysql_sql "ALTER USER 'root'@'localhost' IDENTIFIED BY '$password';" 2>/dev/null || return 1
         elif [[ $major -eq 8 ]]; then
             print_info "MySQL 8.0.x detected - using ALTER USER"
-            /usr/bin/mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '$password';" 2>/dev/null || return 1
+            run_mysql_sql "ALTER USER 'root'@'localhost' IDENTIFIED BY '$password';" 2>/dev/null || return 1
         elif [[ $major -gt 5 ]] || [[ $major -eq 5 && ($minor -gt 7 || ($minor -eq 7 && $patch -ge 6)) ]]; then
             print_info "MySQL $major.$minor.$patch detected (5.7.6+) - using ALTER USER"
-            /usr/bin/mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '$password';" 2>/dev/null || return 1
+            run_mysql_sql "ALTER USER 'root'@'localhost' IDENTIFIED BY '$password';" 2>/dev/null || return 1
         else
             print_warn "MySQL $major.$minor.$patch (pre-5.7.6) detected - using legacy SET PASSWORD with PASSWORD()"
-            /usr/bin/mysql -e "SET PASSWORD FOR 'root'@'localhost' = PASSWORD('$password');" 2>/dev/null || return 1
+            run_mysql_sql "SET PASSWORD FOR 'root'@'localhost' = PASSWORD('$password');" 2>/dev/null || return 1
         fi
     else
         print_info "Could not parse version format, attempting ALTER USER"
-        /usr/bin/mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '$password';" 2>/dev/null || return 1
+        run_mysql_sql "ALTER USER 'root'@'localhost' IDENTIFIED BY '$password';" 2>/dev/null || return 1
     fi
     
     return 0
@@ -600,7 +606,7 @@ elif is_rhel_based || is_arch_based; then
 elif is_suse_based; then
     a2enmod rewrite >/dev/null 2>&1 || true
     a2enmod ssl    >/dev/null 2>&1 || true
-    a2enmod php8   >/dev/null 2>&1 || true
+    a2enmod "php${PHP_VERSION%%.*}" >/dev/null 2>&1 || true
 fi
 
 print_success "Web server modules enabled."
@@ -660,10 +666,10 @@ print_success "WordPress extracted and permissions set."
 
 print_step "Creating Database"
 
-/usr/bin/mysql -e "CREATE DATABASE IF NOT EXISTS \`$DB_NAME\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-/usr/bin/mysql -e "CREATE USER IF NOT EXISTS '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASSWORD';"
-/usr/bin/mysql -e "GRANT ALL PRIVILEGES ON \`$DB_NAME\`.* TO '$DB_USER'@'localhost';"
-/usr/bin/mysql -e "FLUSH PRIVILEGES;"
+run_mysql_sql "CREATE DATABASE IF NOT EXISTS \`$DB_NAME\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+run_mysql_sql "CREATE USER IF NOT EXISTS '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASSWORD';"
+run_mysql_sql "GRANT ALL PRIVILEGES ON \`$DB_NAME\`.* TO '$DB_USER'@'localhost';"
+run_mysql_sql "FLUSH PRIVILEGES;"
 print_success "Database and user created."
 
 print_step "Configuring WordPress"

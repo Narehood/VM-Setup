@@ -17,6 +17,7 @@ NC='\033[0m'
 
 UI_WIDTH=86
 EXIT_APP_CODE=42
+CHECKSUM_FILE="$SCRIPT_DIR/.checksums.sha256"
 
 trap 'echo -e "\n${GREEN}Goodbye!${NC}"; exit $EXIT_APP_CODE' INT
 
@@ -44,6 +45,34 @@ print_success() { echo -e "${GREEN}[OK]${NC} $1"; }
 print_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 # print_error prints MESSAGE to stdout prefixed with a red '[ERROR]' tag.
 print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
+# verify_installer checks a menu-managed script against the committed checksum manifest.
+verify_installer() {
+    local script_path="$1"
+    local script_name expected actual count
+
+    if [[ -L "$script_path" ]]; then
+        print_error "Refusing to execute symlinked installer: $script_path"
+        return 1
+    fi
+    if [[ ! -f "$CHECKSUM_FILE" ]] || ! command -v sha256sum &>/dev/null; then
+        print_error "Checksum verification is unavailable; refusing to execute."
+        return 1
+    fi
+
+    script_name=$(basename "$script_path")
+    count=$(awk -v name="$script_name" '$2 == name { count++ } END { print count+0 }' "$CHECKSUM_FILE")
+    if ((count != 1)); then
+        print_error "Trusted manifest has no unique checksum for $script_name"
+        return 1
+    fi
+    expected=$(awk -v name="$script_name" '$2 == name { print $1 }' "$CHECKSUM_FILE")
+    actual=$(sha256sum "$script_path" | awk '{print $1}')
+    if [[ ! "$expected" =~ ^[[:xdigit:]]{64}$ || "$expected" != "$actual" ]]; then
+        print_error "Checksum verification failed for $script_name"
+        return 1
+    fi
+}
 
 # pause prints a blank line and waits for the user to press Enter to return to the menu.
 pause() {
@@ -185,8 +214,6 @@ declare -A INSTALLERS=(
     [2]="XenOrchestra.sh:Xen Orchestra"
     [3]="UniFi-Controller.sh:UniFi Controller"
     [4]="CloudFlare-Tunnels.sh:CloudFlare Tunnels"
-    [5]="Pangolin.sh:Pangolin Tunnel"
-    [6]="Newt.sh:Newt VPN Node"
 )
 
 TOTAL_OPTIONS=${#INSTALLERS[@]}
@@ -208,6 +235,11 @@ execute_installer() {
         return 1
     fi
 
+    if ! verify_installer "$script_name"; then
+        pause
+        return 1
+    fi
+
     if [ ! -x "$script_name" ]; then
         print_warn "Script is not executable."
         read -rp "  Make it executable? (Y/n): " response
@@ -225,10 +257,18 @@ execute_installer() {
     print_line "-" "$BLUE"
     sleep 0.5
 
-    set +e
-    bash "$script_name"
-    local exit_code=$?
-    set -e
+    local -a command=(bash "$script_name")
+    if head -n 20 "$script_name" | grep -qi '^# *REQUIRES_ROOT: *true' && ((EUID != 0)); then
+        if ! command -v sudo &>/dev/null; then
+            print_error "This installer requires root privileges and sudo is unavailable."
+            pause
+            return 1
+        fi
+        command=(sudo bash "$script_name")
+    fi
+
+    local exit_code=0
+    "${command[@]}" || exit_code=$?
 
     echo ""
     print_line "-" "$BLUE"
@@ -251,12 +291,12 @@ execute_installer() {
     esac
 }
 
-# show_menu displays the available installers in two columns (keys 1–6) and prints options to return to the main menu (0) or exit (q).
+# show_menu displays the available installers in two columns and prints navigation options.
 show_menu() {
     echo -e "${WHITE}AVAILABLE INSTALLERS${NC}"
 
-    local left_keys=(1 2 3)
-    local right_keys=(4 5 6)
+    local left_keys=(1 2)
+    local right_keys=(3 4)
 
     for i in "${!left_keys[@]}"; do
         local lk="${left_keys[$i]}"
@@ -280,7 +320,7 @@ while true; do
     read -rp "  Enter selection [0-$TOTAL_OPTIONS, b, q]: " choice
 
     case "$choice" in
-        [1-6])
+        [1-4])
             if [ -n "${INSTALLERS[$choice]:-}" ]; then
                 script="${INSTALLERS[$choice]%%:*}"
                 name="${INSTALLERS[$choice]#*:}"

@@ -1,53 +1,39 @@
 #!/bin/bash
+set -euo pipefail
 
-REPO_URL="https://github.com/Narehood/Docker-Prep"
-DEST_DIR="Docker-Prep"
+# DESCRIPTION: Downloads and runs a pinned revision of the Docker-Prep installer
 
-# Function to handle the update logic
-update_repo() {
-    echo "Checking for updates..."
-    # Fetch latest metadata without merging yet
-    git remote update > /dev/null 2>&1
-    
-    LOCAL=$(git rev-parse @)
-    REMOTE=$(git rev-parse @{u})
+readonly REPO_URL="https://github.com/Narehood/Docker-Prep.git"
+readonly REPO_REVISION="d50a3bddfd32419791dea74ca26b898275781778"
 
-    if [ "$LOCAL" = "$REMOTE" ]; then
-        echo "Files are up to date."
-    else
-        echo "Update available. Pulling latest changes..."
-        git pull
-    fi
-}
-
-# Main Logic
-if [ -d "$DEST_DIR" ]; then
-    cd "$DEST_DIR" || exit 1
-    
-    # Verify it is actually a git repo before trying to update
-    if [ -d ".git" ]; then
-        update_repo
-    else
-        # Fallback if folder exists but isn't a git repo (e.g. manual copy)
-        echo "Directory exists but is not a linked git repository."
-        read -p "Delete and re-clone? (y/n): " REPLACE
-        if [ "$REPLACE" == "y" ]; then
-            cd ..
-            rm -rf "$DEST_DIR"
-            git clone "$REPO_URL"
-            cd "$DEST_DIR" || exit 1
-        else
-            echo "Operation aborted."
-            exit 1
-        fi
-    fi
-else
-    # Fresh install
-    echo "Cloning repository..."
-    git clone "$REPO_URL"
-    cd "$DEST_DIR" || exit 1
+if ! command -v git &>/dev/null; then
+    echo "ERROR: git is required to securely fetch Docker-Prep." >&2
+    exit 1
 fi
 
-# Run the installation script
-echo "Executing install script..."
-bash install.sh
+echo "Docker-Prep is pinned to revision: $REPO_REVISION"
+read -rp "Press [Enter] to download and run it, or Ctrl+C to cancel..."
+
+work_dir=$(mktemp -d "${TMPDIR:-/tmp}/docker-prep.XXXXXXXX")
+cleanup() {
+    rm -rf -- "$work_dir"
+}
+trap cleanup EXIT
+
+git -C "$work_dir" init -q
+git -C "$work_dir" remote add origin "$REPO_URL"
+git -C "$work_dir" fetch -q --depth 1 origin "$REPO_REVISION"
+git -C "$work_dir" checkout -q --detach FETCH_HEAD
+
+actual_revision=$(git -C "$work_dir" rev-parse HEAD)
+if [[ "$actual_revision" != "$REPO_REVISION" ]]; then
+    echo "ERROR: Docker-Prep revision verification failed." >&2
+    exit 1
+fi
+if [[ ! -f "$work_dir/install.sh" ]]; then
+    echo "ERROR: Pinned Docker-Prep entrypoint was not found." >&2
+    exit 1
+fi
+
+echo "Verified Docker-Prep revision. Starting installer..."
+(cd "$work_dir" && bash ./install.sh)

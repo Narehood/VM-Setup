@@ -1,69 +1,55 @@
 #!/bin/bash
+set -euo pipefail
 
-# VISUAL STYLING
+# DESCRIPTION: Downloads and launches a reviewed, pinned LinUtil revision
+
+readonly LINUTIL_REPO="https://github.com/ChrisTitusTech/linutil.git"
+readonly LINUTIL_REVISION="41fc99189a588bfa82190fe49a1baf23fd65e97f"
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+WHITE='\033[1;37m'
+NC='\033[0m'
 
-# HEADER
 clear
 echo -e "${BLUE}===================================================================${NC}"
 echo -e "${CYAN}                  CHRIS TITUS TECH  |  LINUTIL LAUNCHER            ${NC}"
 echo -e "${BLUE}===================================================================${NC}"
 echo ""
 
-# DEPENDENCY CHECK
-# LinUtil requires curl to download.
-echo -e "${CYAN}[INFO]${NC} Checking for required dependencies..."
-
-if ! command -v curl &> /dev/null; then
-    echo -e "${YELLOW}[WARN]${NC} 'curl' is missing. Attempting to install..."
-    
-    # Detect Package Manager and install curl
-    if [ -f /etc/os-release ]; then
-        . /etc/os-release
-        case "$ID" in
-            debian|ubuntu|kali|linuxmint)
-                sudo apt update -q && sudo apt install -y curl
-                ;;
-            fedora|rhel|centos|rocky|almalinux)
-                sudo dnf install -y curl
-                ;;
-            arch|manjaro)
-                sudo pacman -S --noconfirm curl
-                ;;
-            alpine)
-                sudo apk add curl
-                ;;
-            opensuse*|suse)
-                sudo zypper install -y curl
-                ;;
-            *)
-                echo -e "${RED}[ERROR]${NC} Could not auto-install curl. Please install it manually."
-                read -p "Press [Enter] to exit..."
-                exit 1
-                ;;
-        esac
-    fi
-else
-    echo -e "${GREEN}[OK]${NC} Dependencies met."
+if ! command -v git &>/dev/null; then
+    echo -e "${RED}[ERROR]${NC} git is required to securely fetch LinUtil."
+    exit 1
 fi
 
-# EXECUTION
-echo ""
-echo -e "${WHITE}About to launch: ${YELLOW}christitus.com/linux${NC}"
-echo -e "This will download and run the LinUtil script directly from the internet."
-echo ""
-read -p "Press [Enter] to continue or Ctrl+C to cancel..."
+echo -e "${YELLOW}[NOTICE]${NC} LinUtil is third-party code and may change your system."
+echo -e "Pinned revision: ${WHITE}${LINUTIL_REVISION}${NC}"
+read -rp "Press [Enter] to download and launch, or Ctrl+C to cancel..."
 
-echo -e "\n${GREEN}>>> Launching LinUtil...${NC}"
-sleep 1
+work_dir=$(mktemp -d "${TMPDIR:-/tmp}/linutil.XXXXXXXX")
+cleanup() {
+    rm -rf -- "$work_dir"
+}
+trap cleanup EXIT
 
-# Execute the script
-curl -fsSL https://christitus.com/linux | sh
+echo -e "\n${CYAN}[INFO]${NC} Fetching pinned LinUtil revision..."
+git -C "$work_dir" init -q
+git -C "$work_dir" remote add origin "$LINUTIL_REPO"
+git -C "$work_dir" fetch -q --depth 1 origin "$LINUTIL_REVISION"
+git -C "$work_dir" checkout -q --detach FETCH_HEAD
 
-# The script typically clears the screen on exit, so we just exit cleanly here.
-exit 0
+actual_revision=$(git -C "$work_dir" rev-parse HEAD)
+if [[ "$actual_revision" != "$LINUTIL_REVISION" ]]; then
+    echo -e "${RED}[ERROR]${NC} LinUtil revision verification failed."
+    exit 1
+fi
+if [[ ! -f "$work_dir/linutil.sh" ]]; then
+    echo -e "${RED}[ERROR]${NC} Pinned LinUtil entrypoint was not found."
+    exit 1
+fi
+
+echo -e "${GREEN}[OK]${NC} Verified LinUtil revision."
+(cd "$work_dir" && bash ./linutil.sh)
