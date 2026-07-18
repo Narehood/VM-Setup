@@ -4,7 +4,7 @@ set -euo pipefail
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
 
-for script in install.sh Installers/*.sh tests/*.sh; do
+for script in install.sh Installers/*.sh tests/*.sh tools/*.sh; do
     bash -n "$script"
 done
 

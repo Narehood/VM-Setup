@@ -24,4 +24,5 @@ jobs:
           shellcheck --severity=error \
             install.sh \
             Installers/*.sh \
-            tests/*.sh
+            tests/*.sh \
+            tools/*.sh

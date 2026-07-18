@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# DESCRIPTION: Downloads and launches a reviewed, pinned LinUtil revision
+# DESCRIPTION: Downloads and launches an explicitly pinned LinUtil revision
 
 readonly LINUTIL_REPO="https://github.com/ChrisTitusTech/linutil.git"
 readonly LINUTIL_REVISION="41fc99189a588bfa82190fe49a1baf23fd65e97f"

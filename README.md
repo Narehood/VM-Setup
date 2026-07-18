@@ -62,11 +62,11 @@ bash install.sh
 | Feature | Description |
 | :--- | :--- |
 | **XCP-NG Tools** | Detect the OS and install available guest utilities |
-| **Docker Prep** | Launch a reviewed, pinned Docker-Prep revision |
+| **Docker Prep** | Launch an explicitly pinned Docker-Prep revision |
 | **App Installers** | Guided WordPress, UniFi, Xen Orchestra, and Cloudflare installers |
 | **Security** | Configure unattended security updates |
 | **Server Config** | Manage system-level settings |
-| **LinUtil** | Launch a reviewed, pinned LinUtil revision |
+| **LinUtil** | Launch an explicitly pinned LinUtil revision |
 | **Persistent Settings** | Store local preferences outside tracked files |
 
 ---
