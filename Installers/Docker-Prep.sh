@@ -36,4 +36,9 @@ if [[ ! -f "$work_dir/install.sh" ]]; then
 fi
 
 echo "Verified Docker-Prep revision. Starting installer..."
-(cd "$work_dir" && bash ./install.sh)
+(
+    cd "$work_dir"
+    DOCKER_PREP_EPHEMERAL=1 \
+        DOCKER_PREP_REVISION="$REPO_REVISION" \
+        bash ./install.sh
+)
