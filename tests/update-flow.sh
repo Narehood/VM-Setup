@@ -72,4 +72,18 @@ if ! grep -q 'show_pending_update_summary' install.sh; then
     exit 1
 fi
 
+# Scheduled Docker-Prep pin sync must no-op when releases/latest 404s.
+if ! grep -q "steps.release.outputs.skip != 'true'" .github/workflows/sync-docker-prep-pin.yml; then
+    echo "Sync Docker-Prep pin workflow must skip remaining steps when no release exists." >&2
+    exit 1
+fi
+if ! grep -q 'Scheduled sync has nothing to do until the first release exists.' .github/workflows/sync-docker-prep-pin.yml; then
+    echo "Sync Docker-Prep pin workflow must explain schedule no-op when releases are missing." >&2
+    exit 1
+fi
+if ! grep -q 'No GitHub Releases found in' tools/sync-docker-prep-pin.sh; then
+    echo "sync-docker-prep-pin.sh must report a clear error when releases/latest is missing." >&2
+    exit 1
+fi
+
 echo "Update flow checks passed."

@@ -128,11 +128,19 @@ git diff -- Installers/.checksums.sha256
 Third-party launchers are pinned to Git commit IDs. Docker-Prep pin updates are
 automated safely:
 
-1. Publish a GitHub Release in `Narehood/Docker-Prep`.
+1. Publish a GitHub Release in `Narehood/Docker-Prep` (push a matching `v*` tag;
+   `VERSION` in Docker-Prep's `install.sh` is currently `2.4.0`, so the first tag
+   should be `v2.4.0`).
 2. The `Sync Docker-Prep pin` workflow updates `REPO_REVISION` / `REPO_VERSION`,
-   regenerates checksums, runs security checks, and opens a PR.
+   regenerates checksums, runs security checks, and opens a PR. Docker-Prep's
+   release workflow can also `repository_dispatch` this repo when
+   `VM_SETUP_DISPATCH_TOKEN` is configured.
 3. After that PR is merged, users with Auto Update Check enabled receive the new pin
    through a normal VM-Setup update and see it in the post-update summary.
+
+The weekly scheduled sync polls for the latest Docker-Prep release. If no releases
+exist yet, that run exits successfully with nothing to sync (it no longer fails with
+`gh: Not Found (HTTP 404)`).
 
 Manual pin sync:
 

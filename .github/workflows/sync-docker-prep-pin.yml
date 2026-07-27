@@ -36,15 +36,47 @@ jobs:
         run: |
           set -euo pipefail
           tag="${INPUT_RELEASE_TAG:-}"
+          skip=false
+
           if [[ -z "$tag" && "$EVENT_NAME" == "repository_dispatch" ]]; then
             tag="${CLIENT_PAYLOAD_TAG:-}"
+            if [[ -z "$tag" ]]; then
+              echo "repository_dispatch is missing client_payload.tag" >&2
+              exit 1
+            fi
           fi
+
           if [[ -z "$tag" ]]; then
-            tag=$(gh api repos/Narehood/Docker-Prep/releases/latest --jq '.tag_name')
+            api_err=$(mktemp)
+            if ! tag=$(gh api repos/Narehood/Docker-Prep/releases/latest --jq '.tag_name' 2>"$api_err"); then
+              err=$(cat "$api_err" || true)
+              rm -f -- "$api_err"
+              if grep -qiE 'Not Found|HTTP 404' <<<"$err"; then
+                echo "No GitHub Releases exist yet in Narehood/Docker-Prep."
+                echo "Tag a release (v*) there, or re-run this workflow with release_tag."
+                if [[ "$EVENT_NAME" == "schedule" ]]; then
+                  echo "Scheduled sync has nothing to do until the first release exists."
+                  skip=true
+                else
+                  echo "$err" >&2
+                  exit 1
+                fi
+              else
+                echo "$err" >&2
+                exit 1
+              fi
+            else
+              rm -f -- "$api_err"
+            fi
           fi
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "tag=${tag:-}"
+            echo "skip=$skip"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Update pin and checksums
+        if: steps.release.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
@@ -55,6 +87,7 @@ jobs:
           bash tools/sync-docker-prep-pin.sh "$RELEASE_TAG"
 
       - name: Validate repository security checks
+        if: steps.release.outputs.skip != 'true'
         run: |
           set -euo pipefail
           sudo apt-get install -y shellcheck ripgrep
@@ -66,6 +99,7 @@ jobs:
             tools/*.sh
 
       - name: Create or update pull request
+        if: steps.release.outputs.skip != 'true'
         uses: peter-evans/create-pull-request@v6
         with:
           commit-message: "chore: bump Docker-Prep pin to ${{ steps.release.outputs.tag }}"

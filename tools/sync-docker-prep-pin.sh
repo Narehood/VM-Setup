@@ -20,7 +20,19 @@ if ! command -v gh >/dev/null 2>&1; then
 fi
 
 if [[ -z "$requested_ref" ]]; then
-    requested_ref=$(gh api "repos/${docker_prep_repo}/releases/latest" --jq '.tag_name')
+    api_err=$(mktemp)
+    if ! requested_ref=$(gh api "repos/${docker_prep_repo}/releases/latest" --jq '.tag_name' 2>"$api_err"); then
+        err=$(cat "$api_err" || true)
+        rm -f -- "$api_err"
+        if grep -qiE 'Not Found|HTTP 404' <<<"$err"; then
+            echo "No GitHub Releases found in ${docker_prep_repo}." >&2
+            echo "Publish a v* release there (or pass an explicit tag) before syncing the pin." >&2
+            exit 1
+        fi
+        echo "$err" >&2
+        exit 1
+    fi
+    rm -f -- "$api_err"
 fi
 
 if [[ -z "$requested_ref" || "$requested_ref" == "null" ]]; then
