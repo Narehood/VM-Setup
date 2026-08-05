@@ -138,5 +138,30 @@ detect_repo_style
     echo "Expected mixed style for untagged edge + versioned, got: $REPO_STYLE" >&2
     exit 1
 }
+[[ "$REPO_BRANCH" == "3.23" ]] || {
+    echo "Expected REPO_BRANCH 3.23 for mixed untagged edge case, got: $REPO_BRANCH" >&2
+    exit 1
+}
+
+# Tagging untagged edge overlays should yield a versioned layout.
+tag_untagged_edge_repos
+detect_repo_style
+[[ "$REPO_STYLE" == "versioned" ]] || {
+    echo "Expected versioned after tagging edge overlays, got: $REPO_STYLE" >&2
+    exit 1
+}
+grep -Fq '@edge https://dl-cdn.alpinelinux.org/alpine/edge/community' "$repos_tmp" || {
+    echo "Expected @edge prefix on previously untagged edge community repo" >&2
+    exit 1
+}
+
+if ! grep -Fq -- 'prompt_mixed_repos_continue' "$script"; then
+    echo "Mixed-repo update-anyway prompt is missing." >&2
+    exit 1
+fi
+if ! grep -Fq -- '--allow-mixed' "$script"; then
+    echo "--allow-mixed flag is missing." >&2
+    exit 1
+fi
 
 echo "Alpine upgrade checks passed."
