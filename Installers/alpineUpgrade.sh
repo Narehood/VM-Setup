@@ -11,7 +11,7 @@ if [[ -z "${BASH_VERSION:-}" ]]; then
     exit 1
 fi
 
-VERSION="1.0.3"
+VERSION="1.0.4"
 LOGFILE="/var/log/alpine-upgrade.log"
 LOCKFILE="/var/run/alpine-upgrade.lock"
 REPOS_FILE="/etc/apk/repositories"
@@ -29,6 +29,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[1;34m'
 CYAN='\033[0;36m'
+WHITE='\033[1;37m'
 NC='\033[0m'
 
 CURRENT_VERSION_ID=""

@@ -163,5 +163,9 @@ if ! grep -Fq -- '--allow-mixed' "$script"; then
     echo "--allow-mixed flag is missing." >&2
     exit 1
 fi
+if ! grep -Eq "^WHITE=" "$script"; then
+    echo "WHITE color variable must be defined for mixed-repo prompts under set -u." >&2
+    exit 1
+fi
 
 echo "Alpine upgrade checks passed."
