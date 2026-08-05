@@ -232,6 +232,8 @@ update_system() {
             apk update
             apk upgrade --available
             apk cache clean 2>/dev/null || true
+            print_status "Note: apk upgrade stays on the current release branch."
+            print_status "To move 3.x -> 3.(x+1) (e.g. 3.23 to 3.24), use Server Config > Alpine Release Upgrade."
             ;;
 
         *)

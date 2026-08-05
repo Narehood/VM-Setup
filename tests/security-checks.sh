@@ -9,6 +9,7 @@ for script in install.sh Installers/*.sh tests/*.sh tools/*.sh; do
 done
 
 bash tests/update-flow.sh
+bash tests/alpine-upgrade.sh
 
 (
     cd Installers

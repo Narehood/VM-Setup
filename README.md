@@ -80,7 +80,7 @@ bash install.sh
 | **Docker Host Preparation** | Engine setup and permissions |
 | **Auto Security Patches** | Configure update timers without an implicit full upgrade |
 | **Run System Updates** | Wrapper for apt, dnf, pacman, apk, and other supported managers |
-| **Server Config** | MTU, SSH keys, MOTD, and SSH banner settings |
+| **Server Config** | MTU, SSH keys, MOTD, SSH banner, and Alpine release upgrades |
 | **Launch LinUtil** | External utility integration |
 | **Switch Branch** | Change to another repository branch |
 | **Settings** | Update preferences and explicitly check for application updates |
