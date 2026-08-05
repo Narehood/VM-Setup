@@ -11,7 +11,7 @@ if [[ -z "${BASH_VERSION:-}" ]]; then
     exit 1
 fi
 
-VERSION="1.0.2"
+VERSION="1.0.3"
 LOGFILE="/var/log/alpine-upgrade.log"
 LOCKFILE="/var/run/alpine-upgrade.lock"
 REPOS_FILE="/etc/apk/repositories"
@@ -20,6 +20,7 @@ QUIET="false"
 DRY_RUN="false"
 ASSUME_YES="false"
 SKIP_REBOOT_PROMPT="false"
+ALLOW_MIXED="false"
 TARGET_RELEASE=""
 MIRROR_BASE="https://dl-cdn.alpinelinux.org/alpine"
 
@@ -99,6 +100,7 @@ Options:
     -q, --quiet             Suppress stdout output (errors still print to stderr)
     -y, --yes               Skip confirmation and reboot prompts
     -t, --target RELEASE    Target release branch (e.g. 3.24 or v3.24)
+    --allow-mixed           Proceed when untagged edge overlays are mixed with vX.Y
     -l, --log FILE          Log to specified file (default: $LOGFILE)
 
 Notes:
@@ -107,6 +109,7 @@ Notes:
     - Repositories already using latest-stable only need a normal package upgrade.
     - Edge is not upgraded automatically; switch repos manually if that is intended.
     - Tagged edge overlays (e.g. @testing .../edge/testing) are left unchanged.
+    - Untagged edge mixed with vX.Y prompts to update anyway, tag overlays, or cancel.
 EOF
     exit 0
 }
@@ -459,6 +462,10 @@ build_upgrade_path() {
 
 # backup_repos creates a timestamped backup of the apk repositories file and records REPOS_BACKUP.
 backup_repos() {
+    if [[ -n "${REPOS_BACKUP:-}" && -f "$REPOS_BACKUP" ]]; then
+        print_status "Repositories backup already retained at $REPOS_BACKUP"
+        return 0
+    fi
     REPOS_BACKUP="${REPOS_FILE}.bak.$(date +%Y%m%d%H%M%S)"
     if [[ "$DRY_RUN" == "true" ]]; then
         print_status "[DRY-RUN] Would back up $REPOS_FILE to $REPOS_BACKUP"
@@ -694,6 +701,104 @@ Steps:      $(printf 'v%s -> ' "${steps[@]}" | sed 's/ -> $//')"
     prompt_reboot
 }
 
+# tag_untagged_edge_repos prefixes untagged edge repository URLs with @edge.
+tag_untagged_edge_repos() {
+    local tmp line repo_url
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        print_status "[DRY-RUN] Would prefix untagged edge repos with @edge in $REPOS_FILE"
+        return 0
+    fi
+
+    tmp=$(mktemp)
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        if [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]]; then
+            printf '%s\n' "$line"
+            continue
+        fi
+        if [[ "$line" =~ ^@[A-Za-z0-9_.:-]+[[:space:]]+ ]]; then
+            printf '%s\n' "$line"
+            continue
+        fi
+        repo_url="$line"
+        if [[ "$repo_url" == *"/edge/"* ]]; then
+            printf '@edge %s\n' "$repo_url"
+        else
+            printf '%s\n' "$line"
+        fi
+    done < "$REPOS_FILE" > "$tmp"
+
+    cat "$tmp" > "$REPOS_FILE"
+    rm -f "$tmp"
+    print_success "Tagged untagged edge repository lines with @edge."
+}
+
+# prompt_mixed_repos_continue offers update-anyway choices when versioned repos are mixed with edge overlays.
+# Returns 0 when the caller should continue as a versioned upgrade; exits/returns 1 on cancel or hard failure.
+prompt_mixed_repos_continue() {
+    local answer
+
+    print_warn "Mixed repository channels detected in $REPOS_FILE."
+    if [[ -n "$MIXED_REPO_REASONS" ]]; then
+        while IFS= read -r reason || [[ -n "$reason" ]]; do
+            [[ -z "$reason" ]] && continue
+            print_warn "  - $reason"
+        done <<< "$MIXED_REPO_REASONS"
+    fi
+
+    if [[ -z "$REPO_BRANCH" ]] || [[ "$MIXED_REPO_REASONS" == *"multiple versioned branches:"* ]]; then
+        print_error "Cannot safely continue: need a single versioned vX.Y branch for main/community."
+        print_error "Normalize $REPOS_FILE manually, then re-run."
+        return 1
+    fi
+
+    if [[ "$ALLOW_MIXED" == "true" || "$ASSUME_YES" == "true" ]]; then
+        if [[ "$ALLOW_MIXED" == "true" ]]; then
+            print_warn "Continuing with --allow-mixed: only v${REPO_BRANCH} URLs will be rewritten."
+            print_warn "Edge/latest-stable lines will be left unchanged."
+            return 0
+        fi
+        print_error "Mixed repositories require confirmation. Re-run interactively or pass --allow-mixed."
+        return 1
+    fi
+
+    if [[ ! -t 0 ]]; then
+        print_error "Non-interactive session detected. Re-run with --allow-mixed to update anyway."
+        return 1
+    fi
+
+    echo ""
+    print_status "A versioned branch (v${REPO_BRANCH}) is present. You can update anyway."
+    echo -e "  ${WHITE}Options:${NC}"
+    echo -e "    ${CYAN}1.${NC} Update anyway (rewrite only v${REPO_BRANCH} lines; leave edge lines unchanged)"
+    echo -e "    ${CYAN}2.${NC} Tag untagged edge lines with @edge, then update"
+    echo -e "    ${CYAN}0.${NC} Cancel"
+    echo ""
+    read -rp "  Select option [0-2]: " answer || answer="0"
+    answer=${answer:-0}
+
+    case "$answer" in
+        1)
+            print_warn "Proceeding without changing edge overlays. Only v${REPO_BRANCH} URLs will be rewritten."
+            return 0
+            ;;
+        2)
+            backup_repos
+            tag_untagged_edge_repos
+            detect_repo_style
+            if [[ "$REPO_STYLE" != "versioned" && "$REPO_STYLE" != "latest-stable" ]]; then
+                print_error "Repositories are still mixed after tagging. Inspect $REPOS_FILE and re-run."
+                return 1
+            fi
+            print_success "Repositories are ready to continue as ${REPO_STYLE}."
+            return 0
+            ;;
+        *)
+            print_status "Upgrade cancelled."
+            return 1
+            ;;
+    esac
+}
 # resolve_target_branch chooses the destination release branch from flags / defaults.
 resolve_target_branch() {
     local normalized=""
@@ -721,6 +826,7 @@ while [[ $# -gt 0 ]]; do
         -d|--dry-run) DRY_RUN="true"; shift ;;
         -q|--quiet) QUIET="true"; shift ;;
         -y|--yes) ASSUME_YES="true"; SKIP_REBOOT_PROMPT="true"; shift ;;
+        --allow-mixed) ALLOW_MIXED="true"; shift ;;
         -t|--target)
             if [[ -z "${2:-}" || "$2" == -* ]]; then
                 echo "Error: -t|--target requires a release argument (e.g. 3.24)" >&2
@@ -772,16 +878,17 @@ case "$REPO_STYLE" in
         exit 1
         ;;
     mixed)
-        print_error "Mixed repository channels detected in $REPOS_FILE."
-        if [[ -n "$MIXED_REPO_REASONS" ]]; then
-            while IFS= read -r reason || [[ -n "$reason" ]]; do
-                [[ -z "$reason" ]] && continue
-                print_error "  - $reason"
-            done <<< "$MIXED_REPO_REASONS"
+        if ! prompt_mixed_repos_continue; then
+            exit 1
         fi
-        print_error "Keep a single versioned vX.Y branch for main/community (tagged @testing/@edge overlays are OK)."
-        print_error "Remove untagged edge or latest-stable lines mixed with versioned repos, then re-run."
-        exit 1
+        # After update-anyway / tagging, continue through the versioned upgrade path.
+        if [[ "$REPO_STYLE" == "latest-stable" ]]; then
+            upgrade_latest_stable_repos
+        else
+            target_branch=$(resolve_target_branch)
+            print_status "Selected target release branch: v${target_branch}"
+            upgrade_versioned_repos "$target_branch"
+        fi
         ;;
     none)
         print_error "No Alpine repository URLs found in $REPOS_FILE."
