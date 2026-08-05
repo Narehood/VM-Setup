@@ -212,6 +212,7 @@ declare -A CONFIG_SCRIPTS=(
     [1]="mtu-fix.sh:MTU Configuration"
     [2]="github-ssh-keys.sh:GitHub SSH Keys"
     [3]="motd-config.sh:MOTD and SSH Banner"
+    [4]="alpineUpgrade.sh:Alpine Release Upgrade"
 )
 
 TOTAL_OPTIONS=${#CONFIG_SCRIPTS[@]}
