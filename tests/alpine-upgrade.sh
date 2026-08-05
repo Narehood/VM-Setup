@@ -104,4 +104,39 @@ parsed=$(printf '%s\n' '- version: "3.24.1"' | parse_latest_release_version)
     exit 1
 }
 
+# Versioned main/community plus tagged edge/testing must classify as versioned.
+repos_tmp=$(mktemp)
+trap 'rm -f -- "$repos_tmp"' EXIT
+cat > "$repos_tmp" <<'EOF'
+https://dl-cdn.alpinelinux.org/alpine/v3.23/main
+https://dl-cdn.alpinelinux.org/alpine/v3.23/community
+@testing https://dl-cdn.alpinelinux.org/alpine/edge/testing
+#https://dl-cdn.alpinelinux.org/alpine/edge/main
+EOF
+REPOS_FILE="$repos_tmp"
+detect_repo_style
+[[ "$REPO_STYLE" == "versioned" ]] || {
+    echo "Expected versioned style with tagged edge overlay, got: $REPO_STYLE" >&2
+    exit 1
+}
+[[ "$REPO_BRANCH" == "3.23" ]] || {
+    echo "Expected REPO_BRANCH 3.23, got: $REPO_BRANCH" >&2
+    exit 1
+}
+[[ "$REPO_EDGE_TAGGED" == "true" ]] || {
+    echo "Expected REPO_EDGE_TAGGED=true for @testing overlay" >&2
+    exit 1
+}
+
+# Untagged edge mixed with versioned repos must remain mixed.
+cat > "$repos_tmp" <<'EOF'
+https://dl-cdn.alpinelinux.org/alpine/v3.23/main
+https://dl-cdn.alpinelinux.org/alpine/edge/community
+EOF
+detect_repo_style
+[[ "$REPO_STYLE" == "mixed" ]] || {
+    echo "Expected mixed style for untagged edge + versioned, got: $REPO_STYLE" >&2
+    exit 1
+}
+
 echo "Alpine upgrade checks passed."

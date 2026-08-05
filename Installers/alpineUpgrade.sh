@@ -11,7 +11,7 @@ if [[ -z "${BASH_VERSION:-}" ]]; then
     exit 1
 fi
 
-VERSION="1.0.1"
+VERSION="1.0.2"
 LOGFILE="/var/log/alpine-upgrade.log"
 LOCKFILE="/var/run/alpine-upgrade.lock"
 REPOS_FILE="/etc/apk/repositories"
@@ -36,7 +36,9 @@ LATEST_VERSION_ID=""
 LATEST_BRANCH=""
 REPO_STYLE="" # versioned | latest-stable | edge | mixed | none
 REPO_BRANCH=""
+REPO_EDGE_TAGGED="false"
 REPOS_BACKUP=""
+MIXED_REPO_REASONS=""
 
 # print_status outputs an informational message prefixed with a blue [INFO] tag.
 print_status() {
@@ -104,6 +106,7 @@ Notes:
     - Release branches are upgraded one minor step at a time (3.22 -> 3.23 -> 3.24).
     - Repositories already using latest-stable only need a normal package upgrade.
     - Edge is not upgraded automatically; switch repos manually if that is intended.
+    - Tagged edge overlays (e.g. @testing .../edge/testing) are left unchanged.
 EOF
     exit 0
 }
@@ -223,35 +226,67 @@ detect_alpine() {
 }
 
 # detect_repo_style inspects /etc/apk/repositories and sets REPO_STYLE / REPO_BRANCH.
+# Tagged edge overlays (e.g. "@testing .../edge/testing") are common on stable hosts and
+# do not by themselves block a versioned release upgrade; only the vX.Y lines are rewritten.
 detect_repo_style() {
     if [[ ! -f "$REPOS_FILE" ]]; then
         print_error "Repositories file not found: $REPOS_FILE"
         exit 1
     fi
 
-    local has_versioned=0 has_latest=0 has_edge=0
+    local has_versioned=0 has_latest=0 has_edge_tagged=0 has_edge_untagged=0
+    local line repo_url is_tagged branch
+    local -A versioned_branches=()
     REPO_BRANCH=""
+    REPO_EDGE_TAGGED="false"
+    MIXED_REPO_REASONS=""
+
     while IFS= read -r line || [[ -n "$line" ]]; do
         [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
-        if [[ "$line" == *"/edge/"* ]]; then
-            has_edge=1
-        elif [[ "$line" == *"/latest-stable/"* ]]; then
+
+        is_tagged=0
+        repo_url="$line"
+        if [[ "$line" =~ ^@[A-Za-z0-9_.:-]+[[:space:]]+(.*)$ ]]; then
+            is_tagged=1
+            repo_url="${BASH_REMATCH[1]}"
+        fi
+
+        if [[ "$repo_url" == *"/edge/"* ]]; then
+            if ((is_tagged)); then
+                has_edge_tagged=1
+            else
+                has_edge_untagged=1
+                MIXED_REPO_REASONS+="untagged edge repo: ${line}"$'\n'
+            fi
+        elif [[ "$repo_url" == *"/latest-stable/"* ]]; then
             has_latest=1
-        elif [[ "$line" =~ /v([0-9]+\.[0-9]+)/ ]]; then
+            MIXED_REPO_REASONS+="latest-stable repo: ${line}"$'\n'
+        elif [[ "$repo_url" =~ /v([0-9]+\.[0-9]+)/ ]]; then
             has_versioned=1
+            branch="${BASH_REMATCH[1]}"
+            versioned_branches["$branch"]=1
             if [[ -z "$REPO_BRANCH" ]]; then
-                REPO_BRANCH="${BASH_REMATCH[1]}"
+                REPO_BRANCH="$branch"
             fi
         fi
     done < "$REPOS_FILE"
 
-    if ((has_edge)) && ((! has_versioned)) && ((! has_latest)); then
+    if ((${#versioned_branches[@]} > 1)); then
+        MIXED_REPO_REASONS+="multiple versioned branches: ${!versioned_branches[*]}"$'\n'
+    fi
+
+    if ((has_edge_tagged)); then
+        REPO_EDGE_TAGGED="true"
+    fi
+
+    if ((has_edge_untagged)) && ((! has_versioned)) && ((! has_latest)); then
         REPO_STYLE="edge"
-    elif ((has_latest)) && ((! has_versioned)) && ((! has_edge)); then
+    elif ((has_latest)) && ((! has_versioned)) && ((! has_edge_untagged)); then
+        # Tagged edge alongside latest-stable is unusual but still latest-stable primary.
         REPO_STYLE="latest-stable"
-    elif ((has_versioned)) && ((! has_latest)) && ((! has_edge)); then
+    elif ((has_versioned)) && ((! has_latest)) && ((! has_edge_untagged)) && ((${#versioned_branches[@]} <= 1)); then
         REPO_STYLE="versioned"
-    elif ((! has_versioned)) && ((! has_latest)) && ((! has_edge)); then
+    elif ((! has_versioned)) && ((! has_latest)) && ((! has_edge_untagged)) && ((! has_edge_tagged)); then
         REPO_STYLE="none"
     else
         REPO_STYLE="mixed"
@@ -726,6 +761,9 @@ print_status "Repository style: ${REPO_STYLE}"
 if [[ -n "$REPO_BRANCH" ]]; then
     print_status "Repository branch: v${REPO_BRANCH}"
 fi
+if [[ "$REPO_EDGE_TAGGED" == "true" ]]; then
+    print_warn "Tagged edge overlay repos detected; they will be left unchanged during the upgrade."
+fi
 
 case "$REPO_STYLE" in
     edge)
@@ -735,7 +773,14 @@ case "$REPO_STYLE" in
         ;;
     mixed)
         print_error "Mixed repository channels detected in $REPOS_FILE."
-        print_error "Normalize to versioned vX.Y URLs (or latest-stable), then re-run."
+        if [[ -n "$MIXED_REPO_REASONS" ]]; then
+            while IFS= read -r reason || [[ -n "$reason" ]]; do
+                [[ -z "$reason" ]] && continue
+                print_error "  - $reason"
+            done <<< "$MIXED_REPO_REASONS"
+        fi
+        print_error "Keep a single versioned vX.Y branch for main/community (tagged @testing/@edge overlays are OK)."
+        print_error "Remove untagged edge or latest-stable lines mixed with versioned repos, then re-run."
         exit 1
         ;;
     none)
