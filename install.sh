@@ -16,7 +16,7 @@ readonly WHITE='\033[1;37m'
 readonly NC='\033[0m'
 
 readonly UI_WIDTH=86
-readonly SCRIPT_VERSION="3.8.0"
+readonly SCRIPT_VERSION="3.8.1"
 readonly CHECKSUM_FILE="$SCRIPT_DIR/Installers/.checksums.sha256"
 readonly UPDATE_STATE_FILE="$SCRIPT_DIR/.update-state"
 readonly EXIT_APP_CODE=42
@@ -196,8 +196,8 @@ handle_uncommitted_changes() {
     print_warn "You have uncommitted changes."
     echo ""
     echo -e "  ${WHITE}Options:${NC}"
-    echo -e "    ${CYAN}1.${NC} Stash changes (save for later)"
-    echo -e "    ${CYAN}2.${NC} Discard changes (permanent)"
+    echo -e "    ${CYAN}1.${NC} Stash changes and continue"
+    echo -e "    ${CYAN}2.${NC} Discard changes and continue"
     echo -e "    ${CYAN}0.${NC} Cancel"
     echo ""
     read -rp "  Select option [0-2]: " change_option
@@ -566,11 +566,18 @@ apply_repository_update() {
 
     if [[ -n "$(git status --porcelain 2>/dev/null)" ]]; then
         if [[ "$mode" == "auto" ]]; then
-            print_warn "Uncommitted local changes are present; automatic update was skipped."
-            print_status "Resolve or stash changes, then check for updates again."
-            return 1
-        fi
-        if ! handle_uncommitted_changes "before update"; then
+            print_warn "Uncommitted local changes are present."
+            if [[ ! -t 0 ]]; then
+                print_status "Non-interactive session; automatic update was skipped."
+                print_status "Resolve or stash changes, then check for updates again."
+                return 1
+            fi
+            print_status "Choose an option to update anyway, or cancel to keep local changes."
+            if ! handle_uncommitted_changes "before update"; then
+                print_status "Update skipped."
+                return 1
+            fi
+        elif ! handle_uncommitted_changes "before update"; then
             return 1
         fi
     fi
