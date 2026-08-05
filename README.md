@@ -114,7 +114,8 @@ AUTO_APPLY_UPDATES="true"
 
 After an update is applied, the next launch shows a summary with the previous and new
 VM-Setup versions, Docker-Prep pin, LinUtil pin, and a compare link. Automatic apply
-skips when the working tree has local changes.
+prompts to stash or discard local changes when the working tree is dirty (or skips in
+non-interactive sessions).
 
 Installer scripts are checked against the committed
 `Installers/.checksums.sha256` manifest before execution. A mismatch is fatal.

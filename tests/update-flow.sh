@@ -86,4 +86,13 @@ if ! grep -q 'No GitHub Releases found in' tools/sync-docker-prep-pin.sh; then
     exit 1
 fi
 
+if ! grep -q 'Choose an option to update anyway' install.sh; then
+    echo "Automatic update path must offer an update-anyway prompt for local changes." >&2
+    exit 1
+fi
+if ! grep -q 'Stash changes and continue' install.sh; then
+    echo "Uncommitted-change handler must offer stash-and-continue." >&2
+    exit 1
+fi
+
 echo "Update flow checks passed."
