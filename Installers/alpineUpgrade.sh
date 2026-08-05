@@ -2,9 +2,16 @@
 set -euo pipefail
 
 # REQUIRES_ROOT: true
+# INTERPRETER: bash
 # DESCRIPTION: Upgrade Alpine Linux to a newer release branch (e.g. 3.23 -> 3.24)
+# Requires bash (BASH_REMATCH, mapfile, read -rp). Prefer: bash alpineUpgrade.sh
 
-VERSION="1.0.0"
+if [[ -z "${BASH_VERSION:-}" ]]; then
+    echo "alpineUpgrade.sh requires bash (found a non-bash interpreter)." >&2
+    exit 1
+fi
+
+VERSION="1.0.1"
 LOGFILE="/var/log/alpine-upgrade.log"
 LOCKFILE="/var/run/alpine-upgrade.lock"
 REPOS_FILE="/etc/apk/repositories"
@@ -28,6 +35,8 @@ CURRENT_BRANCH=""
 LATEST_VERSION_ID=""
 LATEST_BRANCH=""
 REPO_STYLE="" # versioned | latest-stable | edge | mixed | none
+REPO_BRANCH=""
+REPOS_BACKUP=""
 
 # print_status outputs an informational message prefixed with a blue [INFO] tag.
 print_status() {
@@ -113,6 +122,7 @@ check_root() {
 }
 
 # acquire_lock creates LOCKFILE containing the current PID to prevent concurrent runs.
+# Uses noclobber so two processes cannot both create the lock after a stale-file check.
 acquire_lock() {
     if [[ -f "$LOCKFILE" ]]; then
         local pid
@@ -125,7 +135,10 @@ acquire_lock() {
         rm -f "$LOCKFILE"
     fi
 
-    if ! echo $$ > "$LOCKFILE" 2>/dev/null; then
+    if ! (
+        set -o noclobber
+        echo $$ > "$LOCKFILE"
+    ) 2>/dev/null; then
         print_error "Failed to create lock file: $LOCKFILE"
         exit 1
     fi
@@ -209,7 +222,7 @@ detect_alpine() {
     fi
 }
 
-# detect_repo_style inspects /etc/apk/repositories and sets REPO_STYLE.
+# detect_repo_style inspects /etc/apk/repositories and sets REPO_STYLE / REPO_BRANCH.
 detect_repo_style() {
     if [[ ! -f "$REPOS_FILE" ]]; then
         print_error "Repositories file not found: $REPOS_FILE"
@@ -217,14 +230,18 @@ detect_repo_style() {
     fi
 
     local has_versioned=0 has_latest=0 has_edge=0
+    REPO_BRANCH=""
     while IFS= read -r line || [[ -n "$line" ]]; do
         [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
         if [[ "$line" == *"/edge/"* ]]; then
             has_edge=1
         elif [[ "$line" == *"/latest-stable/"* ]]; then
             has_latest=1
-        elif [[ "$line" =~ /v[0-9]+\.[0-9]+/ ]]; then
+        elif [[ "$line" =~ /v([0-9]+\.[0-9]+)/ ]]; then
             has_versioned=1
+            if [[ -z "$REPO_BRANCH" ]]; then
+                REPO_BRANCH="${BASH_REMATCH[1]}"
+            fi
         fi
     done < "$REPOS_FILE"
 
@@ -272,6 +289,7 @@ fetch_url() {
 }
 
 # detect_latest_release queries Alpine CDN for the latest-stable point release.
+# When --target is set, CDN failures become warnings so the explicit target can proceed.
 detect_latest_release() {
     local arch yaml version
     arch=$(arch_for_releases)
@@ -283,6 +301,13 @@ detect_latest_release() {
     fi
 
     if [[ -z "$yaml" ]]; then
+        if [[ -n "$TARGET_RELEASE" ]]; then
+            print_warn "Unable to determine the latest Alpine stable release from ${MIRROR_BASE}."
+            print_warn "Continuing with explicit --target ${TARGET_RELEASE}."
+            LATEST_VERSION_ID=""
+            LATEST_BRANCH=""
+            return 0
+        fi
         print_error "Unable to determine the latest Alpine stable release from ${MIRROR_BASE}."
         print_error "Check network access or pass --target explicitly (e.g. --target 3.24)."
         exit 1
@@ -290,8 +315,9 @@ detect_latest_release() {
 
     version=$(printf '%s\n' "$yaml" | awk '
         /^[[:space:]]*-?[[:space:]]*version:[[:space:]]*/ {
-            gsub(/["'\'']/, "", $2)
-            print $2
+            sub(/^[[:space:]]*-?[[:space:]]*version:[[:space:]]*/, "")
+            gsub(/["'\'']/, "")
+            print
             exit
         }
     ')
@@ -301,6 +327,13 @@ detect_latest_release() {
     fi
 
     if [[ -z "$version" ]] || ! LATEST_BRANCH=$(normalize_branch "$version"); then
+        if [[ -n "$TARGET_RELEASE" ]]; then
+            print_warn "Failed to parse latest Alpine release version from CDN metadata."
+            print_warn "Continuing with explicit --target ${TARGET_RELEASE}."
+            LATEST_VERSION_ID=""
+            LATEST_BRANCH=""
+            return 0
+        fi
         print_error "Failed to parse latest Alpine release version from CDN metadata."
         exit 1
     fi
@@ -336,6 +369,15 @@ build_upgrade_path() {
     local start="$1"
     local end="$2"
     local cursor path=() cmp=0
+    local start_major end_major
+
+    start_major="${start%%.*}"
+    end_major="${end%%.*}"
+    if [[ "$start_major" != "$end_major" ]]; then
+        print_error "Refusing to upgrade across major series (v${start} -> v${end})."
+        print_error "This tool only steps within the same major version (e.g. 3.23 -> 3.24)."
+        exit 1
+    fi
 
     compare_branches "$start" "$end" || cmp=$?
     case $cmp in
@@ -370,31 +412,46 @@ build_upgrade_path() {
     printf '%s\n' "${path[@]}"
 }
 
-# backup_repos creates a timestamped backup of the apk repositories file.
+# backup_repos creates a timestamped backup of the apk repositories file and records REPOS_BACKUP.
 backup_repos() {
-    local backup="${REPOS_FILE}.bak.$(date +%Y%m%d%H%M%S)"
+    REPOS_BACKUP="${REPOS_FILE}.bak.$(date +%Y%m%d%H%M%S)"
     if [[ "$DRY_RUN" == "true" ]]; then
-        print_status "[DRY-RUN] Would back up $REPOS_FILE to $backup"
+        print_status "[DRY-RUN] Would back up $REPOS_FILE to $REPOS_BACKUP"
         return 0
     fi
-    cp "$REPOS_FILE" "$backup"
-    print_status "Backed up repositories to $backup"
+    cp "$REPOS_FILE" "$REPOS_BACKUP"
+    print_status "Backed up repositories to $REPOS_BACKUP"
+}
+
+# on_upgrade_error reports recovery steps using the retained repositories backup, then exits.
+on_upgrade_error() {
+    local exit_code=$?
+    trap - ERR
+    print_error "Alpine release upgrade failed (exit ${exit_code}) during package update."
+    if [[ -n "${REPOS_BACKUP:-}" && -f "$REPOS_BACKUP" ]]; then
+        print_error "Repositories backup retained at: $REPOS_BACKUP"
+        print_error "To restore: cp '$REPOS_BACKUP' '$REPOS_FILE' && apk update"
+    else
+        print_error "No repositories backup path is available; inspect $REPOS_FILE manually."
+    fi
+    exit "$exit_code"
 }
 
 # update_repos_to_branch rewrites versioned repository URLs from from_branch to to_branch.
 update_repos_to_branch() {
     local from_branch="$1"
     local to_branch="$2"
-    local tmp
+    local tmp from_escaped
 
     if [[ "$DRY_RUN" == "true" ]]; then
         print_status "[DRY-RUN] Would rewrite v${from_branch} -> v${to_branch} in $REPOS_FILE"
         return 0
     fi
 
+    from_escaped=$(printf '%s\n' "$from_branch" | sed 's/\./\\./g')
     tmp=$(mktemp)
-    sed -e "s|/v${from_branch}/|/v${to_branch}/|g" "$REPOS_FILE" > "$tmp"
-    if ! grep -q "/v${to_branch}/" "$tmp"; then
+    sed -e "s|/v${from_escaped}/|/v${to_branch}/|g" "$REPOS_FILE" > "$tmp"
+    if ! grep -Fq "/v${to_branch}/" "$tmp"; then
         rm -f "$tmp"
         print_error "Repository rewrite did not introduce v${to_branch} URLs. Check $REPOS_FILE."
         exit 1
@@ -491,10 +548,15 @@ prompt_reboot() {
 
 # upgrade_latest_stable_repos performs a package upgrade when repos already track latest-stable.
 upgrade_latest_stable_repos() {
-    local summary
+    local summary latest_line
+    if [[ -n "$LATEST_VERSION_ID" ]]; then
+        latest_line="Latest CDN: Alpine ${LATEST_VERSION_ID} (branch v${LATEST_BRANCH})"
+    else
+        latest_line="Latest CDN: unavailable"
+    fi
     summary="Repositories already use latest-stable.
 Installed: Alpine ${CURRENT_VERSION_ID} (branch v${CURRENT_BRANCH})
-Latest CDN: Alpine ${LATEST_VERSION_ID} (branch v${LATEST_BRANCH})
+${latest_line}
 Action: apk update && apk upgrade --available"
 
     confirm_upgrade "$summary"
@@ -507,7 +569,13 @@ Action: apk update && apk upgrade --available"
 # upgrade_versioned_repos walks release branches from current to the selected target.
 upgrade_versioned_repos() {
     local target="$1"
-    local path_file steps=() step from_branch summary cmp=0
+    local path_file steps=() step from_branch summary cmp=0 latest_line
+
+    if [[ -n "$REPO_BRANCH" && "$REPO_BRANCH" != "$CURRENT_BRANCH" ]]; then
+        print_error "Repository branch v${REPO_BRANCH} does not match installed Alpine branch v${CURRENT_BRANCH}."
+        print_error "Align $REPOS_FILE with the running system before upgrading."
+        exit 1
+    fi
 
     compare_branches "$CURRENT_BRANCH" "$target" || cmp=$?
     case $cmp in
@@ -543,14 +611,20 @@ upgrade_versioned_repos() {
         fi
     done
 
+    if [[ -n "$LATEST_VERSION_ID" ]]; then
+        latest_line="Latest CDN: Alpine ${LATEST_VERSION_ID} (branch v${LATEST_BRANCH})"
+    else
+        latest_line="Latest CDN: unavailable"
+    fi
     summary="Installed: Alpine ${CURRENT_VERSION_ID} (branch v${CURRENT_BRANCH})
-Latest CDN: Alpine ${LATEST_VERSION_ID} (branch v${LATEST_BRANCH})
+${latest_line}
 Target:     v${target}
 Steps:      $(printf 'v%s -> ' "${steps[@]}" | sed 's/ -> $//')"
 
     confirm_upgrade "$summary"
     [[ "$LOG_ENABLED" == "true" ]] && echo "--- Alpine release upgrade started: $(date) ---" >> "$LOGFILE"
     backup_repos
+    trap on_upgrade_error ERR
 
     from_branch="$CURRENT_BRANCH"
     for step in "${steps[@]}"; do
@@ -559,6 +633,8 @@ Steps:      $(printf 'v%s -> ' "${steps[@]}" | sed 's/ -> $//')"
         run_apk_upgrade "v${step}"
         from_branch="$step"
     done
+
+    trap - ERR
 
     # Refresh os-release values after upgrades when possible.
     if [[ -f /etc/os-release ]]; then
@@ -588,6 +664,10 @@ resolve_target_branch() {
 }
 
 # --- MAIN ---
+# When sourced (e.g. by tests), expose helpers only and skip execution.
+if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
+    return 0
+fi
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -627,8 +707,15 @@ detect_repo_style
 detect_latest_release
 
 print_status "Detected Alpine ${CURRENT_VERSION_ID} (branch v${CURRENT_BRANCH})"
-print_status "Latest stable from CDN: ${LATEST_VERSION_ID} (branch v${LATEST_BRANCH})"
+if [[ -n "$LATEST_VERSION_ID" ]]; then
+    print_status "Latest stable from CDN: ${LATEST_VERSION_ID} (branch v${LATEST_BRANCH})"
+else
+    print_status "Latest stable from CDN: unavailable"
+fi
 print_status "Repository style: ${REPO_STYLE}"
+if [[ -n "$REPO_BRANCH" ]]; then
+    print_status "Repository branch: v${REPO_BRANCH}"
+fi
 
 case "$REPO_STYLE" in
     edge)

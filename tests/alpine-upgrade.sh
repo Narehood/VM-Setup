@@ -20,7 +20,10 @@ for required in \
     'build_upgrade_path' \
     'update_repos_to_branch' \
     'latest-releases.yaml' \
-    '--target RELEASE'
+    '--target RELEASE' \
+    'REPOS_BACKUP' \
+    'on_upgrade_error' \
+    'set -o noclobber'
 do
     if ! grep -Fq -- "$required" "$script"; then
         echo "alpineUpgrade.sh is missing expected content: $required" >&2
@@ -33,65 +36,10 @@ if ! grep -Fq 'alpineUpgrade.sh:Alpine Release Upgrade' Installers/serverConfig.
     exit 1
 fi
 
-# Pure bash helpers mirrored from the installer for unit-style checks.
-normalize_branch() {
-    local raw="$1"
-    raw="${raw#v}"
-    if [[ "$raw" =~ ^([0-9]+)\.([0-9]+)(\.[0-9]+)?$ ]]; then
-        echo "${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
-        return 0
-    fi
-    return 1
-}
-
-compare_branches() {
-    local a_major a_minor b_major b_minor
-    IFS=. read -r a_major a_minor <<< "$1"
-    IFS=. read -r b_major b_minor <<< "$2"
-
-    if ((a_major < b_major)); then
-        return 0
-    elif ((a_major > b_major)); then
-        return 2
-    elif ((a_minor < b_minor)); then
-        return 0
-    elif ((a_minor > b_minor)); then
-        return 2
-    fi
-    return 1
-}
-
-next_branch() {
-    local major minor
-    IFS=. read -r major minor <<< "$1"
-    echo "${major}.$((minor + 1))"
-}
-
-build_upgrade_path() {
-    local start="$1"
-    local end="$2"
-    local cursor path=() cmp=0
-
-    compare_branches "$start" "$end" || cmp=$?
-    case $cmp in
-        1) return 0 ;;
-        2) return 2 ;;
-    esac
-
-    cursor="$start"
-    while true; do
-        cursor=$(next_branch "$cursor")
-        path+=("$cursor")
-        cmp=0
-        compare_branches "$cursor" "$end" || cmp=$?
-        case $cmp in
-            1) break ;;
-            2) return 2 ;;
-        esac
-    done
-
-    printf '%s\n' "${path[@]}"
-}
+# Source installer helpers (source guard skips main execution).
+# shellcheck disable=SC1091
+source "$script"
+LOG_ENABLED="false"
 
 got=$(normalize_branch "3.23.5")
 [[ "$got" == "3.23" ]] || {
@@ -135,6 +83,30 @@ path=$(build_upgrade_path "3.22" "3.24" | tr '\n' ' ' | sed 's/[[:space:]]*$//')
 path=$(build_upgrade_path "3.23" "3.24" | tr '\n' ' ' | sed 's/[[:space:]]*$//')
 [[ "$path" == "3.24" ]] || {
     echo "Unexpected upgrade path for 3.23 -> 3.24: '$path'" >&2
+    exit 1
+}
+
+# Cross-major targets must be rejected by the installer implementation.
+if major_err=$(build_upgrade_path "3.24" "4.0" 2>&1); then
+    echo "build_upgrade_path should reject cross-major upgrades" >&2
+    exit 1
+fi
+printf '%s\n' "$major_err" | grep -Fq 'across major series' || {
+    echo "Cross-major rejection message missing: $major_err" >&2
+    exit 1
+}
+
+# awk version extraction must handle list-style "- version:" records.
+parsed=$(printf '%s\n' '- version: "3.24.1"' | awk '
+    /^[[:space:]]*-?[[:space:]]*version:[[:space:]]*/ {
+        sub(/^[[:space:]]*-?[[:space:]]*version:[[:space:]]*/, "")
+        gsub(/["'\'']/, "")
+        print
+        exit
+    }
+')
+[[ "$parsed" == "3.24.1" ]] || {
+    echo "List-style version parse failed: '$parsed'" >&2
     exit 1
 }
 
