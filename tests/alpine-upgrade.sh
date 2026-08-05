@@ -23,7 +23,8 @@ for required in \
     '--target RELEASE' \
     'REPOS_BACKUP' \
     'on_upgrade_error' \
-    'set -o noclobber'
+    'set -o noclobber' \
+    'parse_latest_release_version'
 do
     if ! grep -Fq -- "$required" "$script"; then
         echo "alpineUpgrade.sh is missing expected content: $required" >&2
@@ -96,15 +97,8 @@ printf '%s\n' "$major_err" | grep -Fq 'across major series' || {
     exit 1
 }
 
-# awk version extraction must handle list-style "- version:" records.
-parsed=$(printf '%s\n' '- version: "3.24.1"' | awk '
-    /^[[:space:]]*-?[[:space:]]*version:[[:space:]]*/ {
-        sub(/^[[:space:]]*-?[[:space:]]*version:[[:space:]]*/, "")
-        gsub(/["'\'']/, "")
-        print
-        exit
-    }
-')
+# Production metadata parser must handle list-style "- version:" records.
+parsed=$(printf '%s\n' '- version: "3.24.1"' | parse_latest_release_version)
 [[ "$parsed" == "3.24.1" ]] || {
     echo "List-style version parse failed: '$parsed'" >&2
     exit 1

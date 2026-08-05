@@ -288,6 +288,27 @@ fetch_url() {
     fi
 }
 
+# parse_latest_release_version extracts a point-release version from Alpine CDN YAML on stdin.
+parse_latest_release_version() {
+    local yaml version
+    yaml=$(cat)
+    version=$(printf '%s\n' "$yaml" | awk '
+        /^[[:space:]]*-?[[:space:]]*version:[[:space:]]*/ {
+            sub(/^[[:space:]]*-?[[:space:]]*version:[[:space:]]*/, "")
+            gsub(/["'\'']/, "")
+            print
+            exit
+        }
+    ')
+
+    if [[ -z "$version" ]]; then
+        version=$(printf '%s\n' "$yaml" | sed -n 's/.*version:[[:space:]]*"\?\([0-9]\+\.[0-9]\+\.[0-9]\+\)"\?.*/\1/p' | head -n1)
+    fi
+
+    [[ -n "$version" ]] || return 1
+    printf '%s\n' "$version"
+}
+
 # detect_latest_release queries Alpine CDN for the latest-stable point release.
 # When --target is set, CDN failures become warnings so the explicit target can proceed.
 detect_latest_release() {
@@ -313,18 +334,7 @@ detect_latest_release() {
         exit 1
     fi
 
-    version=$(printf '%s\n' "$yaml" | awk '
-        /^[[:space:]]*-?[[:space:]]*version:[[:space:]]*/ {
-            sub(/^[[:space:]]*-?[[:space:]]*version:[[:space:]]*/, "")
-            gsub(/["'\'']/, "")
-            print
-            exit
-        }
-    ')
-
-    if [[ -z "$version" ]]; then
-        version=$(printf '%s\n' "$yaml" | sed -n 's/.*version:[[:space:]]*"\?\([0-9]\+\.[0-9]\+\.[0-9]\+\)"\?.*/\1/p' | head -n1)
-    fi
+    version=$(printf '%s\n' "$yaml" | parse_latest_release_version || true)
 
     if [[ -z "$version" ]] || ! LATEST_BRANCH=$(normalize_branch "$version"); then
         if [[ -n "$TARGET_RELEASE" ]]; then
