@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-SCRIPT_VERSION="1.2.1"
+SCRIPT_VERSION="1.2.2"
 
 # --- UI & FORMATTING FUNCTIONS ---
 
@@ -297,7 +297,121 @@ prompt_yes_no() {
     [[ "$result" =~ ^[Yy]$ ]]
 }
 
+# alpine_release_branch echoes the Alpine release branch (X.Y) from OS_VERSION.
+alpine_release_branch() {
+    local raw="${OS_VERSION#v}"
+    if [[ "$raw" =~ ^([0-9]+)\.([0-9]+) ]]; then
+        echo "${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
+        return 0
+    fi
+    return 1
+}
+
+# alpine_repos_file echoes the apk repositories path (overridable for tests).
+alpine_repos_file() {
+    echo "${ALPINE_REPOS_FILE:-/etc/apk/repositories}"
+}
+
+# ensure_alpine_guest_tool_repos enables the matching community repo and a tagged @edge community overlay.
+# xe-guest-utilities ships in community on stable releases; tagged edge is added as a safe optional overlay.
+ensure_alpine_guest_tool_repos() {
+    local repos branch branch_escaped main_line community_url edge_base edge_line
+    local changed=0
+    repos=$(alpine_repos_file)
+
+    if [[ ! -f "$repos" ]]; then
+        print_error "Alpine repositories file not found: $repos"
+        return 1
+    fi
+
+    if ! branch=$(alpine_release_branch); then
+        print_error "Unable to determine Alpine release branch from VERSION_ID ($OS_VERSION)."
+        return 1
+    fi
+    branch_escaped=$(printf '%s\n' "$branch" | sed 's/\./\\./g')
+
+    # Prefer the official helper when available (non-interactive community enable).
+    if command -v setup-apkrepos >/dev/null 2>&1; then
+        print_info "Enabling Alpine community repository via setup-apkrepos..."
+        if setup-apkrepos -c >/dev/null 2>&1; then
+            changed=1
+            print_success "Community repository enabled."
+        else
+            print_warn "setup-apkrepos -c did not complete; falling back to direct repository edits."
+        fi
+    fi
+
+    # Uncomment a commented community line for this release branch.
+    if grep -Eq "^[[:space:]]*#+.*/alpine/v${branch_escaped}/community(/|[[:space:]]|$)" "$repos"; then
+        sed -i -E "s|^([[:space:]]*)#+[[:space:]]*(.*/alpine/v${branch_escaped}/community.*)|\1\2|" "$repos"
+        changed=1
+        print_success "Uncommented v${branch}/community repository."
+    fi
+
+    # Add community if still missing, mirroring the configured main URL when possible.
+    if ! grep -Eq "^[[:space:]]*[^#].*/alpine/v${branch_escaped}/community(/|[[:space:]]|$)" "$repos"; then
+        main_line=$(grep -E "^[[:space:]]*[^#].*/alpine/v${branch_escaped}/main(/|[[:space:]]|$)" "$repos" | head -n1 || true)
+        if [[ -n "$main_line" ]]; then
+            community_url=$(printf '%s\n' "$main_line" | sed -E 's|^[[:space:]]*||; s|/main([[:space:]].*)?$|/community|')
+        else
+            community_url="https://dl-cdn.alpinelinux.org/alpine/v${branch}/community"
+        fi
+        printf '%s\n' "$community_url" >> "$repos"
+        changed=1
+        print_success "Added v${branch}/community repository."
+    fi
+
+    # Add a tagged edge/community overlay (not untagged) so edge packages can be opted into safely.
+    if ! grep -Eq "^[[:space:]]*@edge[[:space:]]+.*/alpine/edge/community(/|[[:space:]]|$)" "$repos"; then
+        main_line=$(grep -E "^[[:space:]]*[^#].*/alpine/v${branch_escaped}/main(/|[[:space:]]|$)" "$repos" | head -n1 || true)
+        if [[ -n "$main_line" ]]; then
+            edge_base=$(printf '%s\n' "$main_line" | sed -E "s|^[[:space:]]*||; s|/alpine/v${branch_escaped}/main.*|/alpine|")
+            edge_line="@edge ${edge_base}/edge/community"
+        else
+            edge_line="@edge https://dl-cdn.alpinelinux.org/alpine/edge/community"
+        fi
+        printf '%s\n' "$edge_line" >> "$repos"
+        changed=1
+        print_success "Added tagged @edge community overlay."
+    else
+        print_info "Tagged @edge community overlay already present."
+    fi
+
+    if ((changed)); then
+        PKG_MANAGER_UPDATED="false"
+    fi
+    return 0
+}
+
+# install_alpine_xe_guest_utilities ensures required Alpine repos, then installs and enables xe-guest-utilities.
+install_alpine_xe_guest_utilities() {
+    print_info "Preparing Alpine repositories for XCP-NG guest tools..."
+    ensure_alpine_guest_tool_repos || return 1
+
+    PKG_MANAGER_UPDATED="false"
+    update_repos || return 1
+
+    if apk add xe-guest-utilities >/dev/null 2>&1; then
+        print_success "Installed xe-guest-utilities from Alpine community."
+    elif apk add xe-guest-utilities@edge >/dev/null 2>&1; then
+        print_warn "Installed xe-guest-utilities from the tagged @edge community overlay."
+    else
+        print_error "xe-guest-utilities is unavailable in the configured Alpine repositories."
+        print_info "Ensure v$(alpine_release_branch 2>/dev/null || echo '?')/community is enabled, then retry."
+        return 1
+    fi
+
+    rc-update add xe-guest-utilities default >/dev/null 2>&1 || true
+    /etc/init.d/xe-guest-utilities start >/dev/null 2>&1 || true
+    print_success "XCP-NG tools installed."
+    return 0
+}
+
 # --- MAIN EXECUTION ---
+# When sourced (e.g. by tests), expose helpers only and skip execution.
+if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
+    return 0
+fi
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -325,14 +439,7 @@ if prompt_yes_no "Install?" "y"; then
 
     case "$OS" in
         alpine)
-            if ! apk add xe-guest-utilities >/dev/null 2>&1; then
-                print_error "xe-guest-utilities is unavailable in the configured Alpine repositories."
-                print_info "Enable the matching community repository for your Alpine release, then retry."
-                exit 1
-            fi
-            rc-update add xe-guest-utilities default >/dev/null 2>&1
-            /etc/init.d/xe-guest-utilities start >/dev/null 2>&1
-            print_success "XCP-NG tools installed."
+            install_alpine_xe_guest_utilities || exit 1
             ;;
         arch|endeavouros|manjaro)
             install_pkg xe-guest-utilities
