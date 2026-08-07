@@ -11,6 +11,7 @@ done
 bash tests/update-flow.sh
 bash tests/alpine-upgrade.sh
 bash tests/server-setup-alpine.sh
+bash tests/docker-prep-update.sh
 
 (
     cd Installers
