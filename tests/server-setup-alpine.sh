@@ -15,7 +15,7 @@ bash -n "$script"
 for required in \
     'ensure_alpine_guest_tool_repos' \
     'install_alpine_xe_guest_utilities' \
-    'setup-apkrepos -c' \
+    'Edit /etc/apk/repositories directly' \
     '@edge' \
     '/community'
 do
@@ -24,6 +24,11 @@ do
         exit 1
     fi
 done
+
+if grep -Fq 'setup-apkrepos -c' "$script"; then
+    echo "serverSetup.sh must not call setup-apkrepos -c (it can hang interactively)." >&2
+    exit 1
+fi
 
 # shellcheck disable=SC1091
 source "$script"
@@ -39,9 +44,6 @@ https://dl-cdn.alpinelinux.org/alpine/v3.24/main
 #https://dl-cdn.alpinelinux.org/alpine/v3.24/community
 EOF
 ALPINE_REPOS_FILE="$repos_tmp"
-
-# Avoid calling real setup-apkrepos in the test environment.
-setup-apkrepos() { return 1; }
 
 ensure_alpine_guest_tool_repos
 
