@@ -330,16 +330,8 @@ ensure_alpine_guest_tool_repos() {
     fi
     branch_escaped=$(printf '%s\n' "$branch" | sed 's/\./\\./g')
 
-    # Prefer the official helper when available (non-interactive community enable).
-    if command -v setup-apkrepos >/dev/null 2>&1; then
-        print_info "Enabling Alpine community repository via setup-apkrepos..."
-        if setup-apkrepos -c >/dev/null 2>&1; then
-            changed=1
-            print_success "Community repository enabled."
-        else
-            print_warn "setup-apkrepos -c did not complete; falling back to direct repository edits."
-        fi
-    fi
+    # Edit /etc/apk/repositories directly. setup-apkrepos can hang waiting for
+    # interactive mirror selection even with -c, so it is intentionally avoided.
 
     # Uncomment a commented community line for this release branch.
     if grep -Eq "^[[:space:]]*#+.*/alpine/v${branch_escaped}/community(/|[[:space:]]|$)" "$repos"; then
