@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-SCRIPT_VERSION="1.2.2"
+SCRIPT_VERSION="1.2.3"
 
 # --- UI & FORMATTING FUNCTIONS ---
 
