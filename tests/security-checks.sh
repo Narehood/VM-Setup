@@ -10,6 +10,7 @@ done
 
 bash tests/update-flow.sh
 bash tests/alpine-upgrade.sh
+bash tests/server-setup-alpine.sh
 
 (
     cd Installers
