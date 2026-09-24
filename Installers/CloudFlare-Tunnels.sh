@@ -1,152 +1,92 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# REQUIRES_ROOT: true
+# DESCRIPTION: Installs verified cloudflared for systemd or OpenRC
+set -euo pipefail
+readonly CLOUDFLARED_VERSION="2026.9.3"
 
-# DESCRIPTION: Installs cloudflared and optionally configures a tunnel service
-
-# VISUAL STYLING
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-YELLOW='\033[1;33m'
-WHITE='\033[1;37m'
-NC='\033[0m' # No Color
-
-# HEADER
-clear
-echo -e "${BLUE}===================================================================${NC}"
-echo -e "${CYAN}             CLOUDFLARE TUNNEL (CLOUDFLARED) SETUP         ${NC}"
-echo -e "${BLUE}===================================================================${NC}"
-echo ""
-
-# ROOT CHECK
-if [ "$EUID" -ne 0 ]; then
-    echo -e "${RED}[ERROR]${NC} Please run as root (use sudo)."
-    exit 1
-fi
-
-# OS DETECTION
-echo -e "${CYAN}[INFO]${NC} Detecting Operating System..."
-OS_FAMILY=""
-if [ -f /etc/os-release ]; then
-    . /etc/os-release
-    case "$ID" in
-        debian|ubuntu|kali|linuxmint|pop)
-            OS_FAMILY="debian" ;;
-        fedora|rhel|centos|rocky|almalinux)
-            OS_FAMILY="rhel" ;;
-        arch|manjaro)
-            OS_FAMILY="arch" ;;
-        alpine)
-            OS_FAMILY="alpine" ;;
-        *)
-            echo -e "${RED}[ERROR]${NC} Unsupported OS: $ID"
-            exit 1 ;;
+select_cloudflared_asset() {
+    case "$1" in
+        x86_64|amd64) CF_ARCH=amd64; CF_SHA=77e26d8d900e0b8469f416239d14b5f296525fdf79fee6f511ef55609e3fbac2 ;;
+        aarch64|arm64) CF_ARCH=arm64; CF_SHA=aaeb2d7d0da3614634c7e03ab13487a1522c2e79165ed2929cfe23d5e95b326d ;;
+        armv7l|armv6l) CF_ARCH=arm; CF_SHA=967dc371a3fedbf09e881c13ee7ba317155ebc336cbd4afb756b46fc6785e5af ;;
+        *) echo "Unsupported architecture: $1" >&2; return 1 ;;
     esac
-    echo -e "${GREEN}[OK]${NC} Detected: $ID ($OS_FAMILY)"
-else
-    echo -e "${RED}[ERROR]${NC} Could not detect OS."
-    exit 1
-fi
-
-# INSTALLATION FUNCTIONS
-
-install_debian() {
-    echo -e "${CYAN}[INFO]${NC} Setting up Cloudflare repository..."
-    mkdir -p --mode=0755 /usr/share/keyrings
-    curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
-
-    echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main" | tee /etc/apt/sources.list.d/cloudflared.list >/dev/null
-
-    echo -e "${CYAN}[INFO]${NC} Installing cloudflared..."
-    apt-get update -q
-    apt-get install -y cloudflared -q
 }
 
-install_rhel() {
-    echo -e "${CYAN}[INFO]${NC} Setting up Cloudflare repository..."
-    curl -fsSL https://pkg.cloudflare.com/cloudflared-ascii.repo | tee /etc/yum.repos.d/cloudflared.repo >/dev/null
+write_systemd_service() {
+    cat <<'EOF'
+[Unit]
+Description=Cloudflare Tunnel (VM-Setup)
+Wants=network-online.target
+After=network-online.target
 
-    echo -e "${CYAN}[INFO]${NC} Installing cloudflared..."
-    if command -v dnf >/dev/null; then
-        dnf install -y cloudflared -q
+[Service]
+ExecStart=/usr/local/bin/cloudflared tunnel --no-autoupdate run --token-file /etc/cloudflared/vm-setup-token
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
+EOF
+}
+
+write_openrc_service() {
+    cat <<'EOF'
+#!/sbin/openrc-run
+description="Cloudflare Tunnel (VM-Setup)"
+command="/usr/local/bin/cloudflared"
+command_args="tunnel --no-autoupdate run --token-file /etc/cloudflared/vm-setup-token"
+command_background=true
+pidfile="/run/cloudflared-vm-setup.pid"
+depend() { need net; after firewall; }
+EOF
+}
+
+main() {
+    ((EUID == 0)) || { echo 'Run as root.' >&2; return 1; }
+    local dependency token service_file
+    for dependency in curl sha256sum install; do
+        command -v "$dependency" >/dev/null || { echo "Install $dependency first." >&2; return 1; }
+    done
+    [[ "$(uname -s)" == Linux ]] || return 1
+    select_cloudflared_asset "$(uname -m)"
+    CF_WORK_DIR=$(mktemp -d /var/tmp/vm-cloudflared.XXXXXXXX)
+    trap 'rm -rf -- "$CF_WORK_DIR"' EXIT
+    curl --fail --show-error --location --proto '=https' --proto-redir '=https' --tlsv1.2 --connect-timeout 20 --max-time 300 --retry 3 \
+        "https://github.com/cloudflare/cloudflared/releases/download/$CLOUDFLARED_VERSION/cloudflared-linux-$CF_ARCH" -o "$CF_WORK_DIR/cloudflared"
+    printf '%s  %s\n' "$CF_SHA" "$CF_WORK_DIR/cloudflared" | sha256sum -c -
+    install -m 755 "$CF_WORK_DIR/cloudflared" /usr/local/bin/cloudflared
+    /usr/local/bin/cloudflared --version
+    echo 'Create or select a tunnel in Cloudflare and copy its connector token.'
+    read -rsp 'Tunnel token (Enter skips service configuration): ' token
+    echo
+    [[ -n "$token" ]] || return 0
+    [[ "$token" =~ ^[A-Za-z0-9_+/=-]+$ ]] || { echo 'Invalid token format.' >&2; return 1; }
+    if command -v rc-service >/dev/null; then service_file=/etc/init.d/cloudflared-vm-setup
+    elif command -v systemctl >/dev/null; then service_file=/etc/systemd/system/cloudflared-vm-setup.service
+    else echo 'No supported service manager found.' >&2; return 1; fi
+    # Keep any existing tunnel intact, including package-managed services.
+    if [[ -e "$service_file" || -L "$service_file" || -e /etc/init.d/cloudflared || -e /etc/systemd/system/cloudflared.service || -e /etc/cloudflared/vm-setup-token ]]; then
+        echo 'Existing tunnel configuration found. Binary updated; configure its existing service separately.' >&2
+        return 1
+    fi
+    install -d -m 700 /etc/cloudflared
+    (umask 077; set -o noclobber; printf '%s' "$token" > /etc/cloudflared/vm-setup-token)
+    unset token
+    if command -v rc-service >/dev/null; then
+        write_openrc_service > "$CF_WORK_DIR/service"
+        install -m 755 "$CF_WORK_DIR/service" "$service_file"
+        rc-update add cloudflared-vm-setup default
+        rc-service cloudflared-vm-setup start
+        rc-service cloudflared-vm-setup status
     else
-        yum install -y cloudflared -q
+        write_systemd_service > "$CF_WORK_DIR/service"
+        install -m 644 "$CF_WORK_DIR/service" "$service_file"
+        systemctl daemon-reload
+        systemctl enable --now cloudflared-vm-setup.service
+        systemctl is-active --quiet cloudflared-vm-setup.service
     fi
+    echo 'Tunnel service started. Token is stored in a root-only file.'
 }
 
-install_arch() {
-    echo -e "${CYAN}[INFO]${NC} Installing cloudflared via Pacman..."
-    pacman -S --noconfirm cloudflared
-}
-
-install_alpine() {
-    echo -e "${CYAN}[INFO]${NC} Installing cloudflared via APK..."
-    # Cloudflared is in the community repo
-    apk update
-    apk add cloudflared
-}
-
-# EXECUTE INSTALL
-
-# Check if already installed
-if command -v cloudflared &> /dev/null; then
-    echo -e "${YELLOW}[WARN]${NC} 'cloudflared' is already installed."
-    read -p "Re-install/Update? (y/N): " reinstall
-    if [[ "$reinstall" =~ ^[Yy]$ ]]; then
-        case "$OS_FAMILY" in
-            debian) install_debian ;;
-            rhel)   install_rhel ;;
-            arch)   install_arch ;;
-            alpine) install_alpine ;;
-        esac
-    fi
-else
-    # Install
-    case "$OS_FAMILY" in
-        debian) install_debian ;;
-        rhel)   install_rhel ;;
-        arch)   install_arch ;;
-        alpine) install_alpine ;;
-    esac
-fi
-
-# Verify Installation
-if ! command -v cloudflared &> /dev/null; then
-    echo -e "${RED}[ERROR]${NC} Installation failed. 'cloudflared' binary not found."
-    exit 1
-fi
-echo -e "${GREEN}[SUCCESS]${NC} Cloudflared installed successfully."
-
-# TOKEN CONFIGURATION
-echo ""
-echo -e "${WHITE}--- TUNNEL CONFIGURATION ---${NC}"
-echo "1. Go to Cloudflare Zero Trust Dashboard > Networks > Tunnels"
-echo "2. Create a new tunnel (or select existing) and click 'Configure'"
-echo "3. Copy the token (it looks like a long base64 string)"
-echo ""
-
-read -rsp "Paste your Tunnel Token (input hidden, or press Enter to skip): " CF_TOKEN
-echo ""
-
-if [ -n "$CF_TOKEN" ]; then
-    echo -e "${YELLOW}[WARN]${NC} Cloudflare's service installer receives the token as a process argument."
-    echo -e "${YELLOW}[WARN]${NC} Continue only when no untrusted local users are active."
-    echo -e "\n${CYAN}[INFO]${NC} Installing system service..."
-    
-    # Run the service install command
-    cloudflared service install "$CF_TOKEN"
-    
-    if [ $? -eq 0 ]; then
-        echo -e "${GREEN}[SUCCESS]${NC} Service installed and started."
-        echo -e "Check status with: ${YELLOW}systemctl status cloudflared${NC}"
-    else
-        echo -e "${RED}[ERROR]${NC} Failed to install service. Check the token and try again."
-    fi
-else
-    echo -e "${YELLOW}[SKIP]${NC} No token provided."
-    echo "You can configure it later using:"
-    echo "sudo cloudflared service install <token>"
-fi
-
-echo ""
-read -p "Press [Enter] to finish..."
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then main "$@"; fi

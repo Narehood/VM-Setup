@@ -1,7 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
-VERSION="1.1.0"
+# REQUIRES_ROOT: true
+
+VERSION="1.2.0"
 
 # print_status prints an informational message prefixed with `[INFO]` in blue to stdout.
 print_status() { echo -e "\033[1;34m[INFO]\033[0m $1"; }
@@ -22,11 +24,15 @@ check_privileges() {
     fi
 }
 
+run_as_root() {
+    if ((EUID == 0)); then "$@"; else sudo -- "$@"; fi
+}
+
 # backup_config creates a timestamped backup of the specified file (appends .bak.YYYYMMDDHHMMSS) if the file exists.
 backup_config() {
     local file="$1"
     if [[ -f "$file" ]]; then
-        sudo cp "$file" "${file}.bak.$(date +%Y%m%d%H%M%S)"
+        run_as_root cp "$file" "${file}.bak.$(date +%Y%m%d%H%M%S)"
         print_status "Backed up $file"
     fi
 }
@@ -53,15 +59,17 @@ EOF
 enable_debian_updates() {
     print_status "Configuring Unattended Upgrades for Debian/Ubuntu..."
     
-    sudo apt-get update -q
-    sudo apt-get install -y unattended-upgrades apt-listchanges
+    run_as_root apt-get update -q
+    run_as_root apt-get install -y unattended-upgrades apt-listchanges
 
+    backup_config /etc/apt/apt.conf.d/20auto-upgrades
     # Write both lines in one operation
-    sudo tee /etc/apt/apt.conf.d/20auto-upgrades > /dev/null << 'EOF'
+    run_as_root tee /etc/apt/apt.conf.d/20auto-upgrades > /dev/null << 'EOF'
 APT::Periodic::Update-Package-Lists "1";
 APT::Periodic::Unattended-Upgrade "1";
 EOF
 
+    run_as_root systemctl enable --now apt-daily.timer apt-daily-upgrade.timer
     print_success "Unattended upgrades enabled."
 }
 
@@ -69,13 +77,27 @@ EOF
 enable_redhat_updates() {
     print_status "Configuring DNF Automatic for RHEL-based systems..."
     
-    sudo dnf install -y dnf-automatic
-
     local conf="/etc/dnf/automatic.conf"
+    local timer=dnf-automatic.timer temporary
+    if command -v dnf5 >/dev/null; then
+        run_as_root dnf5 install -y dnf5-plugin-automatic
+        timer=dnf5-automatic.timer
+    else
+        run_as_root dnf install -y dnf-automatic
+    fi
     backup_config "$conf"
-    sudo sed -i 's/^apply_updates = no/apply_updates = yes/' "$conf"
-
-    sudo systemctl enable --now dnf-automatic.timer
+    temporary=$(mktemp)
+    if [[ -f "$conf" ]]; then run_as_root cat "$conf" > "$temporary"; fi
+    awk '
+        /^\[/ {commands=($0=="[commands]")}
+        commands && /^[[:space:]]*(apply_updates|upgrade_type)[[:space:]]*=/ {next}
+        {print}
+        /^\[commands\]$/ {found=1; print "apply_updates = yes\nupgrade_type = security"}
+        END {if (!found) print "\n[commands]\napply_updates = yes\nupgrade_type = security"}
+    ' "$temporary" | run_as_root tee "$conf" >/dev/null
+    rm -f "$temporary"
+    run_as_root systemctl enable --now "$timer"
+    run_as_root systemctl is-active --quiet "$timer"
     print_success "DNF Automatic enabled."
 }
 
@@ -83,14 +105,14 @@ enable_redhat_updates() {
 # It installs the yum-cron package, backs up /etc/sysconfig/yum-cron, sets CHECK_ONLY and DOWNLOAD_ONLY to "no", and enables & starts the yum-cron service.
 enable_centos_updates() {
     print_status "Configuring Yum Cron for CentOS..."
-    sudo yum install -y yum-cron
+    run_as_root yum install -y yum-cron
     
     local conf="/etc/sysconfig/yum-cron"
     backup_config "$conf"
-    sudo sed -i 's/^CHECK_ONLY = yes/CHECK_ONLY = no/' "$conf"
-    sudo sed -i 's/^DOWNLOAD_ONLY = yes/DOWNLOAD_ONLY = no/' "$conf"
+    run_as_root sed -i 's/^CHECK_ONLY = yes/CHECK_ONLY = no/' "$conf"
+    run_as_root sed -i 's/^DOWNLOAD_ONLY = yes/DOWNLOAD_ONLY = no/' "$conf"
     
-    sudo systemctl enable --now yum-cron
+    run_as_root systemctl enable --now yum-cron
     print_success "Yum Cron enabled."
 }
 
@@ -99,24 +121,25 @@ enable_arch_updates() {
     print_status "Configuring Arch Linux maintenance timers..."
 
     if ! pacman -Q pacman-contrib &>/dev/null; then
-        sudo pacman -S --noconfirm pacman-contrib
+        run_as_root pacman -S --noconfirm pacman-contrib
     fi
 
-    sudo systemctl enable --now paccache.timer
+    run_as_root systemctl enable --now paccache.timer
     
-    # Create a custom service to refresh databases
-    sudo tee /etc/systemd/system/pacman-refresh.service > /dev/null << 'EOF'
+    # Keep the old unit name so existing refresh timers migrate to checkupdates.
+    run_as_root tee /etc/systemd/system/pacman-refresh.service > /dev/null << 'EOF'
 [Unit]
-Description=Refresh Pacman Databases
+Description=Check Arch updates without changing the system package database
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/pacman -Syy
+ExecStart=/usr/bin/checkupdates
+SuccessExitStatus=2
 EOF
 
-    sudo tee /etc/systemd/system/pacman-refresh.timer > /dev/null << 'EOF'
+    run_as_root tee /etc/systemd/system/pacman-refresh.timer > /dev/null << 'EOF'
 [Unit]
-Description=Run Pacman Refresh daily
+Description=Check Arch updates daily
 
 [Timer]
 OnCalendar=daily
@@ -126,8 +149,8 @@ Persistent=true
 WantedBy=timers.target
 EOF
 
-    sudo systemctl daemon-reload
-    sudo systemctl enable --now pacman-refresh.timer
+    run_as_root systemctl daemon-reload
+    run_as_root systemctl enable --now pacman-refresh.timer
     
     print_warn "Auto-install disabled for safety on rolling release."
     print_success "Arch maintenance timers active."
@@ -136,29 +159,46 @@ EOF
 # enable_alpine_updates creates a daily /etc/periodic/daily/apk-upgrade script that runs `apk update` and `apk upgrade` and makes it executable.
 enable_alpine_updates() {
     print_status "Configuring Alpine Autoupgrades..."
+    run_as_root mkdir -p /etc/periodic/daily
     
-    sudo tee /etc/periodic/daily/apk-upgrade > /dev/null << 'EOF'
+    run_as_root tee /etc/periodic/daily/apk-upgrade > /dev/null << 'EOF'
 #!/bin/sh
 apk update && apk upgrade
 EOF
     
-    sudo chmod +x /etc/periodic/daily/apk-upgrade
-    print_success "Daily upgrade cron job created."
+    run_as_root chmod +x /etc/periodic/daily/apk-upgrade
+    run_as_root rc-update add crond default
+    run_as_root rc-service crond start
+    run_as_root rc-service crond status
+    print_success "Daily full-package upgrade job enabled (Alpine has no security-only upgrade filter)."
 }
 
 # enable_suse_updates creates a daily cron job at /etc/cron.daily/suse-update that refreshes zypper repositories and applies available updates automatically.
 enable_suse_updates() {
     print_status "Enabling SUSE updates via Cron..."
+    run_as_root zypper --non-interactive install cron
+    run_as_root mkdir -p /etc/cron.daily
     
-    sudo tee /etc/cron.daily/suse-update > /dev/null << 'EOF'
-#!/bin/bash
-zypper refresh
-zypper update -y
+    if [[ "$OS" == opensuse-tumbleweed || "$OS" == opensuse-slowroll ]]; then
+        run_as_root tee /etc/cron.daily/suse-update > /dev/null << 'EOF'
+#!/bin/sh
+zypper --non-interactive refresh && zypper --non-interactive list-updates
 EOF
+        print_warn "Rolling SUSE releases: notification only. Apply complete snapshots with zypper dup."
+    else
+        run_as_root tee /etc/cron.daily/suse-update > /dev/null << 'EOF'
+#!/bin/bash
+zypper --non-interactive refresh && zypper --non-interactive patch --category security
+EOF
+    fi
 
-    sudo chmod +x /etc/cron.daily/suse-update
-    print_success "SUSE cron job created."
+    run_as_root chmod +x /etc/cron.daily/suse-update
+    run_as_root systemctl enable --now cron.service
+    run_as_root systemctl is-active --quiet cron.service
+    print_success "SUSE maintenance job enabled."
 }
+
+if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then return 0; fi
 
 # --- MAIN ---
 
@@ -193,7 +233,7 @@ case "$OS" in
     ubuntu|debian|linuxmint|kali|pop)
         enable_debian_updates
         ;;
-    fedora|rhel|rocky|almalinux)
+    fedora|rhel|redhat|rocky|almalinux)
         enable_redhat_updates
         ;;
     centos)

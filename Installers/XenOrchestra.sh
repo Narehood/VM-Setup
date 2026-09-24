@@ -1,56 +1,33 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# REQUIRES_ROOT: true
+# DESCRIPTION: Runs the verified Xen Orchestra installer (upstream distro requirements apply)
+set -euo pipefail
+readonly REPO_URL="https://github.com/Narehood/XenOrchestraInstallerUpdater.git"
+readonly REPO_REVISION="3c2a24b50c6b247b9d330ee151fcdbb42d305083"
 
-# --- CONFIGURATION ---
-REPO_DIR="XenOrchestraInstallerUpdater"
-REPO_URL="https://github.com/Narehood/XenOrchestraInstallerUpdater"
-
-# Ensure we are in the home directory (or wherever you want this installed)
-cd "$HOME" || { echo "Failed to change to home directory"; exit 1; }
-
-# --- UPDATE LOGIC ---
-
-if [ -d "$REPO_DIR" ]; then
-    echo "Directory $REPO_DIR found. Checking for updates..."
-    cd "$REPO_DIR" || exit 1
-
-    # Verify it is a valid git repo
-    if [ -d ".git" ]; then
-        # Fetch latest info without merging
-        git remote update > /dev/null 2>&1
-        
-        LOCAL=$(git rev-parse @)
-        REMOTE=$(git rev-parse @{u})
-
-        if [ "$LOCAL" = "$REMOTE" ]; then
-            echo "Xen Orchestra Installer is already up to date."
-        else
-            echo "Update available. Pulling latest changes..."
-            git pull
-        fi
-    else
-        echo "Warning: Directory exists but is not a valid git repository."
-        read -p "Delete and re-clone? (y/n): " REPLACE
-        if [ "$REPLACE" == "y" ]; then
-            cd ..
-            rm -rf "$REPO_DIR"
-            echo "Cloning repository..."
-            git clone "$REPO_URL"
-            cd "$REPO_DIR" || exit 1
-        else
-            echo "Using existing directory as-is."
-        fi
+main() {
+    command -v git >/dev/null || { echo 'Install git first.' >&2; return 1; }
+    ((EUID == 0)) || { echo 'Run as root.' >&2; return 1; }
+    XO_WORK_DIR=$(mktemp -d /var/tmp/vm-xo.XXXXXXXX)
+    trap 'rm -rf -- "$XO_WORK_DIR"' EXIT
+    git init -q "$XO_WORK_DIR"
+    git -C "$XO_WORK_DIR" remote add origin "$REPO_URL"
+    git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=60 -C "$XO_WORK_DIR" fetch --depth 1 origin "$REPO_REVISION"
+    git -C "$XO_WORK_DIR" checkout --detach -q FETCH_HEAD
+    [[ "$(git -C "$XO_WORK_DIR" rev-parse HEAD)" == "$REPO_REVISION" ]]
+    [[ -f "$XO_WORK_DIR/xo-install.sh" && ! -L "$XO_WORK_DIR/xo-install.sh" ]]
+    local config="${XO_CONFIG_FILE:-/etc/vm-setup/xo-install.cfg}"
+    if [[ ! -e "$config" ]]; then
+        install -d -m 700 "$(dirname "$config")"
+        (umask 077; set -o noclobber; cat "$XO_WORK_DIR/sample.xo-install.cfg" > "$config")
     fi
-else
-    echo "Cloning Xen Orchestra Installer..."
-    git clone "$REPO_URL"
-    cd "$REPO_DIR" || exit 1
-fi
+    [[ -f "$config" && ! -L "$config" ]]
+    cp "$config" "$XO_WORK_DIR/xo-install.cfg"
+    install -d -m 700 /var/log/vm-setup-xo
+    # The upstream config is sourced before defaults; enforce pinning after it.
+    printf '\nSELFUPGRADE=false\nLOGPATH=/var/log/vm-setup-xo\n' >> "$XO_WORK_DIR/xo-install.cfg"
+    echo "Xen Orchestra installer: $REPO_REVISION; configuration: $config"
+    bash "$XO_WORK_DIR/xo-install.sh" "$@"
+}
 
-# --- EXECUTION ---
-echo "Starting installation script..."
-if [ -f "xo-install.sh" ]; then
-    bash xo-install.sh
-else
-    echo "Error: xo-install.sh not found in $REPO_DIR"
-    exit 1
-fi
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then main "$@"; fi

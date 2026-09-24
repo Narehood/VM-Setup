@@ -1,7 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
-VERSION="1.3.1"
+# REQUIRES_ROOT: true
+
+VERSION="1.4.0"
 LOGFILE="/var/log/system-update.log"
 LOCKFILE="/var/run/system-update.lock"
 LOG_ENABLED="true"
@@ -25,6 +27,7 @@ print_status() {
     else
         echo -e "${BLUE}[INFO]${NC} $1"
     fi
+    return 0
 }
 
 # print_success prints a success message prefixed with a green "[SUCCESS]" tag.
@@ -37,6 +40,7 @@ print_success() {
     else
         echo -e "${GREEN}[SUCCESS]${NC} $1"
     fi
+    return 0
 }
 
 # print_warn prints a warning message prefixed with a yellow [WARN] tag.
@@ -49,6 +53,7 @@ print_warn() {
     else
         echo -e "${YELLOW}[WARN]${NC} $1"
     fi
+    return 0
 }
 
 # print_error prints MESSAGE prefixed with a red "[ERROR]" tag.
@@ -91,7 +96,9 @@ EOF
 
 # cleanup removes the lockfile specified by LOCKFILE.
 cleanup() {
-    rm -f "$LOCKFILE"
+    if [[ -f "$LOCKFILE" && "$(cat "$LOCKFILE")" == "$$" ]]; then
+        rm -f -- "$LOCKFILE"
+    fi
 }
 
 # check_root verifies the script is running as root; prints an error message and exits with status 1 if not.
@@ -103,33 +110,13 @@ check_root() {
 }
 
 # acquire_lock creates LOCKFILE containing the current PID to prevent concurrent runs.
-# If an existing lockfile references a running PID the script prints an error and exits;
-# if the lockfile is stale it is removed before writing the current PID and registering
-# the cleanup trap on EXIT. Verifies the write succeeded before registering the trap.
+# Existing locks require inspection; they are never automatically reclaimed.
 acquire_lock() {
-    if [[ -f "$LOCKFILE" ]]; then
-        local pid
-        pid=$(cat "$LOCKFILE" 2>/dev/null || echo "")
-        if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
-            print_error "Another instance is already running (PID: $pid)."
-            exit 1
-        fi
-        print_warn "Stale lock file found, removing."
-        rm -f "$LOCKFILE"
+    # Never remove a lock owned by another process, including while reclaiming it.
+    if ! (set -o noclobber; printf '%s\n' "$$" > "$LOCKFILE") 2>/dev/null; then
+        print_error "Lock already exists: $LOCKFILE. Check its PID and remove it only if that process has stopped."
+        return 1
     fi
-
-    if ! echo $$ > "$LOCKFILE" 2>/dev/null; then
-        print_error "Failed to create lock file: $LOCKFILE"
-        exit 1
-    fi
-
-    local written_pid
-    written_pid=$(cat "$LOCKFILE" 2>/dev/null || echo "")
-    if [[ "$written_pid" != "$$" ]]; then
-        print_error "Lock file verification failed."
-        exit 1
-    fi
-
     trap cleanup EXIT
 }
 
@@ -154,7 +141,7 @@ check_reboot_required() {
         ubuntu|debian|linuxmint|kali|pop)
             [[ -f /var/run/reboot-required ]] && NEEDS_REBOOT="true"
             ;;
-        fedora|redhat|centos|rocky|almalinux)
+        fedora|rhel|redhat|centos|rocky|almalinux)
             if command -v needs-restarting &>/dev/null; then
                 needs-restarting -r &>/dev/null || NEEDS_REBOOT="true"
             fi
@@ -173,6 +160,7 @@ check_reboot_required() {
             fi
             ;;
     esac
+    return 0
 }
 
 # update_system updates installed packages using the detected OS package manager, logs start and completion to LOGFILE, and prints status messages.
@@ -197,34 +185,26 @@ update_system() {
             apt-get clean
             ;;
 
-        fedora|redhat|centos|rocky|almalinux)
+        fedora|rhel|redhat|centos|rocky|almalinux)
             dnf upgrade --refresh -y
             dnf autoremove -y
             dnf clean all
             ;;
 
-        arch)
-            print_status "Refreshing Arch keyring..."
-            pacman -Sy --noconfirm archlinux-keyring
-            print_status "Performing system upgrade..."
-            pacman -Su --noconfirm
-            print_status "Cleaning package cache..."
-            paccache -r 2>/dev/null || pacman -Sc --noconfirm
-            ;;
-
-        manjaro|endeavouros)
-            print_status "Refreshing keyrings..."
-            pacman -Sy --noconfirm archlinux-keyring manjaro-keyring 2>/dev/null || \
-            pacman -Sy --noconfirm archlinux-keyring
-            print_status "Performing system upgrade..."
-            pacman -Su --noconfirm
+        arch|manjaro|endeavouros)
+            print_status "Performing complete system upgrade..."
+            pacman -Syu --noconfirm
             print_status "Cleaning package cache..."
             paccache -r 2>/dev/null || pacman -Sc --noconfirm
             ;;
 
         opensuse*|suse|sles)
             zypper refresh
-            zypper update -y
+            if [[ "$OS" == opensuse-tumbleweed || "$OS" == opensuse-slowroll ]]; then
+                zypper --non-interactive dup
+            else
+                zypper --non-interactive update
+            fi
             zypper clean -a
             ;;
 
@@ -248,6 +228,7 @@ update_system() {
 
 # prompt_reboot prompts the user to reboot when a reboot is required, skips prompting in non-interactive, quiet, or configured-skip modes, and initiates a reboot if the user confirms.
 prompt_reboot() {
+    [[ "$DRY_RUN" == true ]] && return 0
     check_reboot_required
 
     if [[ "$NEEDS_REBOOT" != "true" ]]; then
@@ -298,6 +279,8 @@ validate_log_path() {
         echo -e "${YELLOW}[WARN]${NC} Cannot write to log file '$LOGFILE'. File logging disabled." >&2
     fi
 }
+
+if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then return 0; fi
 
 # --- MAIN ---
 

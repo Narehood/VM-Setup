@@ -1,7 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
-VERSION="1.0.2"
+# REQUIRES_ROOT: true
+
+VERSION="1.1.0"
 
 # --- UI & FORMATTING FUNCTIONS ---
 
@@ -116,7 +118,7 @@ is_debian_based() {
 
 # is_rhel_based determines whether the detected OS is a RHEL-family distribution (fedora, redhat, centos, rocky, almalinux).
 is_rhel_based() {
-    [[ "$OS" =~ ^(fedora|redhat|centos|rocky|almalinux)$ ]]
+    [[ "$OS" =~ ^(fedora|rhel|redhat|centos|rocky|almalinux)$ ]]
 }
 
 # is_arch_based returns true if the detected OS is Arch Linux, EndeavourOS, or Manjaro.
@@ -134,7 +136,7 @@ is_suse_based() {
 detect_primary_interface() {
     print_info "Detecting primary network interface..."
 
-    PRIMARY_IFACE=$(ip route | grep default | awk '{print $5}' | head -n1)
+    PRIMARY_IFACE=$(ip route | awk '$1=="default" && !found {print $5; found=1}')
 
     if [[ -z "$PRIMARY_IFACE" ]]; then
         PRIMARY_IFACE=$(ip -o link show | awk -F': ' '{print $2}' | grep -vE '^(lo|docker|veth|br-)' | head -n1)
@@ -176,7 +178,7 @@ prompt_yes_no() {
 # validate_mtu validates that an MTU value is an integer between 68 and 9000 (inclusive).
 validate_mtu() {
     local mtu="$1"
-    if [[ "$mtu" =~ ^[0-9]+$ ]] && [[ "$mtu" -ge 68 ]] && [[ "$mtu" -le 9000 ]]; then
+    if [[ "$mtu" =~ ^[1-9][0-9]{1,3}$ ]] && ((10#$mtu >= 68 && 10#$mtu <= 9000)); then
         return 0
     fi
     return 1
@@ -196,240 +198,153 @@ apply_mtu_immediate() {
     fi
 }
 
-# apply_mtu_persistent configures a persistent MTU for the specified network interface using the distribution's preferred mechanism and returns non‑zero if persistent configuration is unsupported.
+# Edit the active backend, preserving addressing and unrelated settings.
+backup_network_file() {
+    local backup
+    backup=$(mktemp "${1}.vm-setup-backup.XXXXXXXX") || return 1
+    cp -p -- "$1" "$backup" || return 1
+    print_info "Backup: $backup"
+}
+
+apply_ifupdown_mtu() {
+    local file="$1" iface="$2" mtu="$3" temporary
+    [[ -f "$file" && ! -L "$file" ]] || return 1
+    awk -v iface="$iface" '$1=="iface" && $2==iface {found=1} END {exit !found}' "$file" || return 1
+    temporary=$(mktemp "${file}.XXXXXXXX") || return 1
+    cp -p "$file" "$temporary" || return 1
+    if ! awk -v iface="$iface" -v mtu="$mtu" '
+        $1=="iface" {active=($2==iface)}
+        active && ($1=="mtu" || ($1=="post-up" && $2=="ip" && $3=="link" && $4=="set" && $5=="dev" && $6==iface && $7=="mtu")) {next}
+        {print}
+        $1=="iface" && $2==iface {print "    mtu " mtu}
+    ' "$file" > "$temporary"; then rm -f "$temporary"; return 1; fi
+    backup_network_file "$file" || return 1
+    mv -- "$temporary" "$file"
+}
+
+apply_netplan_mtu() {
+    local iface="$1" mtu="$2" key stage temporary mac="" config_dir="${NETWORK_ROOT:-}/etc/netplan"
+    command -v python3 >/dev/null || { print_error 'Netplan requires python3 and python3-yaml.'; return 1; }
+    if [[ -r "${NETWORK_ROOT:-}/sys/class/net/$iface/address" ]]; then
+        read -r mac < "${NETWORK_ROOT:-}/sys/class/net/$iface/address"
+    fi
+    # Match the existing definition; never invent a new DHCP interface.
+    key=$(netplan get | python3 -c '
+import sys, yaml
+cfg=yaml.safe_load(sys.stdin) or {}
+iface=sys.argv[1]
+mac=sys.argv[2].lower()
+matches=[]
+for section in ("ethernets", "bonds", "bridges", "vlans", "wifis"):
+    for name, data in cfg.get("network", {}).get(section, {}).items():
+        match=data.get("match", {})
+        if data.get("set-name")==iface or (not match and name==iface) or (match.get("name")==iface) or (mac and match.get("macaddress", "").lower()==mac):
+            matches.append(section+"."+name)
+if len(matches)!=1: sys.exit("Cannot uniquely match interface to Netplan; configure its MTU manually.")
+print(matches[0])
+' "$iface" "$mac") || return 1
+    [[ "$key" =~ ^[a-z]+\.[a-zA-Z0-9_-]+$ ]] || { print_error 'Unsupported Netplan definition name.'; return 1; }
+    stage=$(mktemp -d) || return 1
+    mkdir -p "$stage/etc/netplan" || return 1
+    cp -p "$config_dir/"*.yaml "$stage/etc/netplan/" || { rm -rf "$stage"; return 1; }
+    if ! netplan set --root-dir "$stage" --origin-hint 99-vm-setup-mtu "network.$key.mtu=$mtu" || ! netplan generate --root-dir "$stage"; then
+        rm -rf "$stage"; return 1
+    fi
+    local override="$config_dir/99-vm-setup-mtu.yaml"
+    [[ ! -L "$override" ]] || { rm -rf "$stage"; return 1; }
+    if [[ -f "$override" ]]; then backup_network_file "$override" || return 1; fi
+    temporary=$(mktemp "${override}.XXXXXXXX") || { rm -rf "$stage"; return 1; }
+    install -m 600 "$stage/etc/netplan/99-vm-setup-mtu.yaml" "$temporary" || { rm -rf "$stage"; rm -f "$temporary"; return 1; }
+    mv "$temporary" "$override" || { rm -rf "$stage"; rm -f "$temporary"; return 1; }
+    rm -rf "$stage"
+}
+
 apply_mtu_persistent() {
-    local iface="$1"
-    local mtu="$2"
-
-    print_info "Configuring persistent MTU for $iface..."
-
-    if [[ "$OS" == "alpine" ]]; then
-        apply_mtu_alpine "$iface" "$mtu"
-    elif is_debian_based; then
-        apply_mtu_debian "$iface" "$mtu"
-    elif is_rhel_based; then
-        apply_mtu_rhel "$iface" "$mtu"
-    elif is_arch_based; then
-        apply_mtu_arch "$iface" "$mtu"
-    elif is_suse_based; then
-        apply_mtu_suse "$iface" "$mtu"
-    else
-        print_warn "Unsupported OS for persistent MTU configuration."
-        print_info "MTU applied to current session only."
-        return 1
+    local iface="$1" mtu="$2" uuid file network_file temporary
+    [[ "$iface" =~ ^[a-zA-Z0-9_.:-]+$ ]] && validate_mtu "$mtu" || return 1
+    if command -v netplan >/dev/null && compgen -G "${NETWORK_ROOT:-}/etc/netplan/*.yaml" >/dev/null; then
+        apply_netplan_mtu "$iface" "$mtu"
+        return $?
     fi
-}
-
-# apply_mtu_debian adds or updates /etc/network/interfaces to persistently set the MTU for a given network interface by inserting a `post-up ip link set dev <iface> mtu <mtu>` stanza and creates a basic interfaces file if it does not exist.
-apply_mtu_debian() {
-    local iface="$1"
-    local mtu="$2"
-    local iface_escaped
-    local interfaces_file="/etc/network/interfaces"
-    local post_up_cmd="post-up ip link set dev $iface mtu $mtu"
-
-    iface_escaped=$(escape_regex "$iface")
-
-    if [[ ! -f "$interfaces_file" ]]; then
-        print_warn "$interfaces_file not found. Creating basic configuration."
-        cat > "$interfaces_file" << EOF
-source /etc/network/interfaces.d/*
-
-auto lo
-iface lo inet loopback
-
-auto $iface
-iface $iface inet dhcp
-    $post_up_cmd
-EOF
-        print_success "Created $interfaces_file with MTU configuration."
-        return 0
-    fi
-
-    sed -i "/post-up ip link set dev $iface_escaped mtu/d" "$interfaces_file"
-
-    if grep -qE "^iface $iface_escaped" "$interfaces_file"; then
-        sed -i "/^iface $iface_escaped/a\\    $post_up_cmd" "$interfaces_file"
-        print_success "Updated $interfaces_file with MTU $mtu for $iface"
-    else
-        cat >> "$interfaces_file" << EOF
-
-auto $iface
-iface $iface inet dhcp
-    $post_up_cmd
-EOF
-        print_success "Added $iface configuration to $interfaces_file"
-    fi
-}
-
-# apply_mtu_alpine updates Alpine's /etc/network/interfaces to persistently set the MTU for the specified network interface.
-# It inserts a `post-up ip link set dev <iface> mtu <mtu>` line for the interface, removing any existing matching post-up entries first.
-# Returns 0 on success, 1 if /etc/network/interfaces is missing or the interface is not present in the file.
-apply_mtu_alpine() {
-    local iface="$1"
-    local mtu="$2"
-    local esc_iface
-    local interfaces_file="/etc/network/interfaces"
-
-    esc_iface=$(escape_regex "$iface")
-
-    if [[ ! -f "$interfaces_file" ]]; then
-        print_warn "$interfaces_file not found."
-        return 1
-    fi
-
-    sed -i "/post-up ip link set dev $esc_iface mtu/d" "$interfaces_file"
-
-    if grep -qE "^iface $esc_iface" "$interfaces_file"; then
-        sed -i "/^iface $esc_iface/a\\    post-up ip link set dev $iface mtu $mtu" "$interfaces_file"
-        print_success "Updated $interfaces_file with MTU $mtu"
-    else
-        print_warn "Interface $iface not found in $interfaces_file"
-        return 1
-    fi
-}
-
-# apply_mtu_rhel configures the persistent MTU for an interface on RHEL-family systems, preferring NetworkManager (nmcli) when available and falling back to updating /etc/sysconfig/network-scripts/ifcfg-<iface>.
-apply_mtu_rhel() {
-    local iface="$1"
-    local mtu="$2"
-
-    if command -v nmcli &>/dev/null; then
-        local conn_name
-        conn_name=$(nmcli -t -f NAME,DEVICE con show | grep ":$iface$" | cut -d: -f1 | head -n1)
-
-        if [[ -n "$conn_name" ]]; then
-            nmcli con mod "$conn_name" 802-3-ethernet.mtu "$mtu" 2>/dev/null
-            print_success "Configured MTU $mtu via NetworkManager for $conn_name"
-            return 0
+    if command -v nmcli >/dev/null; then
+        uuid=$(nmcli -g GENERAL.CON-UUID device show "$iface" 2>/dev/null || true)
+        if [[ "$uuid" =~ ^[a-fA-F0-9-]{36}$ ]]; then
+            local kind property previous
+            kind=$(nmcli -g connection.type connection show uuid "$uuid") || return 1
+            case "$kind" in
+                802-3-ethernet) property=802-3-ethernet.mtu ;;
+                802-11-wireless) property=802-11-wireless.mtu ;;
+                *) print_error "Unsupported NetworkManager type: $kind"; return 1 ;;
+            esac
+            previous=$(nmcli -g "$property" connection show uuid "$uuid") || return 1
+            print_info "Previous MTU: $previous; restore with: nmcli con mod uuid $uuid $property $previous"
+            nmcli connection modify uuid "$uuid" "$property" "$mtu"
+            return $?
         fi
     fi
-
-    local ifcfg_file="/etc/sysconfig/network-scripts/ifcfg-$iface"
-    if [[ -f "$ifcfg_file" ]]; then
-        sed -i '/^MTU=/d' "$ifcfg_file"
-        echo "MTU=$mtu" >> "$ifcfg_file"
-        print_success "Updated $ifcfg_file with MTU $mtu"
-    else
-        print_warn "Could not configure persistent MTU for $iface"
-        return 1
-    fi
-}
-
-# apply_mtu_arch applies a persistent MTU for the specified network interface on Arch-based systems.
-# If NetworkManager is available and a connection is associated with the interface, it sets the MTU on that connection;
-# otherwise it creates a systemd-networkd `.link` file under /etc/systemd/network to set MTUBytes for the interface.
-# iface - network interface name (e.g., eth0)
-# mtu - MTU value (integer)
-apply_mtu_arch() {
-    local iface="$1"
-    local mtu="$2"
-
-    if command -v nmcli &>/dev/null; then
-        local conn_name
-        conn_name=$(nmcli -t -f NAME,DEVICE con show | grep ":$iface$" | cut -d: -f1 | head -n1)
-
-        if [[ -n "$conn_name" ]]; then
-            nmcli con mod "$conn_name" 802-3-ethernet.mtu "$mtu" 2>/dev/null
-            print_success "Configured MTU $mtu via NetworkManager"
-            return 0
+    for file in "${NETWORK_ROOT:-}/etc/network/interfaces" "${NETWORK_ROOT:-}/etc/network/interfaces.d/"*; do
+        [[ -f "$file" ]] || continue
+        if awk -v iface="$iface" '$1=="iface" && $2==iface {found=1} END {exit !found}' "$file"; then
+            apply_ifupdown_mtu "$file" "$iface" "$mtu"; return $?
+        fi
+    done
+    for file in "${NETWORK_ROOT:-}/etc/sysconfig/network-scripts/ifcfg-$iface" "${NETWORK_ROOT:-}/etc/sysconfig/network/ifcfg-$iface"; do
+        [[ -f "$file" && ! -L "$file" ]] || continue
+        temporary=$(mktemp "${file}.XXXXXXXX") || return 1
+        cp -p "$file" "$temporary" || return 1
+        { sed '/^[[:space:]]*MTU=/d' "$file"; printf 'MTU=%s\n' "$mtu"; } > "$temporary" || return 1
+        backup_network_file "$file" || return 1
+        mv "$temporary" "$file"; return $?
+    done
+    if command -v networkctl >/dev/null; then
+        network_file=$(LC_ALL=C networkctl status "$iface" --no-pager 2>/dev/null | sed -n 's/^[[:space:]]*Network File: //p' || true)
+        if [[ "$network_file" == /*.network && -f "$network_file" ]]; then
+            file="${NETWORK_ROOT:-}/etc/systemd/network/$(basename "$network_file").d/90-vm-setup-mtu.conf"
+            mkdir -p "$(dirname "$file")" || return 1
+            [[ ! -L "$file" ]] || return 1
+            if [[ -f "$file" ]]; then backup_network_file "$file" || return 1; fi
+            temporary=$(mktemp "${file}.XXXXXXXX") || return 1
+            printf '[Link]\nMTUBytes=%s\n' "$mtu" > "$temporary" || return 1
+            chmod 644 "$temporary"
+            mv "$temporary" "$file"; return $?
         fi
     fi
-
-    local networkd_dir="/etc/systemd/network"
-    mkdir -p "$networkd_dir"
-
-    cat > "$networkd_dir/10-$iface.link" << EOF
-[Match]
-OriginalName=$iface
-
-[Link]
-MTUBytes=$mtu
-EOF
-    print_success "Created systemd-networkd configuration for $iface"
+    print_error "No supported active network configuration found for $iface; no addressing configuration changed."
+    return 1
 }
 
-# apply_mtu_suse sets the MTU for a SUSE network interface by updating or appending `MTU=<value>` in `/etc/sysconfig/network/ifcfg-<iface>`, prints a success message on update, and returns non-zero with a warning if the ifcfg file is missing.
-apply_mtu_suse() {
-    local iface="$1"
-    local mtu="$2"
-    local ifcfg_file="/etc/sysconfig/network/ifcfg-$iface"
-
-    if [[ -f "$ifcfg_file" ]]; then
-        sed -i '/^MTU=/d' "$ifcfg_file"
-        echo "MTU=$mtu" >> "$ifcfg_file"
-        print_success "Updated $ifcfg_file with MTU $mtu"
-    else
-        print_warn "Could not find $ifcfg_file"
-        return 1
-    fi
-}
-
-# reset_mtu_config resets MTU configuration for the given network interface and sets the interface MTU to 1500 immediately.
-# It also removes persistent MTU entries from distribution-specific configuration (Debian/Alpine /etc/network/interfaces, RHEL ifcfg or NetworkManager, Arch systemd .link, SUSE ifcfg) so the interface uses the default MTU after reboot.
 reset_mtu_config() {
-    local iface="$1"
-    local escaped_iface
-
-    print_info "Resetting MTU configuration for $iface..."
-
-    apply_mtu_immediate "$iface" 1500
-
-    if [[ "$OS" == "alpine" ]] || is_debian_based; then
-        local interfaces_file="/etc/network/interfaces"
-        escaped_iface=$(escape_regex "$iface")
-        if [[ -f "$interfaces_file" ]]; then
-            sed -i "/post-up ip link set dev $escaped_iface mtu/d" "$interfaces_file"
-            print_success "Removed MTU configuration from $interfaces_file"
-        fi
-    elif is_rhel_based; then
-        if command -v nmcli &>/dev/null; then
-            local conn_name
-            conn_name=$(nmcli -t -f NAME,DEVICE con show | grep ":$iface$" | cut -d: -f1 | head -n1)
-            if [[ -n "$conn_name" ]]; then
-                nmcli con mod "$conn_name" 802-3-ethernet.mtu "" 2>/dev/null || true
-            fi
-        fi
-        local ifcfg_file="/etc/sysconfig/network-scripts/ifcfg-$iface"
-        if [[ -f "$ifcfg_file" ]]; then
-            sed -i '/^MTU=/d' "$ifcfg_file"
-        fi
-        print_success "Reset MTU configuration"
-    elif is_arch_based; then
-        rm -f "/etc/systemd/network/10-$iface.link" 2>/dev/null || true
-        print_success "Removed systemd-networkd MTU configuration"
-    elif is_suse_based; then
-        local ifcfg_file="/etc/sysconfig/network/ifcfg-$iface"
-        if [[ -f "$ifcfg_file" ]]; then
-            sed -i '/^MTU=/d' "$ifcfg_file"
-        fi
-        print_success "Reset MTU configuration"
-    fi
+    apply_mtu_persistent "$1" 1500 || return 1
+    apply_mtu_immediate "$1" 1500
 }
 
-# update_docker_json updates or creates the Docker daemon.json file at the given path to set the top-level `mtu` value to the provided numeric MTU, preserving file permissions and ownership when possible.
+# A real JSON parser is mandatory. Invalid/non-object JSON is left untouched.
 update_docker_json() {
-    local daemon_json="$1"
-    local mtu="$2"
-    local tmp_file
-    tmp_file=$(mktemp)
-
-    if command -v jq &>/dev/null && [[ -f "$daemon_json" ]] && [[ -s "$daemon_json" ]]; then
-        jq --arg mtu "$mtu" '.mtu = ($mtu | tonumber)' "$daemon_json" > "$tmp_file" 2>/dev/null || {
-            if grep -q '"mtu"' "$daemon_json"; then
-                sed "s/\"mtu\": *[0-9]\+/\"mtu\": $mtu/" "$daemon_json" > "$tmp_file"
-            else
-                sed '/{/a\  "mtu": '"$mtu"',' "$daemon_json" > "$tmp_file"
-            fi
-        }
+    local daemon_json="$1" mtu="$2" temporary source_file
+    command -v jq >/dev/null || { print_error 'Install jq before modifying Docker daemon.json.'; return 1; }
+    [[ ! -L "$daemon_json" ]] || return 1
+    [[ "$mtu" == reset ]] || validate_mtu "$mtu" || return 1
+    temporary=$(mktemp "${daemon_json}.XXXXXXXX") || return 1
+    source_file="$daemon_json"
+    if [[ -f "$daemon_json" ]]; then
+        cp -p "$daemon_json" "$temporary" || return 1
+        jq -e 'type == "object"' "$daemon_json" >/dev/null || { rm -f "$temporary"; return 1; }
     else
-        printf '{\n  "mtu": %s\n}\n' "$mtu" > "$tmp_file"
+        source_file=/dev/null
+        chmod 644 "$temporary"
     fi
+    local filter='.mtu = $mtu' args=()
+    [[ -f "$daemon_json" ]] || args+=(-n)
+    [[ "$mtu" != reset ]] || { filter='del(.mtu)'; mtu=0; }
+    if ! jq "${args[@]}" --argjson mtu "$mtu" "$filter" "$source_file" > "$temporary"; then
+        rm -f "$temporary"; return 1
+    fi
+    if [[ -f "$daemon_json" ]]; then backup_network_file "$daemon_json" || return 1; fi
+    mv -- "$temporary" "$daemon_json"
+}
 
-    chmod --reference="$daemon_json" "$tmp_file" 2>/dev/null || chmod 644 "$tmp_file"
-    chown --reference="$daemon_json" "$tmp_file" 2>/dev/null || true
-
-    mv "$tmp_file" "$daemon_json"
+restart_docker() {
+    if [[ "$OS" == alpine ]]; then rc-service docker restart; else systemctl restart docker; fi
 }
 
 # configure_docker_mtu configures Docker's daemon.json with the given MTU, applies that MTU to existing Docker bridge interfaces, and optionally prompts to restart the Docker service.
@@ -448,7 +363,6 @@ configure_docker_mtu() {
     local docker_dir="/etc/docker"
 
     mkdir -p "$docker_dir"
-    [[ -f "$daemon_json" ]] || echo "{}" > "$daemon_json"
 
     update_docker_json "$daemon_json" "$mtu"
     print_success "Updated $daemon_json with MTU $mtu"
@@ -456,7 +370,7 @@ configure_docker_mtu() {
     apply_docker_bridges_mtu "$mtu"
 
     if prompt_yes_no "Restart Docker service to apply changes?" "y"; then
-        if systemctl restart docker 2>/dev/null; then
+        if restart_docker; then
             print_success "Docker service restarted."
         else
             print_warn "Failed to restart Docker. Please restart manually."
@@ -505,33 +419,10 @@ apply_docker_bridges_mtu() {
     done
 }
 
-# reset_docker_mtu removes any `mtu` setting from /etc/docker/daemon.json (if present), preserves the file's permissions and ownership where possible, prints status messages, and skips bridge resets since Docker will manage them on restart.
 reset_docker_mtu() {
-    local daemon_json="/etc/docker/daemon.json"
-
-    if [[ ! -f "$daemon_json" ]]; then
-        print_info "No Docker daemon.json found."
-        return 0
-    fi
-
-    local tmp_file
-    tmp_file=$(mktemp)
-
-    if command -v jq &>/dev/null && [[ -s "$daemon_json" ]]; then
-        jq 'del(.mtu)' "$daemon_json" > "$tmp_file" 2>/dev/null || {
-            sed '/\"mtu\"/d' "$daemon_json" > "$tmp_file"
-        }
-    else
-        sed '/\"mtu\"/d' "$daemon_json" > "$tmp_file"
-    fi
-
-    chmod --reference="$daemon_json" "$tmp_file" 2>/dev/null || chmod 644 "$tmp_file"
-    chown --reference="$daemon_json" "$tmp_file" 2>/dev/null || true
-
-    mv "$tmp_file" "$daemon_json"
-    print_success "Removed MTU from Docker configuration"
-
-    print_info "Skipping bridge MTU reset (Docker daemon restart will restore defaults)"
+    local daemon_json="${DOCKER_CONFIG_FILE:-/etc/docker/daemon.json}"
+    [[ -f "$daemon_json" ]] || return 0
+    update_docker_json "$daemon_json" reset
 }
 
 # test_mtu_size checks if the specified MTU can reach 1.1.1.1 by pinging with ICMP packets sized to MTU-28.
@@ -541,52 +432,26 @@ test_mtu_size() {
     local target="1.1.1.1"
     local packet_size=$((mtu - 28))
 
-    if ping -c 2 -M do -s "$packet_size" "$target" &>/dev/null; then
+    if ping -4 -c 2 -W 2 -w 6 -M 'do' -s "$packet_size" "$target" &>/dev/null; then
         return 0
     fi
     return 1
 }
 
-# test_mtu_values tests connectivity to 1.1.1.1 using a sequence of MTU sizes and offers the last successful MTU for application.
-# 
-# Runs ICMP tests for MTU values (1500,1450,1400,1350,1300,1250,1200,1150,1100), reports OK/FAIL for each, and tracks the highest tested size that succeeds.
-# If at least one size succeeds, prompts the user to apply the recommended MTU; on confirmation, echoes the chosen MTU to stdout and returns 0.
-# If no sizes succeed or the user declines, prints a warning/info and returns 1.
+# Largest successful candidate wins. UI stays on stderr; stdout is numeric only.
 test_mtu_values() {
-    print_step "Testing MTU Values"
-    echo ""
-    print_info "Testing connectivity to 1.1.1.1 with various MTU sizes..."
-    print_info "This may take a moment..."
-    echo ""
-
-    local test_sizes=(1500 1450 1400 1350 1300 1250 1200 1150 1100)
-    local last_working=0
-
-    for size in "${test_sizes[@]}"; do
-        printf "  Testing MTU %d... " "$size"
+    local size
+    for size in 1500 1450 1400 1350 1300 1250 1200 1150 1100; do
+        printf 'Testing MTU %s...\n' "$size" >&2
         if test_mtu_size "$size"; then
-            echo -e "${GREEN}✓ OK${NC}"
-            last_working=$size
-        else
-            echo -e "${RED}✗ FAIL${NC}"
-            [[ $last_working -eq 0 ]] && break
+            if prompt_yes_no "Apply MTU $size?" y >&2; then
+                printf '%s\n' "$size"
+                return 0
+            fi
+            return 1
         fi
     done
-
-    echo ""
-    if [[ $last_working -gt 0 ]]; then
-        echo -e "${GREEN}Recommendation: Use MTU ${last_working}${NC}"
-        echo ""
-        if prompt_yes_no "Apply MTU $last_working to your system?" "y"; then
-            echo "$last_working"
-            return 0
-        fi
-    else
-        print_warn "Could not determine optimal MTU. System may not support ICMP ping."
-        print_info "Using default menu instead."
-        return 1
-    fi
-
+    print_warn "No probe succeeded. Check ICMP access and use iputils ping (including -M support)." >&2
     return 1
 }
 
@@ -621,9 +486,8 @@ show_mtu_menu() {
             fi
             ;;
         5)
-            test_result=$(test_mtu_values)
-            test_status=$?
-            if [[ $test_status -eq 0 ]] && [[ -n "$test_result" ]]; then
+            local test_result
+            if test_result=$(test_mtu_values); then
                 echo "$test_result"
             else
                 show_mtu_menu
@@ -651,6 +515,8 @@ show_current_status() {
     done
     echo ""
 }
+
+if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then return 0; fi
 
 # --- MAIN EXECUTION ---
 
@@ -683,8 +549,8 @@ if [[ "$selected_mtu" == "reset" ]]; then
     fi
 else
     print_step "Applying MTU $selected_mtu"
-    apply_mtu_immediate "$PRIMARY_IFACE" "$selected_mtu"
     apply_mtu_persistent "$PRIMARY_IFACE" "$selected_mtu"
+    apply_mtu_immediate "$PRIMARY_IFACE" "$selected_mtu"
 
     if command -v docker &>/dev/null; then
         echo ""

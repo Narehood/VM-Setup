@@ -40,6 +40,12 @@ if [[ -z "$requested_ref" || "$requested_ref" == "null" ]]; then
     exit 1
 fi
 
+if [[ ! "$requested_ref" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "Expected a stable vMAJOR.MINOR.PATCH release tag." >&2
+    exit 1
+fi
+command -v jq >/dev/null || { echo 'jq is required.' >&2; exit 1; }
+
 release_json=$(gh api "repos/${docker_prep_repo}/releases/tags/${requested_ref}")
 release_name=$(printf '%s' "$release_json" | jq -r '.name // .tag_name')
 release_url=$(printf '%s' "$release_json" | jq -r '.html_url')
@@ -48,11 +54,14 @@ release_notes=$(printf '%s' "$release_json" | jq -r '.body // ""')
 tag_ref_json=$(gh api "repos/${docker_prep_repo}/git/ref/tags/${requested_ref}")
 target_sha=$(printf '%s' "$tag_ref_json" | jq -r '.object.sha')
 object_type=$(printf '%s' "$tag_ref_json" | jq -r '.object.type')
-if [[ "$object_type" == "tag" ]]; then
-    target_sha=$(gh api "repos/${docker_prep_repo}/git/tags/${target_sha}" --jq '.object.sha')
-fi
+for _ in {1..8}; do
+    [[ "$object_type" == tag ]] || break
+    tag_ref_json=$(gh api "repos/${docker_prep_repo}/git/tags/${target_sha}")
+    target_sha=$(printf '%s' "$tag_ref_json" | jq -r '.object.sha')
+    object_type=$(printf '%s' "$tag_ref_json" | jq -r '.object.type')
+done
 
-if [[ ! "$target_sha" =~ ^[0-9a-f]{40}$ ]]; then
+if [[ "$object_type" != commit || ! "$target_sha" =~ ^[0-9a-f]{40}$ ]]; then
     echo "Unable to resolve a 40-character commit for ${requested_ref}." >&2
     exit 1
 fi

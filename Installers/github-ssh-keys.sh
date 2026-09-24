@@ -15,7 +15,6 @@ NC='\033[0m'
 UI_WIDTH=86
 EXIT_APP_CODE=42
 
-trap 'echo -e "\n${GREEN}Goodbye!${NC}"; exit $EXIT_APP_CODE' INT
 
 # print_centered centers a given string within the UI width and prints it using the optional ANSI color.
 print_centered() {
@@ -216,8 +215,11 @@ main() {
     fi
 
     fetched_file=$(mktemp)
-    merged_file=$(mktemp)
-    trap 'rm -f "${fetched_file:-}" "${merged_file:-}"' EXIT
+    merged_file=""
+    cleanup_key_import() { rm -f -- "$SSH_FETCHED_FILE" "${SSH_MERGED_FILE:-}"; }
+    SSH_FETCHED_FILE="$fetched_file"
+    SSH_MERGED_FILE=""
+    trap cleanup_key_import EXIT
 
     print_status "Fetching public keys from GitHub..."
     if ! fetch_keys "$github_user" "$fetched_file"; then
@@ -238,8 +240,15 @@ main() {
         had_existing_auth_keys="true"
     fi
 
+    if [[ -L "$ssh_dir" || -L "$auth_keys" ]]; then
+        print_error "Refusing to replace symlinked SSH paths."
+        exit 1
+    fi
     ensure_ssh_paths "$ssh_dir" "$auth_keys"
-    cat "$auth_keys" > "$merged_file"
+    merged_file=$(mktemp "$ssh_dir/.authorized_keys.XXXXXXXX")
+    SSH_MERGED_FILE="$merged_file"
+    # awk supplies a final newline without changing existing key restrictions.
+    awk '{ print }' "$auth_keys" > "$merged_file"
 
     while IFS= read -r line || [[ -n "$line" ]]; do
         [[ -z "$line" ]] && continue
@@ -278,7 +287,9 @@ main() {
         create_backup "$auth_keys" "$backup_file"
     fi
 
-    cat "$merged_file" > "$auth_keys"
+    chmod 600 "$merged_file"
+    set_target_ownership "$target_user" "$ssh_dir" "$merged_file"
+    mv -- "$merged_file" "$auth_keys"
     chmod 600 "$auth_keys"
     chmod 700 "$ssh_dir"
     set_target_ownership "$target_user" "$ssh_dir" "$auth_keys"
@@ -297,4 +308,7 @@ main() {
     print_line "-" "$BLUE"
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    trap 'exit "$EXIT_APP_CODE"' INT
+    main "$@"
+fi
