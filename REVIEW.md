@@ -34,8 +34,9 @@ checksums. First-party ShellCheck runs at warning severity; the vendored UniFi
 script runs at error severity. Workflow YAML and the UniFi patch's Python syntax
 were parsed. Netplan's YAML matching test ran with PyYAML available.
 
-Local checks run under Git Bash on Windows. Linux CI jobs have been added but have
-not been executed from this workspace. Native package installation, guest ISO
+Local checks run under Git Bash on Windows. Linux regression CI runs in nine
+container images; per-image results are recorded on [PR #59](https://github.com/Narehood/VM-Setup/pull/59).
+Native package installation, guest ISO
 installation, systemd/OpenRC activation, SELinux/AppArmor behavior, real MTU changes
 and reboot recovery still require disposable Linux VMs. Third-party tools retain
 their upstream OS limits; this is not certification of every OS/application pair.
