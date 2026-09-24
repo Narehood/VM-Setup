@@ -1,75 +1,32 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-cd "$repo_root"
-
-script="Installers/Docker-Prep.sh"
-[[ -f "$script" ]] || {
-    echo "Missing $script" >&2
-    exit 1
-}
-
-bash -n "$script"
-
-for required in \
-    'check_docker_prep_update' \
-    'resolve_latest_docker_prep' \
-    'write_launcher_pin' \
-    'readonly REPO_REVISION=' \
-    'readonly REPO_VERSION=' \
-    'Checking for Docker-Prep updates'
-do
-    if ! grep -Fq -- "$required" "$script"; then
-        echo "Docker-Prep.sh is missing expected content: $required" >&2
-        exit 1
-    fi
-done
-
-# shellcheck disable=SC1091
-source "$script"
-
-# Tag preference: newest v* wins.
-tags_fixture=$(cat <<'EOF'
-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refs/tags/v1.0.0
-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb	refs/tags/v1.2.0
-cccccccccccccccccccccccccccccccccccccccc	refs/tags/v1.10.0
-EOF
-)
-LATEST_SHA=""
-LATEST_VERSION=""
-# Inline the selection logic against the fixture (mirrors resolve_latest_docker_prep tag branch).
-latest_tag=$(printf '%s\n' "$tags_fixture" | awk '{print $2}' | sed 's#refs/tags/##' | sort -V | tail -n1)
-LATEST_SHA=$(printf '%s\n' "$tags_fixture" | awk -v tag="refs/tags/${latest_tag}" '$2 == tag { print $1; exit }')
-LATEST_VERSION="$latest_tag"
-[[ "$latest_tag" == "v1.10.0" ]] || {
-    echo "Expected newest tag v1.10.0, got $latest_tag" >&2
-    exit 1
-}
-[[ "$LATEST_SHA" == "cccccccccccccccccccccccccccccccccccccccc" ]] || {
-    echo "Unexpected SHA for newest tag: $LATEST_SHA" >&2
-    exit 1
-}
-
-# write_launcher_pin should rewrite readonly pin lines.
-pin_tmp=$(mktemp)
-trap 'rm -f -- "$pin_tmp"' EXIT
-cat > "$pin_tmp" <<'EOF'
-readonly REPO_URL="https://example.invalid/Docker-Prep.git"
-readonly REPO_REVISION="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-readonly REPO_VERSION="unreleased"
-EOF
-SCRIPT_PATH="$pin_tmp"
-write_launcher_pin "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" "v9.9.9"
-grep -Fq 'readonly REPO_REVISION="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"' "$pin_tmp" || {
-    echo "write_launcher_pin failed to update REPO_REVISION" >&2
-    cat "$pin_tmp" >&2
-    exit 1
-}
-grep -Fq 'readonly REPO_VERSION="v9.9.9"' "$pin_tmp" || {
-    echo "write_launcher_pin failed to update REPO_VERSION" >&2
-    cat "$pin_tmp" >&2
-    exit 1
-}
-
-echo "Docker-Prep update-check tests passed."
+fixture=$(mktemp -d)
+trap 'rm -rf -- "$fixture"' EXIT
+git init -q -b main "$fixture/remote"
+git -C "$fixture/remote" config user.email test@example.invalid
+git -C "$fixture/remote" config user.name Test
+git -C "$fixture/remote" -c commit.gpgsign=false commit -q --allow-empty -m initial
+revision=$(git -C "$fixture/remote" rev-parse HEAD)
+git -C "$fixture/remote" tag v1.9.0
+git -C "$fixture/remote" -c tag.gpgsign=false tag -a v1.10.0 -m annotated
+git -C "$fixture/remote" tag v99.0.0-rc1
+# shellcheck source=Installers/Docker-Prep.sh
+source "$repo_root/Installers/Docker-Prep.sh"
+remote_git() { git ls-remote "$fixture/remote" 'refs/tags/v*' refs/heads/main; }
+resolve_latest_docker_prep
+[[ "$LATEST_VERSION" == v1.10.0 && "$LATEST_SHA" == "$revision" ]]
+[[ "$LATEST_SHA" != "$(git -C "$fixture/remote" rev-parse v1.10.0)" ]]
+before=$(sha256sum "$repo_root/Installers/Docker-Prep.sh" "$repo_root/Installers/.checksums.sha256")
+check_docker_prep_update </dev/null
+[[ "$EFFECTIVE_REVISION" == "$REPO_REVISION" ]]
+[[ "$before" == "$(sha256sum "$repo_root/Installers/Docker-Prep.sh" "$repo_root/Installers/.checksums.sha256")" ]]
+git -C "$fixture/remote" tag -d v1.9.0 v1.10.0 v99.0.0-rc1 >/dev/null
+resolve_latest_docker_prep
+[[ "$LATEST_VERSION" == main && "$LATEST_SHA" == "$revision" ]]
+remote_git() { printf 'not-a-commit refs/heads/main\n'; }
+if resolve_latest_docker_prep; then echo 'Malformed revision accepted' >&2; exit 1; fi
+remote_git() { return 1; }
+check_docker_prep_update
+[[ "$EFFECTIVE_REVISION" == "$REPO_REVISION" ]]
+echo 'Docker-Prep stable/annotated tags, main fallback, offline pin and immutable manifest: passed.'

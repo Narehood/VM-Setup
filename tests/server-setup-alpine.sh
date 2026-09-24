@@ -30,7 +30,7 @@ if grep -Fq 'setup-apkrepos -c' "$script"; then
     exit 1
 fi
 
-# shellcheck disable=SC1091
+# shellcheck source=Installers/serverSetup.sh
 source "$script"
 QUIET="true"
 OS="alpine"

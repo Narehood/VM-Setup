@@ -38,7 +38,7 @@ if ! grep -Fq 'alpineUpgrade.sh:Alpine Release Upgrade' Installers/serverConfig.
 fi
 
 # Source installer helpers (source guard skips main execution).
-# shellcheck disable=SC1091
+# shellcheck source=Installers/alpineUpgrade.sh
 source "$script"
 LOG_ENABLED="false"
 
@@ -75,15 +75,15 @@ compare_branches "3.24" "3.23" || status=$?
     exit 1
 }
 
-path=$(build_upgrade_path "3.22" "3.24" | tr '\n' ' ' | sed 's/[[:space:]]*$//')
-[[ "$path" == "3.23 3.24" ]] || {
-    echo "Unexpected upgrade path for 3.22 -> 3.24: '$path'" >&2
+upgrade_path_text=$(build_upgrade_path "3.22" "3.24" | tr '\n' ' ' | sed 's/[[:space:]]*$//')
+[[ "$upgrade_path_text" == "3.23 3.24" ]] || {
+    echo "Unexpected upgrade path for 3.22 -> 3.24: '$upgrade_path_text'" >&2
     exit 1
 }
 
-path=$(build_upgrade_path "3.23" "3.24" | tr '\n' ' ' | sed 's/[[:space:]]*$//')
-[[ "$path" == "3.24" ]] || {
-    echo "Unexpected upgrade path for 3.23 -> 3.24: '$path'" >&2
+upgrade_path_text=$(build_upgrade_path "3.23" "3.24" | tr '\n' ' ' | sed 's/[[:space:]]*$//')
+[[ "$upgrade_path_text" == "3.24" ]] || {
+    echo "Unexpected upgrade path for 3.23 -> 3.24: '$upgrade_path_text'" >&2
     exit 1
 }
 

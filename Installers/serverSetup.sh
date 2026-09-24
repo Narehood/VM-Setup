@@ -1,7 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
-SCRIPT_VERSION="1.2.3"
+# REQUIRES_ROOT: true
+
+SCRIPT_VERSION="1.3.0"
 
 # --- UI & FORMATTING FUNCTIONS ---
 
@@ -75,13 +77,26 @@ OS=""
 OS_VERSION=""
 QUIET="false"
 
-# cleanup unmounts /mnt if it is a mount point.
+# cleanup unmounts only the guest-tools mount created by this process.
 cleanup() {
-    if mountpoint -q /mnt 2>/dev/null; then
-        umount /mnt 2>/dev/null || true
+    if [[ -n "${GUEST_TOOLS_STAGE:-}" ]]; then
+        rm -rf -- "$GUEST_TOOLS_STAGE"
+        GUEST_TOOLS_STAGE=""
+    fi
+    if [[ "$GUEST_TOOLS_MOUNTED" == true ]]; then
+        if ! umount "$GUEST_TOOLS_MOUNT"; then
+            print_warn "Could not unmount $GUEST_TOOLS_MOUNT; leaving it intact."
+            return 0
+        fi
+        GUEST_TOOLS_MOUNTED=false
+    fi
+    if [[ -n "$GUEST_TOOLS_MOUNT" ]]; then
+        rmdir -- "$GUEST_TOOLS_MOUNT" 2>/dev/null || true
     fi
 }
-trap cleanup EXIT
+GUEST_TOOLS_MOUNT=""
+GUEST_TOOLS_MOUNTED=false
+GUEST_TOOLS_STAGE=""
 
 # check_root ensures the script is running as root and exits with an error message if not.
 check_root() {
@@ -129,7 +144,7 @@ is_debian_based() {
 
 # is_rhel_based checks whether the detected OS belongs to the RHEL family (fedora, redhat, centos, rocky, almalinux).
 is_rhel_based() {
-    [[ "$OS" =~ ^(fedora|redhat|centos|rocky|almalinux)$ ]]
+    [[ "$OS" =~ ^(fedora|rhel|redhat|centos|rocky|almalinux)$ ]]
 }
 
 # is_arch_based reports whether the detected OS is an Arch-family distribution (arch, endeavouros, or manjaro).
@@ -157,9 +172,9 @@ update_repos() {
     elif is_rhel_based; then
         dnf makecache -q >/dev/null 2>&1
     elif is_arch_based; then
-        pacman -Sy --noconfirm >/dev/null 2>&1
+        print_info "Using the existing Arch package database. Run a full pacman -Syu first if it is stale."
     elif is_suse_based; then
-        zypper refresh -q >/dev/null 2>&1
+        zypper --non-interactive refresh
     else
         print_warn "Unknown OS for repo update"
         return 1
@@ -186,7 +201,7 @@ install_pkg() {
     elif is_rhel_based; then
         dnf install -y -q "$@" >/dev/null 2>&1 || result=$?
     elif is_suse_based; then
-        zypper install -y -q "$@" >/dev/null 2>&1 || result=$?
+        zypper --non-interactive install "$@" || result=$?
     else
         print_warn "Unsupported OS for package install"
         return 1
@@ -218,8 +233,47 @@ validate_hostname() {
     [[ "$hostname" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$ ]]
 }
 
+# Install only the expected files from trusted ISO media, without extracting an
+# arbitrary archive into /. Arch's package is in AUR, not the official repos.
+install_guest_tools_archive() {
+    local archive file member
+    archive=$(find "$GUEST_TOOLS_MOUNT" -type f -name 'xe-guest-utilities_*_all.tgz' -print -quit)
+    [[ -n "$archive" ]] || { print_error 'Generic xe-guest-utilities_*_all.tgz not found on the ISO.'; return 1; }
+    GUEST_TOOLS_STAGE=$(mktemp -d "${TMPDIR:-/tmp}/vm-guest-files.XXXXXXXX") || return 1
+    tar -tzf "$archive" > "$GUEST_TOOLS_STAGE/members" || return 1
+    for file in usr/sbin/xe-daemon usr/sbin/xe-linux-distribution usr/bin/xenstore; do
+        member=$(awk -v name="$file" '$0==name || $0=="./"name {print; exit}' "$GUEST_TOOLS_STAGE/members")
+        [[ -n "$member" ]] || { print_error "Archive lacks $file"; return 1; }
+        tar -xOzf "$archive" "$member" > "$GUEST_TOOLS_STAGE/$(basename "$file")" || return 1
+        [[ -s "$GUEST_TOOLS_STAGE/$(basename "$file")" ]] || return 1
+    done
+    install -m 755 "$GUEST_TOOLS_STAGE/xe-daemon" /usr/sbin/xe-daemon || return 1
+    install -m 755 "$GUEST_TOOLS_STAGE/xe-linux-distribution" /usr/sbin/xe-linux-distribution || return 1
+    install -m 755 "$GUEST_TOOLS_STAGE/xenstore" /usr/bin/xenstore || return 1
+    for file in read write exists rm list ls chmod watch; do
+        ln -sf xenstore "/usr/bin/xenstore-$file" || return 1
+    done
+    # Use the installed paths; upstream ISO units may use /usr/share/oem/xs.
+    cat > "$GUEST_TOOLS_STAGE/xe-linux-distribution.service" <<'EOF'
+[Unit]
+Description=Xen guest management agent
+ConditionVirtualization=xen
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=simple
+ExecStartPre=/usr/sbin/xe-linux-distribution /var/cache/xe-linux-distribution
+ExecStart=/usr/sbin/xe-daemon
+[Install]
+WantedBy=multi-user.target
+EOF
+    install -m 644 "$GUEST_TOOLS_STAGE/xe-linux-distribution.service" /etc/systemd/system/xe-linux-distribution.service || return 1
+    systemctl daemon-reload || return 1
+    systemctl enable --now xe-linux-distribution.service
+}
+
 # install_xcp_tools_iso mounts a guest-tools ISO attached via Xen Orchestra and runs its installer to install XCP-NG guest tools.
-# Prompts the user to confirm ISO attachment, mounts the ISO at /mnt, looks for an `install.sh` under `/mnt/Linux` or `/mnt`, executes it if found, and unmounts when finished (can be skipped by the user).
+# Uses a private read-only mount and executes an installer only after confirmation.
 install_xcp_tools_iso() {
     print_info "Installing XCP-NG tools from Guest Tools ISO..."
 
@@ -242,25 +296,30 @@ install_xcp_tools_iso() {
             continue
         fi
 
-        mountpoint -q /mnt && umount /mnt
+        [[ -n "$GUEST_TOOLS_MOUNT" ]] || GUEST_TOOLS_MOUNT=$(mktemp -d "${TMPDIR:-/tmp}/vm-guest-tools.XXXXXXXX")
         print_info "Mounting $device..."
 
-        if ! mount "$device" /mnt 2>/dev/null; then
+        if ! mount -o ro "$device" "$GUEST_TOOLS_MOUNT" 2>/dev/null; then
             print_error "Failed to mount ISO."
             continue
         fi
 
+        GUEST_TOOLS_MOUNTED=true
         local script=""
-        if [[ -f "/mnt/Linux/install.sh" ]]; then
-            script="/mnt/Linux/install.sh"
-        elif [[ -f "/mnt/install.sh" ]]; then
-            script="/mnt/install.sh"
+        if [[ -f "$GUEST_TOOLS_MOUNT/Linux/install.sh" ]]; then
+            script="$GUEST_TOOLS_MOUNT/Linux/install.sh"
+        elif [[ -f "$GUEST_TOOLS_MOUNT/install.sh" ]]; then
+            script="$GUEST_TOOLS_MOUNT/install.sh"
         fi
 
-        if [[ -n "$script" ]]; then
+        if is_arch_based || is_suse_based; then
+            if ! prompt_yes_no "Install guest utilities from trusted media $device?" n; then cleanup; return 0; fi
+            if ! install_guest_tools_archive; then cleanup; return 1; fi
+            print_success "XCP-NG tools installed from the generic ISO archive."
+        elif [[ -n "$script" ]]; then
             print_warn "The guest-tools installer cannot be authenticated by this application."
             if ! prompt_yes_no "Execute installer from trusted media $device?" "n"; then
-                umount /mnt
+                cleanup
                 return 1
             fi
             print_info "Running installer..."
@@ -268,14 +327,16 @@ install_xcp_tools_iso() {
                 print_success "XCP-NG tools installed."
             else
                 print_error "Guest-tools installer failed."
-                umount /mnt
+                cleanup
                 return 1
             fi
         else
             print_error "install.sh not found on ISO."
+            cleanup
+            return 1
         fi
 
-        umount /mnt
+        cleanup
         break
     done
 }
@@ -393,8 +454,8 @@ install_alpine_xe_guest_utilities() {
         return 1
     fi
 
-    rc-update add xe-guest-utilities default >/dev/null 2>&1 || true
-    /etc/init.d/xe-guest-utilities start >/dev/null 2>&1 || true
+    rc-update add xe-guest-utilities default || return 1
+    /etc/init.d/xe-guest-utilities start || return 1
     print_success "XCP-NG tools installed."
     return 0
 }
@@ -416,6 +477,7 @@ done
 
 show_header
 check_root
+trap cleanup EXIT
 detect_os
 
 if [[ "$OS" != "alpine" ]]; then
@@ -434,25 +496,26 @@ if prompt_yes_no "Install?" "y"; then
             install_alpine_xe_guest_utilities || exit 1
             ;;
         arch|endeavouros|manjaro)
-            install_pkg xe-guest-utilities
-            print_success "XCP-NG tools installed."
+            install_xcp_tools_iso
             ;;
         ubuntu|pop|linuxmint)
             install_pkg xe-guest-utilities
+            systemctl enable --now xe-linux-distribution.service
             print_success "XCP-NG tools installed."
             ;;
         debian)
             install_xcp_tools_iso
             ;;
-        fedora|redhat|centos|rocky|almalinux)
+        fedora|rhel|redhat|centos|rocky|almalinux)
             dnf install -y epel-release -q >/dev/null 2>&1 || true
-            install_pkg xe-guest-utilities || install_pkg xe-guest-utilities-latest || true
-            systemctl enable --now xe-linux-distribution.service >/dev/null 2>&1 || true
+            if ! install_pkg xe-guest-utilities && ! install_pkg xe-guest-utilities-latest; then
+                install_xcp_tools_iso
+            fi
+            systemctl enable --now xe-linux-distribution.service
             print_success "XCP-NG tools installed."
             ;;
         suse|opensuse*|sles)
-            install_pkg xe-guest-utilities
-            print_success "XCP-NG tools installed."
+            install_xcp_tools_iso
             ;;
         *)
             print_warn "Skipping XCP-NG Tools: Unsupported OS ($OS)."
@@ -464,21 +527,21 @@ fi
 
 # Install Standard Server Tools
 print_step "Standard System Utilities"
-print_info "Installing: net-tools, btop, curl, wget, file, nano..."
+print_info "Installing common utilities and download/MTU prerequisites..."
 update_repos
 
 install_result=0
 
 if [[ "$OS" == "alpine" ]]; then
-    install_pkg net-tools nano curl wget file htop || install_result=$?
+    install_pkg net-tools nano curl wget file htop ca-certificates jq coreutils iputils || install_result=$?
 elif is_arch_based; then
-    install_pkg net-tools btop whois curl wget nano || install_result=$?
+    install_pkg net-tools btop whois curl wget file nano ca-certificates jq || install_result=$?
 elif is_debian_based; then
-    install_pkg net-tools btop plocate whois curl wget nano || install_result=$?
+    install_pkg net-tools btop plocate whois curl wget file nano ca-certificates jq || install_result=$?
 elif is_rhel_based; then
-    install_pkg net-tools btop whois curl wget nano || install_result=$?
+    install_pkg net-tools curl wget file nano ca-certificates jq || install_result=$?
 elif is_suse_based; then
-    install_pkg net-tools btop whois curl wget nano || install_result=$?
+    install_pkg net-tools curl wget file nano ca-certificates jq || install_result=$?
 else
     print_warn "Unsupported system for standard tools."
     install_result=1
@@ -488,6 +551,7 @@ if [[ $install_result -eq 0 ]]; then
     print_success "Utilities installed."
 else
     print_error "Failed to install one or more utilities on $OS."
+    exit "$install_result"
 fi
 
 # Hostname Configuration (skip for Alpine)

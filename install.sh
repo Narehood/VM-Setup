@@ -4,7 +4,9 @@ set -euo pipefail
 # --- 1. CRITICAL SETUP & RESTART FIX ---
 SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
-cd "$SCRIPT_DIR" || { echo "Failed to change directory to $SCRIPT_DIR"; exit 1; }
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    cd "$SCRIPT_DIR" || { echo "Failed to change directory to $SCRIPT_DIR"; exit 1; }
+fi
 
 # --- 2. VISUAL STYLING ---
 readonly RED='\033[0;31m'
@@ -16,7 +18,7 @@ readonly WHITE='\033[1;37m'
 readonly NC='\033[0m'
 
 readonly UI_WIDTH=86
-readonly SCRIPT_VERSION="3.8.1"
+readonly SCRIPT_VERSION="3.9.0"
 readonly CHECKSUM_FILE="$SCRIPT_DIR/Installers/.checksums.sha256"
 readonly UPDATE_STATE_FILE="$SCRIPT_DIR/.update-state"
 readonly EXIT_APP_CODE=42
@@ -29,14 +31,13 @@ HAS_SUDO=$(command -v sudo &>/dev/null && echo 1 || echo 0)
 HAS_TIMEOUT=$(command -v timeout &>/dev/null && echo 1 || echo 0)
 
 # --- 4. STATIC SYSTEM INFO CACHE ---
-readonly CACHED_HOSTNAME=$(hostname)
-readonly CACHED_KERNEL=$(uname -r)
+CACHED_KERNEL=$(uname -r)
+readonly CACHED_KERNEL
 
 # cleanup restores the terminal cursor to a visible state when the script exits.
 cleanup() {
     tput cnorm 2>/dev/null || true
 }
-trap cleanup EXIT
 
 # --- 6. SETTINGS & CONFIGURATION ---
 SETTINGS_FILE="$SCRIPT_DIR/settings.local.conf"
@@ -87,11 +88,16 @@ load_settings() {
                 ;;
         esac
     done < "$SETTINGS_FILE"
+    return 0
 }
 
 # save_settings writes local preferences without modifying tracked repository files.
 save_settings() {
-    cat > "$SETTINGS_FILE" << EOF
+    local temporary
+    [[ ! -L "$SETTINGS_FILE" ]] || return 1
+    temporary=$(mktemp "${SETTINGS_FILE}.XXXXXXXX") || return 1
+    chmod 600 "$temporary"
+    cat > "$temporary" << EOF
 # System Setup Menu - Configuration
 # AUTO_UPDATE_CHECK: Check for updates on startup (true/false)
 AUTO_UPDATE_CHECK="$AUTO_UPDATE_CHECK"
@@ -99,10 +105,9 @@ AUTO_UPDATE_CHECK="$AUTO_UPDATE_CHECK"
 # AUTO_APPLY_UPDATES: Apply fast-forward updates without prompting (true/false)
 AUTO_APPLY_UPDATES="$AUTO_APPLY_UPDATES"
 EOF
-    chmod 600 "$SETTINGS_FILE" 2>/dev/null || true
+    mv -- "$temporary" "$SETTINGS_FILE"
 }
 
-load_settings
 
 # print_centered prints TEXT centered within UI_WIDTH, using an optional COLOR escape code for output.
 print_centered() {
@@ -205,7 +210,8 @@ handle_uncommitted_changes() {
     case "$change_option" in
         1)
             print_status "Stashing changes..."
-            local stash_msg="Auto-stash $context on $(date '+%Y-%m-%d %H:%M')"
+            local stash_msg
+            stash_msg="Auto-stash $context on $(date '+%Y-%m-%d %H:%M')"
             if ! git stash push --include-untracked -m "$stash_msg" 2>/dev/null; then
                 print_error "Failed to stash changes."
                 return 1
@@ -395,7 +401,7 @@ show_stats() {
     fi
 
     local hostname_str
-    hostname_str=$(truncate_string "$CACHED_HOSTNAME" 30)
+    hostname_str=$(truncate_string "$(hostname)" 30)
 
     local ip_addr="N/A"
     local subnet="N/A"
@@ -464,7 +470,11 @@ write_update_state() {
     local mode="$3"
     local release_url="$4"
 
-    cat > "$UPDATE_STATE_FILE" << EOF
+    local temporary
+    [[ ! -L "$UPDATE_STATE_FILE" ]] || return 1
+    temporary=$(mktemp "${UPDATE_STATE_FILE}.XXXXXXXX") || return 1
+    chmod 600 "$temporary"
+    cat > "$temporary" << EOF
 mode=${mode}
 previous_commit=$(awk -F= '$1=="commit"{print $2}' "$before_file")
 previous_version=$(awk -F= '$1=="version"{print $2}' "$before_file")
@@ -478,7 +488,7 @@ new_docker_prep_version=$(awk -F= '$1=="docker_prep_version"{print $2}' "$after_
 new_linutil_revision=$(awk -F= '$1=="linutil_revision"{print $2}' "$after_file")
 release_url=${release_url}
 EOF
-    chmod 600 "$UPDATE_STATE_FILE" 2>/dev/null || true
+    mv -- "$temporary" "$UPDATE_STATE_FILE"
 }
 
 # show_pending_update_summary announces a completed update once, then clears the state file.
@@ -534,13 +544,14 @@ show_pending_update_summary() {
 prepare_update_check() {
     UPDATE_LOCAL_REV=""
     UPDATE_REMOTE_REV=""
+    UPDATE_RELATION=""
 
     if ((! HAS_GIT)); then
         print_error "Git is not installed. Cannot check for updates."
         return 1
     fi
 
-    if [[ ! -d "$SCRIPT_DIR/.git" ]]; then
+    if ! git rev-parse --git-dir >/dev/null 2>&1; then
         print_warn "Not a git repository. Skipping update check."
         return 1
     fi
@@ -556,6 +567,16 @@ prepare_update_check() {
         return 1
     fi
 
+    if [[ "$UPDATE_LOCAL_REV" == "$UPDATE_REMOTE_REV" ]]; then
+        UPDATE_RELATION=equal
+    elif git merge-base --is-ancestor "$UPDATE_REMOTE_REV" "$UPDATE_LOCAL_REV"; then
+        UPDATE_RELATION=ahead
+    elif git merge-base --is-ancestor "$UPDATE_LOCAL_REV" "$UPDATE_REMOTE_REV"; then
+        UPDATE_RELATION=behind
+    else
+        UPDATE_RELATION=diverged
+    fi
+
     return 0
 }
 
@@ -563,6 +584,12 @@ prepare_update_check() {
 apply_repository_update() {
     local mode="${1:-manual}"
     local before_file after_file compare_url new_commit
+
+    if [[ "${UPDATE_RELATION:-}" != behind ]] ||
+       ! git merge-base --is-ancestor HEAD "$UPDATE_REMOTE_REV"; then
+        print_warn "No fast-forward update is available."
+        return 1
+    fi
 
     if [[ -n "$(git status --porcelain 2>/dev/null)" ]]; then
         if [[ "$mode" == "auto" ]]; then
@@ -587,13 +614,18 @@ apply_repository_update() {
 
     capture_component_snapshot > "$before_file"
 
-    if ! git pull --ff-only --quiet; then
+    if ! git merge --ff-only --quiet "$UPDATE_REMOTE_REV"; then
         rm -f -- "$before_file" "$after_file"
         print_error "Update failed. Please try manually with 'git pull --ff-only'."
         return 1
     fi
 
     new_commit=$(git rev-parse HEAD)
+    if [[ "$new_commit" == "$UPDATE_LOCAL_REV" ]]; then
+        rm -f -- "$before_file" "$after_file"
+        print_status "No commit changed; continuing without a restart."
+        return 0
+    fi
     {
         echo "commit=${new_commit}"
         awk -F= '/^readonly SCRIPT_VERSION=/{ gsub(/"/, "", $2); print "version="$2 }' "$SCRIPT_PATH"
@@ -622,9 +654,8 @@ check_for_updates_interactive() {
         return 1
     fi
 
-    if [[ "$UPDATE_LOCAL_REV" = "$UPDATE_REMOTE_REV" ]]; then
-        print_success "Menu is up to date."
-        sleep 1
+    if [[ "$UPDATE_RELATION" != behind ]]; then
+        print_status "Repository is $UPDATE_RELATION relative to upstream; no automatic merge is needed."
         return 0
     fi
 
@@ -653,9 +684,8 @@ check_for_updates_automatic() {
         return 1
     fi
 
-    if [[ "$UPDATE_LOCAL_REV" = "$UPDATE_REMOTE_REV" ]]; then
-        print_success "Menu is up to date."
-        sleep 1
+    if [[ "$UPDATE_RELATION" != behind ]]; then
+        print_status "Repository is $UPDATE_RELATION relative to upstream; automatic update skipped."
         return 0
     fi
 
@@ -684,7 +714,7 @@ switch_branch() {
         return 1
     fi
 
-    if [[ ! -d "$SCRIPT_DIR/.git" ]]; then
+    if ! git -C "$SCRIPT_DIR" rev-parse --git-dir &>/dev/null; then
         print_error "Not a git repository."
         pause
         return 1
@@ -784,14 +814,13 @@ switch_branch() {
     echo ""
     print_status "Switching to branch '$selected_branch'..."
 
-    local checkout_output
+    local checkout_output checkout_status=0
     if git show-ref --verify --quiet "refs/heads/$selected_branch" 2>/dev/null; then
-        checkout_output=$(git checkout "$selected_branch" 2>&1)
+        checkout_output=$(git checkout "$selected_branch" 2>&1) || checkout_status=$?
     else
-        checkout_output=$(git checkout -b "$selected_branch" "origin/$selected_branch" 2>&1)
+        checkout_output=$(git checkout -b "$selected_branch" "origin/$selected_branch" 2>&1) || checkout_status=$?
     fi
 
-    local checkout_status=$?
     if ((checkout_status != 0)); then
         print_error "Failed to switch branch."
         echo -e "  ${RED}Details:${NC} $checkout_output"
@@ -929,12 +958,6 @@ execute_script() {
 
     local requires_root=""
     requires_root=$(parse_script_metadata "$full_path" "REQUIRES_ROOT")
-
-    if [[ -z "$requires_root" ]]; then
-        if grep -qE '^\s*(sudo|apt|dnf|yum|pacman|zypper|systemctl|hostnamectl|usermod|chmod|chown)\s' "$full_path" 2>/dev/null; then
-            requires_root="true"
-        fi
-    fi
 
     if [[ "$requires_root" = "true" ]] && ! is_root; then
         print_warn "This script requires root privileges."
@@ -1110,6 +1133,9 @@ manage_settings() {
 }
 
 # --- STARTUP TASKS ---
+if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then return 0; fi
+trap cleanup EXIT
+load_settings
 clear
 fix_permissions silent
 show_pending_update_summary

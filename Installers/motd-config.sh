@@ -68,9 +68,40 @@ create_backup() {
     [ -f "$MOTD_FILE" ] && cp "$MOTD_FILE" "$backup_path/" 2>/dev/null || true
     [ -f "$PROFILE_MOTD" ] && cp "$PROFILE_MOTD" "$backup_path/" 2>/dev/null || true
     [ -f "$SSH_BANNER" ] && cp "$SSH_BANNER" "$backup_path/" 2>/dev/null || true
+    if [[ -f "$SSH_CONFIG" ]]; then cp -p "$SSH_CONFIG" "$backup_path/sshd_config"; fi
     [ -d "$MOTD_DIR" ] && cp -r "$MOTD_DIR" "$backup_path/" 2>/dev/null || true
 
     print_success "Backup created: $backup_path"
+}
+
+# Put the global Banner before any Include/Match block, and validate before replacing.
+apply_ssh_banner() {
+    local value="$1" temporary backup
+    [[ -f "$SSH_CONFIG" && ! -L "$SSH_CONFIG" ]] || return 1
+    command -v sshd >/dev/null || { print_error 'sshd is required to validate configuration.'; return 1; }
+    temporary=$(mktemp "${SSH_CONFIG}.XXXXXXXX") || return 1
+    cp -p "$SSH_CONFIG" "$temporary" || return 1
+    awk -v banner="$value" '
+        BEGIN {print "Banner " banner}
+        /^[[:space:]]*Match[[:space:]]/ {in_match=1}
+        !in_match && /^[[:space:]]*Banner[[:space:]]/ {next}
+        {print}
+    ' "$SSH_CONFIG" > "$temporary"
+    if ! sshd -t -f "$temporary"; then
+        rm -f "$temporary"
+        print_error 'Invalid SSH configuration; original file retained.'
+        return 1
+    fi
+    backup=$(mktemp "${SSH_CONFIG}.vm-setup-backup.XXXXXXXX") || return 1
+    cp -p "$SSH_CONFIG" "$backup" || return 1
+    mv "$temporary" "$SSH_CONFIG" || return 1
+    if command -v rc-service >/dev/null; then
+        rc-service sshd reload
+    elif systemctl is-active --quiet sshd 2>/dev/null; then
+        systemctl reload sshd
+    elif systemctl is-active --quiet ssh 2>/dev/null; then
+        systemctl reload ssh
+    fi
 }
 
 # detect_distro returns the distribution family.
@@ -542,20 +573,8 @@ Disconnect immediately if you are not authorized.
             ;;
         5)
             create_backup
-            if grep -qE "^Banner " "$SSH_CONFIG" 2>/dev/null; then
-                sed -i '/^Banner /d' "$SSH_CONFIG"
-                print_success "SSH banner disabled."
-                
-                if systemctl is-active --quiet sshd 2>/dev/null; then
-                    systemctl reload sshd
-                    print_success "SSH service reloaded."
-                elif systemctl is-active --quiet ssh 2>/dev/null; then
-                    systemctl reload ssh
-                    print_success "SSH service reloaded."
-                fi
-            else
-                print_status "SSH banner was not configured."
-            fi
+            apply_ssh_banner none || return 1
+            print_success "SSH banner disabled."
             pause
             return 0
             ;;
@@ -576,23 +595,8 @@ Disconnect immediately if you are not authorized.
     echo "$content" > "$SSH_BANNER"
     chmod 644 "$SSH_BANNER"
 
-    if grep -qE "^Banner " "$SSH_CONFIG" 2>/dev/null; then
-        sed -i "s|^Banner .*|Banner $SSH_BANNER|" "$SSH_CONFIG"
-    else
-        echo "Banner $SSH_BANNER" >> "$SSH_CONFIG"
-    fi
-
+    apply_ssh_banner "$SSH_BANNER" || return 1
     print_success "SSH banner configured."
-
-    if systemctl is-active --quiet sshd 2>/dev/null; then
-        systemctl reload sshd
-        print_success "SSH service reloaded."
-    elif systemctl is-active --quiet ssh 2>/dev/null; then
-        systemctl reload ssh
-        print_success "SSH service reloaded."
-    else
-        print_warn "Could not reload SSH. You may need to restart manually."
-    fi
 
     pause
 }
@@ -766,16 +770,8 @@ restore_defaults() {
         print_success "Removed dynamic MOTD script"
     fi
 
-    if grep -qE "^Banner " "$SSH_CONFIG" 2>/dev/null; then
-        sed -i '/^Banner /d' "$SSH_CONFIG"
-        print_success "Disabled SSH banner"
-
-        if systemctl is-active --quiet sshd 2>/dev/null; then
-            systemctl reload sshd
-        elif systemctl is-active --quiet ssh 2>/dev/null; then
-            systemctl reload ssh
-        fi
-    fi
+    apply_ssh_banner none || return 1
+    print_success "Disabled SSH banner"
 
     if [ -d "$MOTD_DIR" ]; then
         chmod +x "$MOTD_DIR"/* 2>/dev/null || true
@@ -808,6 +804,7 @@ show_menu() {
 }
 
 # MAIN
+if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then return 0; fi
 check_root
 
 while true; do

@@ -11,20 +11,54 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Install analysis tools
-        run: sudo apt-get update && sudo apt-get install -y shellcheck ripgrep
+        run: sudo apt-get update && sudo apt-get install -y shellcheck ripgrep jq python3 python3-yaml
 
       - name: Validate syntax and security policy
         run: bash tests/security-checks.sh
 
       - name: Run ShellCheck
         run: |
-          shellcheck --severity=error \
-            install.sh \
-            Installers/*.sh \
-            tests/*.sh \
-            tools/*.sh
+          mapfile -t scripts < <(find Installers tests tools -name '*.sh' ! -name UniFi-Controller.sh)
+          shellcheck -x --severity=warning install.sh "${scripts[@]}"
+          shellcheck --severity=error Installers/UniFi-Controller.sh
+
+  distro-regressions:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: debian:stable
+            bootstrap: apt-get update && apt-get install -y bash git ripgrep jq coreutils tar python3 python3-yaml
+          - image: ubuntu:24.04
+            bootstrap: apt-get update && apt-get install -y bash git ripgrep jq coreutils tar python3 python3-yaml
+          - image: ubuntu:26.04
+            bootstrap: apt-get update && apt-get install -y bash git ripgrep jq coreutils tar python3 python3-yaml
+          - image: alpine:3.24
+            bootstrap: apk add --no-cache bash git ripgrep jq coreutils tar
+          - image: archlinux:base
+            bootstrap: pacman -Syu --noconfirm --needed bash git ripgrep jq coreutils tar
+          - image: fedora:latest
+            bootstrap: dnf install -y bash git ripgrep jq coreutils tar
+          - image: rockylinux:9
+            bootstrap: dnf install -y epel-release && dnf install -y bash git ripgrep jq coreutils tar
+          - image: opensuse/leap:latest
+            bootstrap: zypper --non-interactive install bash git ripgrep jq coreutils tar
+          - image: opensuse/tumbleweed:latest
+            bootstrap: zypper --non-interactive install bash git ripgrep jq coreutils tar
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run isolated regression suite
+        env:
+          DISTRO_IMAGE: ${{ matrix.image }}
+          BOOTSTRAP: ${{ matrix.bootstrap }}
+        run: |
+          docker run --rm -v "$PWD:/workspace:ro" -w /workspace "$DISTRO_IMAGE" \
+            sh -c "$BOOTSTRAP && bash tests/security-checks.sh"

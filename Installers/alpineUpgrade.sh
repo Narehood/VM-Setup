@@ -1,5 +1,5 @@
 #!/bin/bash
-set -euo pipefail
+set -Eeuo pipefail
 
 # REQUIRES_ROOT: true
 # INTERPRETER: bash
@@ -11,7 +11,7 @@ if [[ -z "${BASH_VERSION:-}" ]]; then
     exit 1
 fi
 
-VERSION="1.0.4"
+VERSION="1.1.0"
 LOGFILE="/var/log/alpine-upgrade.log"
 LOCKFILE="/var/run/alpine-upgrade.lock"
 REPOS_FILE="/etc/apk/repositories"
@@ -51,6 +51,7 @@ print_status() {
     else
         echo -e "${BLUE}[INFO]${NC} $1"
     fi
+    return 0
 }
 
 # print_success prints a success message prefixed with a green "[SUCCESS]" tag.
@@ -62,6 +63,7 @@ print_success() {
     else
         echo -e "${GREEN}[SUCCESS]${NC} $1"
     fi
+    return 0
 }
 
 # print_warn prints a warning message prefixed with a yellow [WARN] tag.
@@ -73,6 +75,7 @@ print_warn() {
     else
         echo -e "${YELLOW}[WARN]${NC} $1"
     fi
+    return 0
 }
 
 # print_error prints MESSAGE prefixed with a red "[ERROR]" tag to stderr.
@@ -117,7 +120,9 @@ EOF
 
 # cleanup removes the lockfile specified by LOCKFILE.
 cleanup() {
-    rm -f "$LOCKFILE"
+    if [[ -f "$LOCKFILE" && "$(cat "$LOCKFILE")" == "$$" ]]; then
+        rm -f -- "$LOCKFILE"
+    fi
 }
 
 # check_root verifies the script is running as root.
@@ -131,32 +136,11 @@ check_root() {
 # acquire_lock creates LOCKFILE containing the current PID to prevent concurrent runs.
 # Uses noclobber so two processes cannot both create the lock after a stale-file check.
 acquire_lock() {
-    if [[ -f "$LOCKFILE" ]]; then
-        local pid
-        pid=$(cat "$LOCKFILE" 2>/dev/null || echo "")
-        if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
-            print_error "Another instance is already running (PID: $pid)."
-            exit 1
-        fi
-        print_warn "Stale lock file found, removing."
-        rm -f "$LOCKFILE"
+    # Never remove a lock owned by another process, including while reclaiming it.
+    if ! (set -o noclobber; printf '%s\n' "$$" > "$LOCKFILE") 2>/dev/null; then
+        print_error "Lock already exists: $LOCKFILE. Check its PID and remove it only if that process has stopped."
+        return 1
     fi
-
-    if ! (
-        set -o noclobber
-        echo $$ > "$LOCKFILE"
-    ) 2>/dev/null; then
-        print_error "Failed to create lock file: $LOCKFILE"
-        exit 1
-    fi
-
-    local written_pid
-    written_pid=$(cat "$LOCKFILE" 2>/dev/null || echo "")
-    if [[ "$written_pid" != "$$" ]]; then
-        print_error "Lock file verification failed."
-        exit 1
-    fi
-
     trap cleanup EXIT
 }
 
@@ -483,7 +467,7 @@ on_upgrade_error() {
     print_error "Alpine release upgrade failed (exit ${exit_code}) during package update."
     if [[ -n "${REPOS_BACKUP:-}" && -f "$REPOS_BACKUP" ]]; then
         print_error "Repositories backup retained at: $REPOS_BACKUP"
-        print_error "To restore: cp '$REPOS_BACKUP' '$REPOS_FILE' && apk update"
+        print_error "Repository-only recovery (does not roll back installed packages): cp '$REPOS_BACKUP' '$REPOS_FILE' && apk update"
     else
         print_error "No repositories backup path is available; inspect $REPOS_FILE manually."
     fi
@@ -529,7 +513,7 @@ run_apk_upgrade() {
     # Upgrading apk-tools first is recommended by Alpine and is harmless on modern releases.
     if apk info -e apk-tools >/dev/null 2>&1; then
         print_status "Ensuring apk-tools is current..."
-        apk add --upgrade apk-tools || print_warn "apk-tools upgrade skipped or failed; continuing."
+        apk add --upgrade apk-tools
     fi
 
     print_status "Upgrading all packages ($label)..."

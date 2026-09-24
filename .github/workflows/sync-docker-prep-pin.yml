@@ -24,7 +24,7 @@ jobs:
   sync-pin:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Resolve release tag
         id: release
@@ -70,6 +70,10 @@ jobs:
             fi
           fi
 
+          if [[ "$skip" != true && ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Expected a stable vMAJOR.MINOR.PATCH tag." >&2
+            exit 1
+          fi
           {
             echo "tag=${tag:-}"
             echo "skip=$skip"
@@ -90,7 +94,7 @@ jobs:
         if: steps.release.outputs.skip != 'true'
         run: |
           set -euo pipefail
-          sudo apt-get install -y shellcheck ripgrep
+          sudo apt-get install -y shellcheck ripgrep jq python3 python3-yaml
           bash tests/security-checks.sh
           shellcheck --severity=error \
             install.sh \
@@ -100,12 +104,12 @@ jobs:
 
       - name: Create or update pull request
         if: steps.release.outputs.skip != 'true'
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
         with:
           commit-message: "chore: bump Docker-Prep pin to ${{ steps.release.outputs.tag }}"
           title: "Bump Docker-Prep pin to ${{ steps.release.outputs.tag }}"
           body-path: .docker-prep-pin-update.md
-          branch: cursor/docker-prep-pin-${{ steps.release.outputs.tag }}
+          branch: codex/docker-prep-pin-${{ steps.release.outputs.tag }}
           delete-branch: true
           add-paths: |
             Installers/Docker-Prep.sh

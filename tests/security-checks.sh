@@ -12,6 +12,9 @@ bash tests/update-flow.sh
 bash tests/alpine-upgrade.sh
 bash tests/server-setup-alpine.sh
 bash tests/docker-prep-update.sh
+bash tests/installer-regressions.sh
+bash tests/distro-compatibility.sh
+bash tests/network-backends.sh
 
 (
     cd Installers
