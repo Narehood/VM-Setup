@@ -39,23 +39,23 @@ jobs:
       matrix:
         include:
           - image: debian:stable
-            bootstrap: apt-get update && apt-get install -y bash git ripgrep jq coreutils diffutils tar python3 python3-yaml
+            bootstrap: apt-get update && apt-get install -y bash git ripgrep jq coreutils diffutils findutils tar python3 python3-yaml
           - image: ubuntu:24.04
-            bootstrap: apt-get update && apt-get install -y bash git ripgrep jq coreutils diffutils tar python3 python3-yaml
+            bootstrap: apt-get update && apt-get install -y bash git ripgrep jq coreutils diffutils findutils tar python3 python3-yaml
           - image: ubuntu:26.04
-            bootstrap: apt-get update && apt-get install -y bash git ripgrep jq coreutils diffutils tar python3 python3-yaml
+            bootstrap: apt-get update && apt-get install -y bash git ripgrep jq coreutils diffutils findutils tar python3 python3-yaml
           - image: alpine:3.24
-            bootstrap: apk add --no-cache bash git ripgrep jq coreutils diffutils tar
+            bootstrap: apk add --no-cache bash git ripgrep jq coreutils diffutils findutils tar
           - image: archlinux:base
-            bootstrap: pacman -Syu --noconfirm --needed bash git ripgrep jq coreutils diffutils tar
+            bootstrap: pacman -Syu --noconfirm --needed bash git ripgrep jq coreutils diffutils findutils tar
           - image: fedora:latest
-            bootstrap: dnf install -y bash git ripgrep jq coreutils diffutils tar
+            bootstrap: dnf install -y bash git ripgrep jq coreutils diffutils findutils tar
           - image: rockylinux:9
-            bootstrap: dnf install -y epel-release && dnf install -y bash git ripgrep jq diffutils tar
+            bootstrap: dnf install -y epel-release && dnf install -y bash git ripgrep jq diffutils findutils tar
           - image: opensuse/leap:latest
-            bootstrap: zypper --non-interactive install bash git ripgrep jq coreutils diffutils tar
+            bootstrap: zypper --non-interactive install bash git ripgrep jq coreutils diffutils findutils tar
           - image: opensuse/tumbleweed:latest
-            bootstrap: zypper --non-interactive install bash git ripgrep jq coreutils diffutils tar
+            bootstrap: zypper --non-interactive install bash git ripgrep jq coreutils diffutils findutils tar
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
