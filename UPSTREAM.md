@@ -9,7 +9,7 @@ every package installed by third-party tools is pinned or audited.
 | LinUtil | `2026.07.17`, `7ed1ddb5e9c2733c4f1bb359c7af5dbd08c2261c` | [Stable release](https://github.com/ChrisTitusTech/linutil/releases/tag/2026.07.17) |
 | Xen Orchestra installer | `3c2a24b50c6b247b9d330ee151fcdbb42d305083` | [Repository](https://github.com/Narehood/XenOrchestraInstallerUpdater/commit/3c2a24b50c6b247b9d330ee151fcdbb42d305083) |
 | cloudflared | `2026.9.3` | [Release](https://github.com/cloudflare/cloudflared/releases/tag/2026.9.3) |
-| UniFi installer | Script `9.2.3`, Network `10.6.106` | [Upstream script](https://get.glennr.nl/unifi/install/unifi-10.6.106.sh) |
+| UniFi installer | Script `9.2.3`, Network `10.6.101` | [Upstream script](https://get.glennr.nl/unifi/install/unifi-10.6.101.sh) |
 | actions/checkout | `v7.0.1`, `3d3c42e5aac5ba805825da76410c181273ba90b1` | [Release](https://github.com/actions/checkout/releases/tag/v7.0.1) |
 | peter-evans/create-pull-request | `v8.1.1`, `5f6978faf089d4d20b00c7766989d076bb2fc7f1` | [Release](https://github.com/peter-evans/create-pull-request/releases/tag/v8.1.1) |
 
@@ -28,9 +28,11 @@ refresh; they do not silently follow moving downloads at launch.
 
 ## Vendored UniFi patch
 
+UniFi source rechecked October 10, 2026.
+
 Unmodified upstream SHA-256:
-`582e88b863419121aca8af0aaf769f4062fe5f8ff4c04328b0c17eddcfe3d664`.
-This matches the [upstream version/checksum API](https://api.glennr.nl/api/latest-script-version?script=unifi-install&version=10.6.106).
+`ee45e8b1f8f2779e616278e5f8fa5807ec863966ee5845ae47e306ec85f159bf`.
+This matches the [upstream version/checksum API](https://api.glennr.nl/api/latest-script-version?script=unifi-install&version=10.6.101).
 
 The reproducible patch in `tools/harden-unifi.py` requires this exact input digest.
 It enforces HTTPS and certificate validation for shared external downloads, removes
@@ -42,7 +44,7 @@ an exhaustive security audit.
 
 ```bash
 curl --fail --location --proto '=https' --proto-redir '=https' \
-  https://get.glennr.nl/unifi/install/unifi-10.6.106.sh -o /tmp/unifi-upstream.sh
+  https://get.glennr.nl/unifi/install/unifi-10.6.101.sh -o /tmp/unifi-upstream.sh
 python3 tools/harden-unifi.py /tmp/unifi-upstream.sh
 bash tools/generate-checksums.sh
 bash tests/security-checks.sh

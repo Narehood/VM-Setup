@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Apply VM-Setup's small hardening patch to the verified upstream UniFi script.
 
-Usage: python3 tools/harden-unifi.py downloaded-unifi-10.6.106.sh
+Usage: python3 tools/harden-unifi.py downloaded-unifi-10.6.101.sh
 Output: Installers/UniFi-Controller.sh. Never executes the downloaded script.
 """
 import hashlib
@@ -9,7 +9,7 @@ import re
 import sys
 from pathlib import Path
 
-EXPECTED = '582e88b863419121aca8af0aaf769f4062fe5f8ff4c04328b0c17eddcfe3d664'
+EXPECTED = 'ee45e8b1f8f2779e616278e5f8fa5807ec863966ee5845ae47e306ec85f159bf'
 data = Path(sys.argv[1]).read_bytes()
 if hashlib.sha256(data).hexdigest() != EXPECTED:
     raise SystemExit('Upstream checksum mismatch; review a new version before updating this tool.')
