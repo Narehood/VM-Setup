@@ -3,7 +3,7 @@ set -euo pipefail
 
 # REQUIRES_ROOT: true
 
-SCRIPT_VERSION="1.3.0"
+SCRIPT_VERSION="1.3.1"
 
 # --- UI & FORMATTING FUNCTIONS ---
 
@@ -500,7 +500,8 @@ if prompt_yes_no "Install?" "y"; then
             ;;
         ubuntu|pop|linuxmint)
             install_pkg xe-guest-utilities
-            systemctl enable --now xe-linux-distribution.service
+            # Ubuntu's package names the management agent xe-daemon.service.
+            systemctl enable --now xe-daemon.service
             print_success "XCP-NG tools installed."
             ;;
         debian)
